@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
+import { permissionGuard } from './core/auth/permission-guard';
 
 export const routes: Routes = [
   {
@@ -17,9 +18,27 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardPage),
       },
 
-      // ── Próximas features (se agregan al construir cada módulo) ──────────
-      // { path: 'clientes',     canActivate: [permissionGuard('customer.view')],    loadChildren: () => import('./features/customers/customers.routes').then(m => m.CUSTOMER_ROUTES) },
-      // { path: 'aprobaciones', canActivate: [permissionGuard('customer.approve')], loadComponent: () => import('./features/customers/approvals').then(m => m.ApprovalsPage) },
+      // Clientes (módulo 2)
+      {
+        path: 'clientes',
+        canActivate: [permissionGuard('customer.view')],
+        loadChildren: () =>
+          import('./features/customers/customers.routes').then((m) => m.CUSTOMER_ROUTES),
+      },
+      {
+        path: 'aprobaciones',
+        canActivate: [permissionGuard('customer.approve')],
+        loadComponent: () => import('./features/customers/approvals').then((m) => m.ApprovalsPage),
+      },
+      {
+        path: 'asignaciones',
+        canActivate: [permissionGuard('customer.assign')],
+        loadComponent: () =>
+          import('./features/customers/assignments').then((m) => m.AssignmentsPage),
+      },
+
+      // ── Próximas features ───────────────────────────────────────────────
+      // { path: 'segmentos',    canActivate: [permissionGuard('segment.manage')],   loadComponent: ... },
       // { path: 'pedidos',      canActivate: [permissionGuard('order.view_all','order.create')], loadChildren: ... },
       // { path: 'promos',       canActivate: [permissionGuard('promo.create','promo.approve')], loadChildren: ... },
       // { path: 'reparto',      canActivate: [permissionGuard('delivery.deliver','delivery.settle')], loadChildren: ... },
