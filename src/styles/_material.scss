@@ -1,0 +1,35 @@
+﻿@use '@angular/material' as mat;
+@use './theme-colors' as brand;
+
+html {
+  // Modo automático: sigue la preferencia del sistema operativo.
+  // light-dark() dentro de los tokens resuelve claro/oscuro solo.
+  color-scheme: light dark;
+
+  @include mat.theme((
+    color: (
+      primary: brand.$primary-palette,
+      tertiary: brand.$tertiary-palette,   // Ámbar Acción (acentos M3)
+    ),
+    typography: Inter,
+    density: 0,                            // cómodo/táctil por defecto (móvil)
+  ));
+}
+
+// ---- Forzar modo desde el ThemeService (pone la clase en <html>) ----
+html.theme-light { color-scheme: light; }
+html.theme-dark  { color-scheme: dark; }
+
+// ---- Región compacta para tablas anchas de escritorio ----
+// Envuelve una tabla/página con class="density-compact" para apretar filas.
+.density-compact {
+  @include mat.all-component-densities(-3);
+}
+
+// ---- (Opcional) ajustes finos de tokens del sistema ----
+// Descomenta y edita si quieres desviarte del resultado de la paleta.
+// html {
+//   @include mat.theme-overrides((
+//     // primary-container: #d3e4ff,
+//   ));
+// }

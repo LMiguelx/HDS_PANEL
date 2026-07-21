@@ -1,0 +1,38 @@
+﻿// Layout
+.flex            { display: flex; }
+.flex-col        { display: flex; flex-direction: column; }
+.items-center    { align-items: center; }
+.justify-between { justify-content: space-between; }
+.wrap            { flex-wrap: wrap; }
+.grow            { flex: 1 1 auto; }
+
+// Gaps
+.gap-1 { gap: var(--sp-1); }
+.gap-2 { gap: var(--sp-2); }
+.gap-3 { gap: var(--sp-3); }
+.gap-4 { gap: var(--sp-4); }
+
+// Contenedor de página
+.page {
+  padding: var(--sp-4);
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+// Botón/target táctil para pantallas de calle (archivo 10.8)
+.touch-target {
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
+}
+
+// Card sencilla sobre superficie
+.card {
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  box-shadow: var(--shadow-card);
+}
+
+// Texto secundario
+.muted { color: var(--mat-sys-on-surface-variant); }

@@ -1,0 +1,12 @@
+﻿.money,
+.tabular,
+.mat-mdc-table .mat-mdc-cell {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+// Evita que los montos se partan en dos líneas.
+.money {
+  white-space: nowrap;
+  font-weight: 600;
+}

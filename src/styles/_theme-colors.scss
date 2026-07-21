@@ -1,0 +1,69 @@
+﻿@use 'sass:map';
+
+$_palettes: (
+  // ---- Primary: Azul Comercio (confianza / logística) ----
+  primary: (
+    0: #000000,  10: #001c39, 20: #00325b, 25: #003c6d, 30: #00497f,
+    35: #005591, 40: #0061a4, 50: #2379c5, 60: #4a93e1, 70: #71adff,
+    80: #a2c9ff, 90: #d3e4ff, 95: #eaf1ff, 98: #f8f9ff, 99: #fdfcff,
+    100: #ffffff,
+  ),
+  // ---- Secondary: azul-gris de apoyo ----
+  secondary: (
+    0: #000000,  10: #131c2b, 20: #283141, 25: #333c4d, 30: #3e4759,
+    35: #4a5365, 40: #565f71, 50: #6e788a, 60: #8891a5, 70: #a3acc0,
+    80: #bec7dc, 90: #dae2f9, 95: #edf0ff, 98: #f8f9ff, 99: #fdfcff,
+    100: #ffffff,
+  ),
+  // ---- Tertiary: Ámbar Acción (solo para la acción principal) ----
+  tertiary: (
+    0: #000000,  10: #291800, 20: #442b00, 25: #513400, 30: #5f3e00,
+    35: #6d4800, 40: #7c5300, 50: #9a6900, 60: #b98100, 70: #d99b00,
+    80: #f6bb46, 90: #ffddb3, 95: #ffeeda, 98: #fff8f4, 99: #fffbff,
+    100: #ffffff,
+  ),
+  // ---- Neutral: grises de superficie/texto ----
+  neutral: (
+    0: #000000,  4: #0c0e11,  6: #111316,  10: #1a1c1e, 12: #1e2022,
+    17: #282a2d, 20: #2f3133, 22: #333537, 24: #37393c, 25: #3a3b3e,
+    30: #454749, 35: #515255, 40: #5d5e61, 50: #76777a, 60: #909194,
+    70: #ababae, 80: #c6c6c9, 87: #dadadd, 90: #e2e2e5, 92: #e8e8eb,
+    94: #eeedf0, 95: #f1f0f3, 96: #f4f3f6, 98: #faf9fc, 99: #fdfcff,
+    100: #ffffff,
+  ),
+  // ---- Neutral variant: bordes/outline ----
+  neutral-variant: (
+    0: #000000,  10: #171c22, 20: #2c3038, 25: #373b43, 30: #43474e,
+    35: #4e525a, 40: #5a5e66, 50: #73777f, 60: #8d9199, 70: #a8abb4,
+    80: #c3c7cf, 90: #dfe2eb, 95: #edf0fa, 98: #f8f9ff, 99: #fdfcff,
+    100: #ffffff,
+  ),
+  // ---- Error: rojo estándar M3 ----
+  error: (
+    0: #000000,  10: #410002, 20: #690005, 25: #7e0007, 30: #93000a,
+    35: #a80710, 40: #ba1a1a, 50: #de3730, 60: #ff5449, 70: #ff897d,
+    80: #ffb4ab, 90: #ffdad6, 95: #ffedea, 98: #fff8f7, 99: #fffbff,
+    100: #ffffff,
+  ),
+);
+
+// mat.theme() consume "primary" y "tertiary" ya con secondary/neutral/error dentro.
+$primary-palette: map.merge(
+  map.get($_palettes, primary),
+  (
+    secondary: map.get($_palettes, secondary),
+    neutral: map.get($_palettes, neutral),
+    neutral-variant: map.get($_palettes, neutral-variant),
+    error: map.get($_palettes, error),
+  )
+);
+
+$tertiary-palette: map.merge(
+  map.get($_palettes, tertiary),
+  (
+    secondary: map.get($_palettes, secondary),
+    neutral: map.get($_palettes, neutral),
+    neutral-variant: map.get($_palettes, neutral-variant),
+    error: map.get($_palettes, error),
+  )
+);
