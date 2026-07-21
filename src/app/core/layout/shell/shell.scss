@@ -1,0 +1,48 @@
+.shell {
+  height: 100vh;
+}
+mat-sidenav {
+  width: 256px;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface-container-low);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--mat-sys-primary);
+}
+.group-label {
+  padding: 14px 16px 4px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mat-sys-on-surface-variant);
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  gap: 4px;
+  background: var(--mat-sys-surface);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+.title {
+  font-weight: 600;
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.user-name {
+  margin-left: 6px;
+}
+a.active {
+  background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+  color: var(--mat-sys-primary);
+}
+.content {
+  padding: 16px;
+}

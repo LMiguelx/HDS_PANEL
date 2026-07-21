@@ -1,1 +1,62 @@
-<p>shell works!</p>
+<mat-sidenav-container class="shell">
+  <mat-sidenav [mode]="isHandset() ? 'over' : 'side'" [opened]="!isHandset()" #sidenav>
+    <div class="brand">
+      <mat-icon>local_shipping</mat-icon>
+      <span>hdsapp</span>
+    </div>
+
+    <mat-nav-list>
+      @for (group of groups(); track group.name) {
+        @if (group.name) {
+          <div class="group-label">{{ group.name }}</div>
+        }
+        @for (item of group.items; track item.route) {
+          <a
+            mat-list-item
+            [routerLink]="item.route"
+            routerLinkActive="active"
+            (click)="isHandset() && sidenav.close()"
+          >
+            <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+            <span matListItemTitle>{{ item.label }}</span>
+          </a>
+        }
+      }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    <mat-toolbar class="topbar">
+      @if (isHandset()) {
+        <button mat-icon-button (click)="sidenav.toggle()" aria-label="Menú">
+          <mat-icon>menu</mat-icon>
+        </button>
+      }
+      <span class="title">hdsapp</span>
+      <span class="spacer"></span>
+
+      <button mat-icon-button (click)="theme.toggle()" aria-label="Cambiar tema">
+        <mat-icon>{{ theme.resolved() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
+
+      <button mat-icon-button aria-label="Notificaciones">
+        <mat-icon>notifications</mat-icon>
+      </button>
+
+      <button mat-button [matMenuTriggerFor]="userMenu">
+        <mat-icon>account_circle</mat-icon>
+        <span class="user-name">{{ user()?.fullName || user()?.username }}</span>
+      </button>
+      <mat-menu #userMenu="matMenu">
+        <button mat-menu-item (click)="logout()">
+          <mat-icon>logout</mat-icon>
+          <span>Cerrar sesión</span>
+        </button>
+      </mat-menu>
+    </mat-toolbar>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>
