@@ -36,9 +36,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/customers/assignments').then((m) => m.AssignmentsPage),
       },
+      {
+        path: 'segmentos',
+        canActivate: [permissionGuard('segments.manage')],
+        loadComponent: () => import('./features/segments/segments').then((m) => m.SegmentsPage),
+      },
 
       // ── Próximas features ───────────────────────────────────────────────
-      // { path: 'segmentos',    canActivate: [permissionGuard('segment.manage')],   loadComponent: ... },
+      // { path: 'segmentos',    canActivate: [permissionGuard('segments.manage')],   loadComponent: ... },
       // { path: 'pedidos',      canActivate: [permissionGuard('order.view_all','order.create')], loadChildren: ... },
       // { path: 'promos',       canActivate: [permissionGuard('promo.create','promo.approve')], loadChildren: ... },
       // { path: 'reparto',      canActivate: [permissionGuard('delivery.deliver','delivery.settle')], loadChildren: ... },

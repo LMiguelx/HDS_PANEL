@@ -38,7 +38,7 @@ export const NAV: NavItem[] = [
     label: 'Segmentos',
     icon: 'group_work',
     route: '/segmentos',
-    anyOf: ['segment.manage'],
+    anyOf: ['segments.manage'],
     group: 'Clientes',
   },
 

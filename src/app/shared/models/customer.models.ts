@@ -1,8 +1,12 @@
-﻿export interface CustomerSummary {
+﻿// Contratos de Clientes. Se agrega customerTypeId (lo pide /prices/resolve).
+// Confirma/regenera con openapi-typescript contra el Swagger real.
+
+export interface CustomerSummary {
   customerId: number;
   businessName: string;
   documentNumber: string;
   address: string | null;
+  customerTypeId?: number | null;
   customerTypeName: string | null;
   active: boolean;
 }
@@ -24,9 +28,10 @@ export interface CustomerDetail {
   businessName: string;
   documentTypeName: string | null;
   documentNumber: string;
-  address: string | null;
+  customerTypeId?: number | null;
   customerTypeName: string | null;
   salesChannelName: string | null;
+  address: string | null;
   latitude: number | null;
   longitude: number | null;
   active: boolean;
@@ -35,7 +40,7 @@ export interface CustomerDetail {
 
 export interface CustomerInvoiceSummary {
   invoiceId: string;
-  issueDate: string; // ISO
+  issueDate: string;
   totalAmount: number;
-  matchStatus: string; // UNMATCHED | MATCHED_AUTO | MATCHED_MANUAL | MISMATCH
+  matchStatus: string;
 }

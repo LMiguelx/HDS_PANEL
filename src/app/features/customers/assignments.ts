@@ -309,7 +309,7 @@ export class AssignmentsPage {
   readonly userIdInput = signal<number | null>(null);
   readonly userAssignments = signal<AssignmentView[]>([]);
 
-  private readonly WD = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  private readonly WD = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
   canCreate() {
     return !!this.selectedCustomer() && !!this.formUserId() && !!this.formFrom();
