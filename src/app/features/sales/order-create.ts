@@ -55,7 +55,7 @@ interface GiftDraft {
   ],
   template: `
     <div class="page">
-      <app-page-header title="Nuevo pedido" subtitle="Creación como administrador" />
+      <app-page-header title="Nuevo pedido" subtitle="Creación como administrador"></app-page-header>
 
       <!-- 1. Cliente -->
       <mat-card class="card">
@@ -101,7 +101,8 @@ interface GiftDraft {
             <div class="chips">
               @for (s of suggested(); track s.productId) {
                 <button class="sug" (click)="addSuggested(s)">
-                  <mat-icon>add</mat-icon> {{ s.productName }}
+                  <mat-icon>add</mat-icon>
+                  {{ s.productName }}
                   <span class="muted">(~{{ s.avgQuantity }})</span>
                 </button>
               }
@@ -130,7 +131,8 @@ interface GiftDraft {
               @for (p of prodResults(); track p.productId) {
                 <button class="row-item" (click)="addProduct(p)">
                   <span>{{ p.name }}</span
-                  ><mat-icon>add</mat-icon>
+                  >
+                  <mat-icon>add</mat-icon>
                 </button>
               }
             </div>
@@ -140,7 +142,7 @@ interface GiftDraft {
             <div class="items">
               <div class="item head">
                 <span>Producto</span><span>Cant.</span><span>P. Unit</span><span>Total</span
-                ><span></span>
+              ><span></span>
               </div>
               @for (it of items(); track it.productId) {
                 <div class="item">
@@ -160,7 +162,8 @@ interface GiftDraft {
               }
             </div>
             <button mat-stroked-button (click)="previewPrices()">
-              <mat-icon>calculate</mat-icon> Previsualizar precios
+              <mat-icon>calculate</mat-icon>
+              Previsualizar precios
             </button>
           } @else {
             <p class="muted">Agrega productos del sugerido o del buscador.</p>
@@ -174,7 +177,8 @@ interface GiftDraft {
             <div class="chips">
               @for (a of myAllocations(); track a.allocationId) {
                 <button class="sug" [disabled]="a.availableQuantity <= 0" (click)="addGift(a)">
-                  <mat-icon>redeem</mat-icon> {{ a.productName }}
+                  <mat-icon>redeem</mat-icon>
+                  {{ a.productName }}
                   <span class="muted">(saldo {{ a.availableQuantity }})</span>
                 </button>
               }
@@ -184,7 +188,7 @@ interface GiftDraft {
                 @for (g of gifts(); track g.allocationId) {
                   <div class="item gift">
                     <span class="pname"
-                      >{{ g.productName }} <span class="muted">(regalo)</span></span
+                    >{{ g.productName }} <span class="muted">(regalo)</span></span
                     >
                     <input
                       type="number"
@@ -239,7 +243,8 @@ interface GiftDraft {
             <span class="muted small"> · el total real y las promos los calcula el backend</span>
           </div>
           <button mat-flat-button color="tertiary" [disabled]="!canSubmit()" (click)="submit()">
-            <mat-icon>check</mat-icon> Crear pedido
+            <mat-icon>check</mat-icon>
+            Crear pedido
           </button>
         </mat-card>
       }
@@ -251,10 +256,10 @@ interface GiftDraft {
           <div class="head">
             <div>
               <span class="muted">Estado</span><br /><span
-                class="status-chip"
-                [attr.data-status]="r.statusCode"
-                >{{ label(r.statusCode) }}</span
-              >
+              class="status-chip"
+              [attr.data-status]="r.statusCode"
+            >{{ label(r.statusCode) }}</span
+            >
             </div>
             <div>
               <span class="muted">Total</span><br /><strong class="money">{{
@@ -638,7 +643,7 @@ export class OrderCreatePage {
 
   goToDetail() {
     const r = this.result();
-    if (r) this.router.navigate(['/pedidos', r.orderId]);
+    if (r) void this.router.navigate(['/pedidos', r.orderId]);
   }
   sendToBilling() {
     const r = this.result();

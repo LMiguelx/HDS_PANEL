@@ -42,10 +42,27 @@ export const routes: Routes = [
         loadComponent: () => import('./features/segments/segments').then((m) => m.SegmentsPage),
       },
 
+      // Pedidos (módulo 3)
+      {
+        path: 'pedidos',
+        canActivate: [permissionGuard('order.view_all', 'order.create')],
+        loadChildren: () => import('./features/sales/sales.routes').then((m) => m.SALES_ROUTES),
+      },
+
+      // Promociones (módulo 4) — lista + aprobar + detalle (wizard en parte 2)
+      {
+        path: 'promos',
+        canActivate: [permissionGuard('promo.create', 'promo.approve')],
+        loadChildren: () => import('./features/promos/promos.routes').then((m) => m.PROMO_ROUTES),
+      },
+      {
+        path: 'dotaciones',
+        canActivate: [permissionGuard('promo.allocate')],
+        loadComponent: () =>
+          import('./features/promos/allocations-admin').then((m) => m.AllocationsAdminPage),
+      },
+
       // ── Próximas features ───────────────────────────────────────────────
-      // { path: 'segmentos',    canActivate: [permissionGuard('segments.manage')],   loadComponent: ... },
-      // { path: 'pedidos',      canActivate: [permissionGuard('order.view_all','order.create')], loadChildren: ... },
-      // { path: 'promos',       canActivate: [permissionGuard('promo.create','promo.approve')], loadChildren: ... },
       // { path: 'reparto',      canActivate: [permissionGuard('delivery.deliver','delivery.settle')], loadChildren: ... },
       // { path: 'facturas',     canActivate: [permissionGuard('invoice.reconcile')], loadChildren: ... },
       // { path: 'precios',      canActivate: [permissionGuard('price.view')], loadComponent: ... },
