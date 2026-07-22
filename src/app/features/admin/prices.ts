@@ -14,7 +14,7 @@ import { PriceAdminService } from './price-admin';
 import { CatalogService } from '../sales/catalog';
 import { ProductPickerDialog } from '../promos/product-picker-dialog';
 import { Product, PaymentCondition } from '../../shared/models/catalog.models';
-import { PriceRow, UpsertPriceCommand } from '../../shared/models/price.models';
+import { UpsertPriceCommand } from '../../shared/models/price.models';
 
 let SEQ = 0;
 interface PriceDraft {
@@ -43,12 +43,13 @@ interface PriceDraft {
   ],
   template: `
     <div class="page">
-      <app-page-header title="Precios" subtitle="Escalones por volumen, por producto" />
+      <app-page-header title="Precios" subtitle="Escalones por volumen, por producto"></app-page-header>
 
       <mat-card class="card">
         <div class="pick">
           <button mat-stroked-button (click)="pickProduct()">
-            <mat-icon>inventory_2</mat-icon> {{ productName() || 'Elegir producto' }}
+            <mat-icon>inventory_2</mat-icon>
+            {{ productName() || 'Elegir producto' }}
           </button>
           @if (productId()) {
             <span class="muted">Producto #{{ productId() }}</span>
@@ -65,7 +66,7 @@ interface PriceDraft {
           <h3>Escalones</h3>
           <div class="grid head">
             <span>Cond. pago</span><span>Tipo cliente</span><span>Cant. mín.</span
-            ><span>Precio</span><span></span>
+          ><span>Precio</span><span></span>
           </div>
           @for (r of rows(); track r.uid) {
             <div class="grid">
@@ -129,7 +130,8 @@ interface PriceDraft {
           }
 
           <button *hasPermission="'price.edit'" mat-stroked-button class="add" (click)="addRow()">
-            <mat-icon>add</mat-icon> Agregar escalón
+            <mat-icon>add</mat-icon>
+            Agregar escalón
           </button>
         </mat-card>
 
@@ -137,29 +139,33 @@ interface PriceDraft {
           <h3>Simulador</h3>
           <div class="sim">
             <mat-form-field appearance="outline" subscriptSizing="dynamic"
-              ><mat-label>Cond. pago</mat-label>
+            >
+              <mat-label>Cond. pago</mat-label>
               <mat-select [value]="simPc()" (valueChange)="simPc.set($event)">
                 @for (pc of paymentConditions(); track pc.paymentConditionId) {
                   <mat-option [value]="pc.paymentConditionId">{{ pc.name }}</mat-option>
                 }
-              </mat-select></mat-form-field
+              </mat-select>
+            </mat-form-field
             >
             <mat-form-field appearance="outline" subscriptSizing="dynamic"
-              ><mat-label>Tipo cliente (id)</mat-label>
+            >
+              <mat-label>Tipo cliente (id)</mat-label>
               <input
                 matInput
                 type="number"
                 [value]="simCt() ?? ''"
                 (input)="simCt.set(+$any($event.target).value || null)"
-            /></mat-form-field>
+              /></mat-form-field>
             <mat-form-field appearance="outline" subscriptSizing="dynamic"
-              ><mat-label>Cantidad</mat-label>
+            >
+              <mat-label>Cantidad</mat-label>
               <input
                 matInput
                 type="number"
                 [value]="simQty() || ''"
                 (input)="simQty.set(+$any($event.target).value || 0)"
-            /></mat-form-field>
+              /></mat-form-field>
             <button
               mat-flat-button
               color="tertiary"
