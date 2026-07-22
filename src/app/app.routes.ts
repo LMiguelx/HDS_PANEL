@@ -49,7 +49,7 @@ export const routes: Routes = [
         loadChildren: () => import('./features/sales/sales.routes').then((m) => m.SALES_ROUTES),
       },
 
-      // Promociones (módulo 4) — lista + aprobar + detalle (wizard en parte 2)
+      // Promociones (módulo 4)
       {
         path: 'promos',
         canActivate: [permissionGuard('promo.create', 'promo.approve')],
@@ -62,12 +62,43 @@ export const routes: Routes = [
           import('./features/promos/allocations-admin').then((m) => m.AllocationsAdminPage),
       },
 
-      // ── Próximas features ───────────────────────────────────────────────
-      // { path: 'reparto',      canActivate: [permissionGuard('delivery.deliver','delivery.settle')], loadChildren: ... },
-      // { path: 'facturas',     canActivate: [permissionGuard('invoice.reconcile')], loadChildren: ... },
-      // { path: 'precios',      canActivate: [permissionGuard('price.view')], loadComponent: ... },
-      // { path: 'inventario',   canActivate: [permissionGuard('report.view')], loadComponent: ... },
-      // { path: 'empresa',      canActivate: [permissionGuard('config.edit')], loadChildren: ... },
+      // Reparto (módulo 5)
+      {
+        path: 'reparto',
+        canActivate: [permissionGuard('delivery.deliver', 'delivery.settle')],
+        loadChildren: () =>
+          import('./features/delivery/delivery.routes').then((m) => m.DELIVERY_ROUTES),
+      },
+      {
+        path: 'flota',
+        canActivate: [permissionGuard('delivery.settle')],
+        loadComponent: () => import('./features/delivery/fleet-page').then((m) => m.FleetPage),
+      },
+
+      // Facturación (módulo 6)
+      {
+        path: 'facturas',
+        canActivate: [permissionGuard('invoice.reconcile')],
+        loadChildren: () =>
+          import('./features/billing/billing.routes').then((m) => m.BILLING_ROUTES),
+      },
+
+      // Administración (módulo 7)
+      {
+        path: 'empresa',
+        canActivate: [permissionGuard('config.edit')],
+        loadChildren: () => import('./features/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
+      },
+      {
+        path: 'precios',
+        canActivate: [permissionGuard('price.view')],
+        loadComponent: () => import('./features/admin/prices').then((m) => m.PricesPage),
+      },
+      {
+        path: 'inventario',
+        canActivate: [permissionGuard('report.view')],
+        loadComponent: () => import('./features/admin/kardex').then((m) => m.KardexPage),
+      },
     ],
   },
   { path: '**', redirectTo: 'dashboard' },
