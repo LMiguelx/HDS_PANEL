@@ -292,9 +292,9 @@ interface GiftDraft {
   styles: [
     `
       .card {
-        padding: 16px 20px;
-        margin-bottom: 16px;
-        max-width: 820px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-md);
       }
       h3 {
         margin: 0 0 12px;

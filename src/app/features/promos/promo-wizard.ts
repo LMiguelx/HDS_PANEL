@@ -8,6 +8,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { PageHeaderComponent } from '../../shared/components/page-header';
 import { ToastService } from '../../core/ui/toast';
 import { PromoService } from './promo';
@@ -15,7 +16,7 @@ import { ProductPickerDialog } from './product-picker-dialog';
 import { CatalogService } from '../sales/catalog';
 import { SegmentService } from '../segments/segment';
 import { CustomerService } from '../customers/customer';
-import { Brand, Family, Product } from '../../shared/models/catalog.models';
+import { Brand, Family, Product, SalesChannel } from '../../shared/models/catalog.models';
 import { Segment } from '../../shared/models/segment.models';
 import { CustomerSummary } from '../../shared/models/customer.models';
 import { CreatePromoCommand, PromoTargets } from '../../shared/models/promo.models';
@@ -73,6 +74,7 @@ interface CustTarget {
     MatButtonModule,
     MatIconModule,
     MatCheckboxModule,
+    MatTooltipModule,
     PageHeaderComponent,
   ],
   template: `
@@ -97,36 +99,51 @@ interface CustTarget {
         <!-- 1. Datos generales -->
         @case (1) {
           <mat-card class="card">
+            <h3 class="picker-h">¿Qué tipo de promoción es?</h3>
+            <div class="type-grid">
+              @for (t of promoTypes; track t.code) {
+                <button
+                  type="button"
+                  class="type-card"
+                  [class.selected]="promoType() === t.code"
+                  (click)="onTypeChange(t.code)"
+                >
+                  <mat-icon>{{ t.icon }}</mat-icon>
+                  <span class="t-label">{{ t.label }}</span>
+                  <span class="t-desc">{{ t.desc }}</span>
+                </button>
+              }
+            </div>
+
             <div class="grid2">
               <mat-form-field appearance="outline"
               >
-                <mat-label>Código</mat-label>
-                <input matInput [value]="code()" (input)="code.set($any($event.target).value)"
-                /></mat-form-field>
-              <mat-form-field appearance="outline"
-              >
                 <mat-label>Nombre</mat-label>
-                <input matInput [value]="name()" (input)="name.set($any($event.target).value)"
+                <input matInput [value]="name()" (input)="onNameInput($any($event.target).value)"
                 /></mat-form-field>
               <mat-form-field appearance="outline"
               >
-                <mat-label>Tipo</mat-label>
-                <mat-select [value]="promoType()" (valueChange)="promoType.set($event)">
-                  @for (t of promoTypes; track t.code) {
-                    <mat-option [value]="t.code">{{ t.label }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field
-              >
-              <mat-form-field appearance="outline"
-              >
-                <mat-label>Canal (ID, vacío = todos)</mat-label>
+                <mat-label>Código</mat-label>
                 <input
                   matInput
-                  type="number"
-                  [value]="salesChannelId() ?? ''"
-                  (input)="salesChannelId.set(+$any($event.target).value || null)"
-                /></mat-form-field>
+                  [value]="code()"
+                  (input)="onCodeInput($any($event.target).value)"
+                />
+                <mat-hint>Se genera solo desde el nombre — edítalo si quieres otro.</mat-hint>
+              </mat-form-field>
+              <mat-form-field appearance="outline"
+              >
+                <mat-label>Canal (vacío = todos)</mat-label>
+                <mat-select
+                  [value]="salesChannelId()"
+                  (valueChange)="salesChannelId.set($event)"
+                >
+                  <mat-option [value]="null">Todos los canales</mat-option>
+                  @for (c of salesChannels(); track c.salesChannelId) {
+                    <mat-option [value]="c.salesChannelId">{{ c.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
               <mat-form-field appearance="outline"
               >
                 <mat-label>Desde</mat-label>
@@ -146,6 +163,12 @@ interface CustTarget {
                   (input)="endDate.set($any($event.target).value)"
                 /></mat-form-field>
             </div>
+            @if (typeNote(); as note) {
+              <p class="hint">
+                <mat-icon inline="">info</mat-icon>
+                {{ note }}
+              </p>
+            }
             <mat-form-field appearance="outline" class="full"
             >
               <mat-label>Descripción</mat-label>
@@ -154,9 +177,17 @@ interface CustTarget {
                 [value]="description()"
                 (input)="description.set($any($event.target).value)"
               /></mat-form-field>
-            <mat-checkbox [checked]="repeats()" (change)="repeats.set($any($event).checked)">
-              Se repite por cada múltiplo (compra 36 con umbral 12 → 3× el beneficio)
-            </mat-checkbox>
+            @if (promoType() !== 'CUSTOMER_LIST') {
+              <mat-checkbox [checked]="repeats()" (change)="repeats.set($any($event).checked)">
+                Se repite por cada múltiplo (compra 36 con umbral 12 → 3× el beneficio)
+              </mat-checkbox>
+            } @else {
+              <p class="hint">
+                <mat-icon inline="">info</mat-icon>
+                No aplica: una promo de lista de clientes siempre se otorga una vez por pedido
+                calificado, sin multiplicar.
+              </p>
+            }
           </mat-card>
         }
 
@@ -164,16 +195,18 @@ interface CustTarget {
         @case (2) {
           <mat-card class="card">
             <p class="muted">{{ conditionHint() }}</p>
-            <div class="addrow">
-              <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                <mat-label>Agregar condición (scope)</mat-label>
-                <mat-select [value]="null" (valueChange)="addCondition($event)">
-                  @for (s of scopes; track s.code) {
-                    <mat-option [value]="s.code">{{ s.label }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-            </div>
+            @if (allowedScopes().length) {
+              <div class="addrow">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Agregar condición (scope)</mat-label>
+                  <mat-select [value]="null" (valueChange)="addCondition($event)">
+                    @for (s of allowedScopes(); track s.code) {
+                      <mat-option [value]="s.code">{{ s.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+            }
 
             @for (c of conditions(); track c.uid) {
               <div class="cond">
@@ -251,10 +284,18 @@ interface CustTarget {
         <!-- 3. Tramos y beneficios -->
         @case (3) {
           <mat-card class="card">
-            <button mat-stroked-button (click)="addTier()">
-              <mat-icon>add</mat-icon>
-              Agregar tramo
-            </button>
+            @if (canAddTier()) {
+              <button mat-stroked-button (click)="addTier()">
+                <mat-icon>add</mat-icon>
+                Agregar tramo
+              </button>
+            } @else {
+              <p class="hint">
+                <mat-icon inline="">info</mat-icon>
+                {{ typeLabel(promoType()) }} solo usa el primer tramo — el motor ignora tramos
+                adicionales para este tipo. Si necesitas otro nivel de beneficio, crea otra promo.
+              </p>
+            }
             @for (t of tiers(); track t.uid) {
               <div class="tier">
                 <div class="trow">
@@ -383,6 +424,16 @@ interface CustTarget {
         <!-- 4. Targeting -->
         @case (4) {
           <mat-card class="card">
+            @if (segmentRepeatsWarning()) {
+              <p class="warn">
+                <mat-icon inline="true">warning</mat-icon>
+                Esta promo "no se repite", pero ese límite de una sola vez <strong>no se aplica
+                a clientes que califican solo por segmento</strong> — es un límite conocido del
+                backend (solo lo controla para clientes agregados individualmente abajo). Si
+                necesitas que sea estrictamente una vez por cliente, agrégalos uno por uno en vez
+                de por segmento.
+              </p>
+            }
             <h3>Segmentos</h3>
             <div class="addrow">
               <mat-form-field appearance="outline" subscriptSizing="dynamic"
@@ -558,9 +609,68 @@ interface CustTarget {
         font-size: 0.78rem;
       }
       .card {
-        padding: 20px;
-        margin-bottom: 16px;
-        max-width: 900px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-lg);
+      }
+      .picker-h {
+        margin: 0 0 10px;
+        font-size: 0.95rem;
+      }
+      .type-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      @media (max-width: 900px) {
+        .type-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 560px) {
+        .type-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .type-card {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        text-align: left;
+        border: 1px solid var(--mat-sys-outline-variant);
+        border-radius: var(--radius-md);
+        padding: 14px;
+        background: var(--mat-sys-surface-container-low);
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        transition: border-color 0.15s ease, background 0.15s ease;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .type-card {
+          transition: none;
+        }
+      }
+      .type-card:hover {
+        border-color: var(--mat-sys-primary);
+      }
+      .type-card.selected {
+        border-color: var(--mat-sys-primary);
+        border-width: 2px;
+        background: color-mix(in srgb, var(--mat-sys-primary) 8%, var(--mat-sys-surface-container-low));
+      }
+      .type-card mat-icon {
+        color: var(--mat-sys-primary);
+      }
+      .type-card .t-label {
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .type-card .t-desc {
+        font-size: 0.78rem;
+        color: var(--mat-sys-on-surface-variant);
       }
       .grid2 {
         display: grid;
@@ -671,6 +781,25 @@ interface CustTarget {
       .err {
         color: var(--mat-sys-error);
       }
+      .hint {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: var(--mat-sys-on-surface-variant);
+        margin: 4px 0 12px;
+      }
+      .warn {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 0.85rem;
+        color: var(--mat-sys-on-error-container, var(--mat-sys-error));
+        background: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        margin-bottom: 12px;
+      }
       .nav {
         display: flex;
         justify-content: space-between;
@@ -691,7 +820,44 @@ export class PromoWizardPage {
   readonly stepLabels = ['General', 'Condiciones', 'Tramos', 'Targeting', 'Revisar'];
   readonly step = signal(1);
 
-  readonly promoTypes = Object.entries(PROMO_TYPE_LABELS).map(([code, label]) => ({ code, label }));
+  readonly promoTypes = [
+    {
+      code: 'PRODUCT_QTY',
+      label: PROMO_TYPE_LABELS['PRODUCT_QTY'],
+      icon: 'inventory_2',
+      desc: 'Compra X unidades de un producto y recibe el beneficio.',
+    },
+    {
+      code: 'BRAND_FAMILY',
+      label: PROMO_TYPE_LABELS['BRAND_FAMILY'],
+      icon: 'category',
+      desc: 'Aplica a toda una marca o familia desde cierta cantidad o monto.',
+    },
+    {
+      code: 'TIERED',
+      label: PROMO_TYPE_LABELS['TIERED'],
+      icon: 'stacked_line_chart',
+      desc: 'Varios escalones: a mayor compra, mejor beneficio.',
+    },
+    {
+      code: 'ORDER_TOTAL',
+      label: PROMO_TYPE_LABELS['ORDER_TOTAL'],
+      icon: 'shopping_cart',
+      desc: 'El pedido completo supera un monto mínimo.',
+    },
+    {
+      code: 'COMBO',
+      label: PROMO_TYPE_LABELS['COMBO'],
+      icon: 'redeem',
+      desc: 'Combina varios productos distintos en un mismo pedido.',
+    },
+    {
+      code: 'CUSTOMER_LIST',
+      label: PROMO_TYPE_LABELS['CUSTOMER_LIST'],
+      icon: 'group',
+      desc: 'Solo para clientes o segmentos elegidos, sin condiciones de compra.',
+    },
+  ];
   readonly scopes = [
     { code: 'PRODUCT', label: 'Producto' },
     { code: 'FAMILY', label: 'Familia' },
@@ -707,6 +873,7 @@ export class PromoWizardPage {
 
   // Paso 1
   readonly code = signal('');
+  readonly codeTouched = signal(false);
   readonly name = signal('');
   readonly description = signal('');
   readonly promoType = signal('PRODUCT_QTY');
@@ -720,6 +887,7 @@ export class PromoWizardPage {
   readonly tiers = signal<TierDraft[]>([]);
   readonly families = signal<Family[]>([]);
   readonly brands = signal<Brand[]>([]);
+  readonly salesChannels = signal<SalesChannel[]>([]);
 
   // Paso 4
   readonly segments = signal<Segment[]>([]);
@@ -737,7 +905,7 @@ export class PromoWizardPage {
       case 'BRAND_FAMILY':
         return 'Agrega una condición de FAMILIA o MARCA (por cantidad o monto).';
       case 'ORDER_TOTAL':
-        return 'Agrega una condición PEDIDO TOTAL con monto mínimo.';
+        return 'Sin condiciones: el umbral se define con "Desde monto" en el tramo (paso siguiente).';
       case 'COMBO':
         return 'Agrega una condición ÍTEM DE COMBO por cada producto exigido.';
       case 'CUSTOMER_LIST':
@@ -749,14 +917,83 @@ export class PromoWizardPage {
     }
   });
 
+  /** Scopes de condición que el motor realmente usa para cada tipo (evita 409 al enviar). */
+  readonly allowedScopes = computed(() => {
+    switch (this.promoType()) {
+      case 'PRODUCT_QTY':
+        return this.scopes.filter((s) => s.code === 'PRODUCT');
+      case 'BRAND_FAMILY':
+        return this.scopes.filter((s) => s.code === 'FAMILY' || s.code === 'BRAND');
+      case 'TIERED':
+        return this.scopes.filter((s) => ['PRODUCT', 'FAMILY', 'BRAND'].includes(s.code));
+      case 'COMBO':
+        return this.scopes.filter((s) => s.code === 'COMBO_ITEM');
+      case 'ORDER_TOTAL':
+      case 'CUSTOMER_LIST':
+      default:
+        return [];
+    }
+  });
+
+  /** PRODUCT_QTY/BRAND_FAMILY/TIERED comparten el mismo motor — solo cambia la etiqueta. */
+  readonly typeNote = computed(() => {
+    if (['PRODUCT_QTY', 'BRAND_FAMILY', 'TIERED'].includes(this.promoType())) {
+      return 'Nota: este tipo, "Por cantidad de producto", "Por marca/familia" y "Escalonada" funcionan exactamente igual por dentro — el nombre es solo para identificar la promo, no cambia el comportamiento.';
+    }
+    return null;
+  });
+
+  /** COMBO y CUSTOMER_LIST solo usan el tramo 1; el resto son código muerto en el motor. */
+  readonly canAddTier = computed(() => {
+    const single = this.promoType() === 'COMBO' || this.promoType() === 'CUSTOMER_LIST';
+    return !single || this.tiers().length < 1;
+  });
+
+  /** Bug conocido de backend: repeats=false no limita a clientes que califican por segmento. */
+  readonly segmentRepeatsWarning = computed(
+    () => !this.repeats() && this.targetSegments().some((s) => s.mode === 'INCLUDE'),
+  );
+
   constructor() {
     this.catalog.families().subscribe({ next: (f) => this.families.set(f), error: () => {} });
     this.catalog.brands().subscribe({ next: (b) => this.brands.set(b), error: () => {} });
+    this.catalog
+      .salesChannels()
+      .subscribe({ next: (c) => this.salesChannels.set(c), error: () => {} });
     this.segmentsSvc.list().subscribe({ next: (s) => this.segments.set(s), error: () => {} });
   }
 
   typeLabel(code: string) {
     return PROMO_TYPE_LABELS[code] ?? code;
+  }
+
+  onNameInput(v: string) {
+    this.name.set(v);
+    if (!this.codeTouched()) this.code.set(this.slugify(v));
+  }
+  onCodeInput(v: string) {
+    this.codeTouched.set(true);
+    this.code.set(v.toUpperCase());
+  }
+  private slugify(v: string): string {
+    return v
+      .normalize('NFD')
+      .replace(new RegExp('[̀-ͯ]', 'g'), '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+      .slice(0, 40);
+  }
+
+  onTypeChange(code: string) {
+    this.promoType.set(code);
+    const single = code === 'COMBO' || code === 'CUSTOMER_LIST';
+    if (single && this.tiers().length > 1) {
+      this.tiers.update((l) => l.slice(0, 1));
+      this.toast.info(
+        `Se conservó solo el tramo 1: ${this.typeLabel(code)} no usa tramos adicionales.`,
+      );
+    }
   }
   scopeLabel(code: string) {
     return this.scopes.find((s) => s.code === code)?.label ?? code;

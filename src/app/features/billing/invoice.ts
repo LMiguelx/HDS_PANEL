@@ -28,6 +28,16 @@ export class InvoiceService {
     return this.http.get<InvoiceSummary[]>(`${this.base}/by-customer/${customerId}`);
   }
 
+  /** Facturas conciliadas sin planilla asignada, para armar un batch (delivery.settle). */
+  readyForBatch(branchId?: number, issueDate?: string, page = 0, size = 50) {
+    const params: Record<string, string | number> = { page, size };
+    if (branchId) params['branchId'] = branchId;
+    if (issueDate) params['issueDate'] = issueDate;
+    return this.http.get<PageResponse<InvoiceSummary>>(`${this.base}/ready-for-batch`, {
+      params,
+    });
+  }
+
   /** Importa un lote de facturas del ERP (product.sync). Idempotente. */
   importInvoices(payload: unknown) {
     return this.http.post<ImportResult>(`${this.base}/import`, payload);

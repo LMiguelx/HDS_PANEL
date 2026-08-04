@@ -222,9 +222,9 @@ import { AssignmentView } from '../../shared/models/assignment.models';
         flex: 1 1 auto;
       }
       .card {
-        padding: 16px;
-        margin-bottom: 12px;
-        max-width: 640px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-sm);
       }
       .list {
         display: flex;

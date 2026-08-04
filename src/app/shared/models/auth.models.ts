@@ -21,3 +21,10 @@ export interface Session {
   roles: string[];
   permissions: string[];
 }
+
+/** Catálogo de roles (user.manage) — para el select de roles al crear usuario. */
+export interface Role {
+  roleId: number;
+  code: string;
+  name: string;
+}

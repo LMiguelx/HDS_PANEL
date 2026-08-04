@@ -20,3 +20,21 @@ export interface Brand {
   brandId: number;
   name: string;
 }
+
+export interface DocumentType {
+  documentTypeId: number;
+  code: string;
+  name: string;
+}
+
+export interface CustomerType {
+  customerTypeId: number;
+  code: string;
+  name: string;
+}
+
+export interface SalesChannel {
+  salesChannelId: number;
+  code: string;
+  name: string;
+}

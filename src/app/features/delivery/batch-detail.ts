@@ -152,8 +152,8 @@ import { BatchDetail, BatchItemView, ReturnView } from '../../shared/models/deli
   styles: [
     `
       .card {
-        padding: 20px;
-        margin-bottom: 16px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
       }
       .head {
         display: flex;

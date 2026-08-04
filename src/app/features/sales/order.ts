@@ -7,6 +7,7 @@ import {
   OrderCreatedResult,
   OrderDetail,
   OrderSummary,
+  PendingBonusOrderView,
   SuggestedItem,
 } from '../../shared/models/order.models';
 
@@ -41,5 +42,12 @@ export class OrderService {
 
   cancel(id: number) {
     return this.http.post<void>(`${this.base}/${id}/cancel`, {});
+  }
+
+  /** Pedidos OPEN con líneas de bonificación sin stock respaldado (order.view_all). Sin resolución automática — ver CU-39. */
+  pendingBonuses(branchId?: number) {
+    const params: Record<string, number> = {};
+    if (branchId) params['branchId'] = branchId;
+    return this.http.get<PendingBonusOrderView[]>(`${this.base}/pending-bonuses`, { params });
   }
 }

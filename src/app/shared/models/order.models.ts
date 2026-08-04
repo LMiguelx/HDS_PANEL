@@ -70,3 +70,19 @@ export interface OrderCreatedResult {
   bonusLines: number;
   promoDiscountTotal: number;
 }
+
+// ── Bonificaciones pendientes de stock (reporte, sin resolución automática) ──
+export interface PendingBonusLine {
+  lineNumber: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+}
+
+export interface PendingBonusOrderView {
+  orderId: number;
+  customerId: number;
+  customerName: string;
+  orderDate: string;
+  pendingLines: PendingBonusLine[];
+}

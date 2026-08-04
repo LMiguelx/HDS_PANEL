@@ -31,8 +31,9 @@ import { TenantInfo } from '../../shared/models/tenant.models';
   styles: [
     `
       .card {
-        padding: 20px;
-        max-width: 720px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-sm);
       }
       .grid {
         display: grid;

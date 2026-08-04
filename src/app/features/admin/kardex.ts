@@ -118,9 +118,9 @@ const MOVEMENT_LABELS: Record<string, string> = {
   styles: [
     `
       .card {
-        padding: 20px;
-        margin-bottom: 16px;
-        max-width: 920px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-lg);
       }
       .pick {
         display: flex;

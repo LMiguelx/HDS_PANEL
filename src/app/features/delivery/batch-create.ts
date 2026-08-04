@@ -1,4 +1,5 @@
-﻿import { Component, computed, inject, signal } from '@angular/core';
+﻿import { DecimalPipe } from '@angular/common';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -6,12 +7,15 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { PageHeaderComponent } from '../../shared/components/page-header';
 import { ToastService } from '../../core/ui/toast';
 import { DeliveryService } from './delivery';
 import { FleetService } from './fleet';
+import { InvoiceService } from '../billing/invoice';
 import { TeamView } from '../../shared/models/fleet.models';
 import { CreateBatchCommand } from '../../shared/models/delivery.models';
+import { InvoiceSummary } from '../../shared/models/invoice.models';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -26,7 +30,9 @@ function today(): string {
     MatSelectModule,
     MatButtonModule,
     MatIconModule,
+    MatCheckboxModule,
     PageHeaderComponent,
+    DecimalPipe,
   ],
   template: `
     <div class="page">
@@ -86,35 +92,31 @@ function today(): string {
 
       <mat-card class="card">
         <h3>Facturas a cargar</h3>
-        <div class="row">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="grow">
-            <mat-label>ID de factura (ej. F001-123)</mat-label>
-            <input
-              matInput
-              [value]="invoiceInput()"
-              (input)="invoiceInput.set($any($event.target).value)"
-              (keyup.enter)="addInvoice()"
-            />
-          </mat-form-field>
-          <button mat-stroked-button (click)="addInvoice()">
-            <mat-icon>add</mat-icon>
-            Agregar
-          </button>
-        </div>
-        @if (invoiceIds().length) {
-          <div class="chips">
-            @for (id of invoiceIds(); track id) {
-              <span class="chip"
-              >{{ id }}
-                <button (click)="removeInvoice(id)" aria-label="Quitar">✕</button></span
-              >
+        @if (!branchId()) {
+          <p class="muted small">Elige la sede para ver las facturas listas para planilla.</p>
+        } @else if (loadingInvoices()) {
+          <p class="muted small">Cargando facturas…</p>
+        } @else if (!availableInvoices().length) {
+          <p class="muted small">
+            No hay facturas conciliadas sin planilla para esta sede y fecha.
+          </p>
+        } @else {
+          <div class="invoice-list">
+            @for (inv of availableInvoices(); track inv.invoiceId) {
+              <label class="invoice-row">
+                <mat-checkbox
+                  [checked]="invoiceIds().includes(inv.invoiceId)"
+                  (change)="toggleInvoice(inv.invoiceId)"
+                ></mat-checkbox>
+                <span class="inv-id">{{ inv.invoiceId }}</span>
+                <span class="inv-customer">{{ inv.customerName }}</span>
+                <span class="inv-amount">{{ inv.totalAmount | number: '1.2-2' }}</span>
+              </label>
             }
           </div>
-        } @else {
-          <p class="muted small">
-            Agrega las facturas por su ID. (El selector de facturas pendientes se integrará con
-            Facturación.)
-          </p>
+        }
+        @if (invoiceIds().length) {
+          <p class="muted small">{{ invoiceIds().length }} factura(s) seleccionada(s).</p>
         }
       </mat-card>
 
@@ -134,9 +136,9 @@ function today(): string {
   styles: [
     `
       .card {
-        padding: 20px;
-        margin-bottom: 16px;
-        max-width: 760px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-md);
       }
       .grid {
         display: grid;
@@ -163,25 +165,32 @@ function today(): string {
       .small {
         font-size: 0.82rem;
       }
-      .chips {
+      .invoice-list {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 8px;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 320px;
+        overflow-y: auto;
       }
-      .chip {
-        display: inline-flex;
+      .invoice-row {
+        display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 4px 6px 4px 12px;
-        border-radius: 999px;
-        background: var(--mat-sys-surface-container-high);
-      }
-      .chip button {
-        border: 0;
-        background: transparent;
+        gap: 12px;
+        padding: 6px 4px;
         cursor: pointer;
-        font: inherit;
+      }
+      .inv-id {
+        font-variant-numeric: tabular-nums;
+        min-width: 110px;
+      }
+      .inv-customer {
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .inv-amount {
+        font-variant-numeric: tabular-nums;
       }
       .actions {
         max-width: 760px;
@@ -192,6 +201,7 @@ function today(): string {
 export class BatchArmPage {
   private delivery = inject(DeliveryService);
   private fleet = inject(FleetService);
+  private invoices = inject(InvoiceService);
   private toast = inject(ToastService);
   private router = inject(Router);
 
@@ -201,7 +211,8 @@ export class BatchArmPage {
   readonly batchDate = signal(today());
   readonly series = signal(1);
 
-  readonly invoiceInput = signal('');
+  readonly availableInvoices = signal<InvoiceSummary[]>([]);
+  readonly loadingInvoices = signal(false);
   readonly invoiceIds = signal<string[]>([]);
   readonly saving = signal(false);
 
@@ -213,19 +224,35 @@ export class BatchArmPage {
     this.fleet
       .teams()
       .subscribe({ next: (t) => this.teams.set(t), error: () => this.teams.set([]) });
+
+    effect(() => {
+      const branchId = this.branchId();
+      const batchDate = this.batchDate();
+      if (!branchId) {
+        this.availableInvoices.set([]);
+        this.invoiceIds.set([]);
+        return;
+      }
+      this.loadingInvoices.set(true);
+      this.invoices.readyForBatch(branchId, batchDate || undefined).subscribe({
+        next: (page) => {
+          this.availableInvoices.set(page.content);
+          const ids = new Set(page.content.map((i) => i.invoiceId));
+          this.invoiceIds.update((selected) => selected.filter((id) => ids.has(id)));
+          this.loadingInvoices.set(false);
+        },
+        error: () => {
+          this.availableInvoices.set([]);
+          this.loadingInvoices.set(false);
+        },
+      });
+    });
   }
 
-  addInvoice() {
-    const id = this.invoiceInput().trim();
-    if (!id || this.invoiceIds().includes(id)) {
-      this.invoiceInput.set('');
-      return;
-    }
-    this.invoiceIds.update((l) => [...l, id]);
-    this.invoiceInput.set('');
-  }
-  removeInvoice(id: string) {
-    this.invoiceIds.update((l) => l.filter((x) => x !== id));
+  toggleInvoice(id: string) {
+    this.invoiceIds.update((l) =>
+      l.includes(id) ? l.filter((x) => x !== id) : [...l, id],
+    );
   }
 
   canCreate() {

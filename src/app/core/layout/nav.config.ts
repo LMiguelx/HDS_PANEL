@@ -50,6 +50,13 @@ export const NAV: NavItem[] = [
     anyOf: ['order.view_all', 'order.create'],
     group: 'Ventas',
   },
+  {
+    label: 'Bonificaciones pendientes',
+    icon: 'production_quantity_limits',
+    route: '/pedidos/bonificaciones-pendientes',
+    anyOf: ['order.view_all'],
+    group: 'Ventas',
+  },
 
   // Promos
   {

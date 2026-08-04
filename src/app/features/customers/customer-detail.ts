@@ -153,7 +153,7 @@ import { CustomerDetail, CustomerInvoiceSummary } from '../../shared/models/cust
         margin-bottom: 16px;
       }
       .card {
-        padding: 20px;
+        padding: var(--sp-5);
       }
       .card h2 {
         margin: 0 0 12px;

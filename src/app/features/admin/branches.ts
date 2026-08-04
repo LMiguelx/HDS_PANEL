@@ -82,9 +82,9 @@ import { BranchView, CreateBranchCommand } from '../../shared/models/tenant.mode
   styles: [
     `
       .card {
-        padding: 20px;
-        margin-bottom: 16px;
-        max-width: 900px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-lg);
       }
       h3 {
         margin: 0 0 12px;

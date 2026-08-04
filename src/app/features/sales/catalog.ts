@@ -2,7 +2,15 @@
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
-import { Brand, Family, PaymentCondition, Product } from '../../shared/models/catalog.models';
+import {
+  Brand,
+  CustomerType,
+  DocumentType,
+  Family,
+  PaymentCondition,
+  Product,
+  SalesChannel,
+} from '../../shared/models/catalog.models';
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
@@ -24,5 +32,14 @@ export class CatalogService {
   }
   brands() {
     return this.http.get<Brand[]>(`${this.base}/brands`);
+  }
+  documentTypes() {
+    return this.http.get<DocumentType[]>(`${this.base}/document-types`);
+  }
+  customerTypes() {
+    return this.http.get<CustomerType[]>(`${this.base}/customer-types`);
+  }
+  salesChannels() {
+    return this.http.get<SalesChannel[]>(`${this.base}/sales-channels`);
   }
 }

@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTableModule } from '@angular/material/table';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { PageHeaderComponent } from '../../shared/components/page-header';
 import { MoneyPipe } from '../../shared/pipes/money';
@@ -26,6 +27,7 @@ import { OrderDetail } from '../../shared/models/order.models';
     MatButtonModule,
     MatProgressBarModule,
     MatTableModule,
+    MatTooltipModule,
     PageHeaderComponent,
     MoneyPipe,
     HasPermissionDirective,
@@ -38,6 +40,14 @@ import { OrderDetail } from '../../shared/models/order.models';
       >
         <a mat-stroked-button routerLink="/pedidos"><mat-icon>arrow_back</mat-icon> Volver</a>
         @if (order()?.statusCode === 'OPEN') {
+          <a
+            *hasPermission="'order.view_all'"
+            mat-stroked-button
+            routerLink="/pedidos/bonificaciones-pendientes"
+            matTooltip="Si el envío falla por bonificación sin stock, revisa este reporte"
+          >
+            <mat-icon>production_quantity_limits</mat-icon> Bonif. pendientes
+          </a>
           <button
             *hasPermission="'order.send_to_billing'"
             mat-flat-button
@@ -130,8 +140,8 @@ import { OrderDetail } from '../../shared/models/order.models';
   styles: [
     `
       .card {
-        padding: 20px;
-        margin-bottom: 16px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
       }
       .head {
         display: flex;

@@ -111,9 +111,9 @@ import { benefitText, conditionText, promoTypeLabel } from '../../shared/ui/prom
   styles: [
     `
       .card {
-        padding: 20px;
-        margin-bottom: 16px;
-        max-width: 760px;
+        padding: var(--sp-5);
+        margin-bottom: var(--sp-4);
+        max-width: var(--card-w-md);
       }
       .head {
         display: flex;
