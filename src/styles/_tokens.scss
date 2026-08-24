@@ -38,4 +38,61 @@
 
   // ---- Sombras suaves (encima de las de Material) ----
   --shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.06);
+
+  // ==========================================================================
+  // Módulo de Promociones — sistema nuevo (sin Material, radio 0)
+  // Ver "Traspaso Claude Code.dc.html" sección 1. No reemplaza nada de arriba.
+  // ==========================================================================
+
+  /* — Superficies y tinta — */
+  --bg:            light-dark(#f3f2f2, #1a1918);
+  --surface:       light-dark(#eae9e9, #242221);
+  --surface-sunk:  light-dark(#f8f4f4, #201e1d);
+  --ink:           light-dark(#201e1d, #f3f2f2);
+  --ink-muted:     light-dark(#605d5d, #a09b98);
+  --divider:       light-dark(rgba(32,30,29,.40), rgba(243,242,242,.26)); /* 2px, secciones */
+  --hairline:      light-dark(rgba(32,30,29,.14), rgba(243,242,242,.14)); /* 1px, filas */
+  --faint:         light-dark(rgba(32,30,29,.06), rgba(243,242,242,.06)); /* relleno sutil */
+
+  /* — Acento (una sola familia; rojo institucional) — */
+  --accent:        #ec3013;
+  --accent-hover:  light-dark(#dd2b0f, #ff563c);
+  --accent-press:  light-dark(#ae1800, #ff9783);
+  --accent-ink:    light-dark(#ae1800, #ff9783);  /* acento en texto tamaño párrafo */
+  --accent-wash:   light-dark(#fff2ef, rgba(236,48,19,.16));
+  --on-accent:     light-dark(#f3f2f2, #1a1918);
+
+  /* — Estados de promoción (nuevos; mismo patrón que --st-*) — */
+  --st-vigente:    light-dark(#0d6b3f, #54d19a);
+  --st-programada: light-dark(#1d4ed8, #92b6ff);
+  --st-vencida:    light-dark(#6b6663, #a09b98);
+  --st-apagada:    light-dark(#8a5a00, #e0b055);
+  --st-pendiente:  light-dark(#b03a00, #ffab7a);
+  --st-sin-stock:  light-dark(#6b6663, #7d7979);
+
+  /* — Tipografía (Archivo 400/600/800) — */
+  --font-sans: 'Archivo', system-ui, sans-serif;
+  --fs-display: 30px; --lh-display: 1.12; --fw-display: 800;
+  --fs-h1: 24px;      --lh-h1: 1.15;     --fw-h1: 800;
+  --fs-h2: 18px;      --lh-h2: 1.25;     --fw-h2: 800;
+  --fs-body: 15px;    --lh-body: 1.55;   --fw-body: 400;
+  --fs-dense: 14px;   --lh-dense: 1.45;  /* tablas y matrices */
+  --fs-meta: 12px;    --lh-meta: 1.4;    /* dato secundario, códigos */
+  --fs-label: 11px;   --ls-label: .08em; /* mayúsculas de cabecera */
+  --fs-metric: 22px;  --fw-metric: 800;  /* saldo disponible, KPI */
+  --tnum: tabular-nums;                  /* font-variant-numeric en cifras */
+
+  /* — Bordes y elevación — */
+  --border-hair: 1px solid var(--hairline);
+  --border-rule: 2px solid var(--divider);
+  --border-focus: 2px solid var(--accent);
+  --elev-menu: 0 3px 10px light-dark(rgba(45, 43, 43, .16), rgba(0, 0, 0, .5));
+  --elev-dialog: 0 12px 32px light-dark(rgba(45, 43, 43, .22), rgba(0, 0, 0, .6));
+
+  /* — Motion (definidos ahora, se implementan al cierre) — */
+  --dur-fast: 120ms;   /* hover, foco, cambio de estado de un control */
+  --dur-base: 200ms;   /* entrada de filas, confirmaciones */
+  --dur-slow: 320ms;   /* transición entre pasos del wizard */
+  --ease-standard: cubic-bezier(.2, 0, .2, 1);
+  --ease-exit:     cubic-bezier(.4, 0, 1, 1);
 }

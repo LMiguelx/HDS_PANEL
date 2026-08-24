@@ -1,43 +1,32 @@
-﻿import { Component, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
-import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatDialog } from '@angular/material/dialog';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { PageHeaderComponent } from '../../shared/components/page-header';
-import { ToastService } from '../../core/ui/toast';
+﻿import { Component, effect, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Observable, forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
+import { UiButton } from '../../shared/ui/button/button';
+import { UiField, UiFieldOption } from '../../shared/ui/field/field';
+import { UiToggle } from '../../shared/ui/toggle/toggle';
+import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
+import { UiWizardSteps, UiWizardStep } from './ui/wizard-steps/wizard-steps';
 import { PromoService } from './promo';
-import { ProductPickerDialog } from './product-picker-dialog';
-import { CatalogService } from '../sales/catalog';
-import { SegmentService } from '../segments/segment';
-import { CustomerService } from '../customers/customer';
-import { Brand, Family, Product, SalesChannel } from '../../shared/models/catalog.models';
-import { Segment } from '../../shared/models/segment.models';
-import { CustomerSummary } from '../../shared/models/customer.models';
-import { CreatePromoCommand, PromoTargets } from '../../shared/models/promo.models';
-import { PROMO_TYPE_LABELS } from '../../shared/ui/promo';
+import { LookupService } from './lookup';
+import { CreatePromoCommand, LookupItem, PromoDetail, UpdatePromoCommand } from './promo.types';
+import { dateText } from './promo-format';
 
-let SEQ = 0;
-const uid = () => ++SEQ;
+// ─── Borrador local (vive solo en el navegador hasta guardar) ──────────────
 
-interface CondDraft {
-  uid: number;
-  scope: string;
+interface ConditionDraft {
+  scope: 'PRODUCT' | 'FAMILY' | 'BRAND';
   productId?: number;
-  productName?: string;
   familyId?: number;
   brandId?: number;
-  minQuantity?: number;
-  minAmount?: number;
+  name: string;
 }
-interface BenefDraft {
-  uid: number;
-  benefitType: string;
+
+interface BenefitDraft {
+  key: number;
+  benefitType: 'FREE_PRODUCT' | 'DISCOUNT_AMOUNT' | 'DISCOUNT_PERCENT';
+  catalog: boolean; // true = producto de catálogo (productId); false = material promocional (label)
   productId?: number;
   productName?: string;
   quantity?: number;
@@ -45,1160 +34,1564 @@ interface BenefDraft {
   discountPercent?: number;
   label?: string;
 }
+
+interface BenefitGroupDraft {
+  benefitGroup: number;
+  selectionMode: 'ALL' | 'CHOOSE';
+  chooseCount: number;
+  benefits: BenefitDraft[];
+}
+
 interface TierDraft {
-  uid: number;
+  key: number;
   tier: number;
   fromQuantity: number;
-  fromAmount: number;
-  benefits: BenefDraft[];
+  benefitGroups: BenefitGroupDraft[];
 }
-interface SegTarget {
-  segmentId: number;
+
+interface AudienceDraft {
+  kind: 'segment' | 'customer';
+  id: number;
   name: string;
-  mode: string;
+  mode: 'INCLUDE' | 'EXCLUDE';
 }
-interface CustTarget {
-  customerId: number;
-  name: string;
-  mode: string;
-  maxQuantity?: number;
+
+let benefitKeySeq = 0;
+let tierKeySeq = 0;
+
+function slugCode(name: string): string {
+  const base = name
+    .normalize('NFD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-')
+    .slice(0, 14);
+  return `${base || 'PROMO'}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+}
+
+function emptyTier(tierNumber: number): TierDraft {
+  return { key: tierKeySeq++, tier: tierNumber, fromQuantity: 10, benefitGroups: [] };
 }
 
 @Component({
   selector: 'app-promo-wizard',
-  imports: [
-    MatCardModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatButtonModule,
-    MatIconModule,
-    MatCheckboxModule,
-    MatTooltipModule,
-    PageHeaderComponent,
-  ],
+  imports: [NgTemplateOutlet, UiButton, UiField, UiToggle, UiTypeahead, UiWizardSteps],
   template: `
-    <div class="page">
-      <app-page-header title="Nueva promoción" subtitle="Nace apagada; se aprueba al final"></app-page-header>
-
-      <!-- Stepper propio -->
-      <div class="steps">
-        @for (s of stepLabels; track $index) {
-          <button
-            class="step"
-            [class.active]="step() === $index + 1"
-            [class.done]="step() > $index + 1"
-            (click)="goStep($index + 1)"
-          >
-            <span class="n">{{ $index + 1 }}</span> {{ s }}
-          </button>
-        }
+    <section class="wizard-page">
+      <div class="wizard-head">
+        <div>
+          <div class="wizard-eyebrow">{{ editingId() ? 'Editar promoción' : 'Nueva promoción' }}</div>
+          <h1>{{ name() || 'Sin nombre todavía' }}</h1>
+        </div>
+        <div class="wizard-head-actions">
+          @if (savedAt()) {
+            <span class="wizard-saved">Guardado</span>
+          }
+          <button uiButton variant="secondary" (click)="exit()">Guardar y salir</button>
+        </div>
       </div>
 
-      @switch (step()) {
-        <!-- 1. Datos generales -->
-        @case (1) {
-          <mat-card class="card">
-            <h3 class="picker-h">¿Qué tipo de promoción es?</h3>
-            <div class="type-grid">
-              @for (t of promoTypes; track t.code) {
+      <ui-wizard-steps
+        [steps]="stepDefs"
+        [current]="step()"
+        [visited]="visited()"
+        [errorSteps]="errorSteps()"
+        (stepChange)="goToStep($event)"
+      />
+
+      <div class="wizard-body">
+        @switch (step()) {
+          @case (0) {
+            <div class="wizard-step1-grid">
+              <div class="wizard-col">
+                <ui-field label="Nombre de la promoción" [(value)]="name" [error]="fieldError('name')" />
+                <ui-field
+                  label="Descripción (la ve el vendedor en el celular)"
+                  type="textarea"
+                  [(value)]="description"
+                />
+                <div class="wizard-2col">
+                  <ui-field
+                    label="Canal de ventas"
+                    type="select"
+                    [(value)]="salesChannelId"
+                    [options]="channelOptions()"
+                  />
+                  <ui-field label="Prioridad" type="select" [(value)]="priority" [options]="priorityOptions" />
+                </div>
+                <div class="wizard-2col">
+                  <ui-field label="Desde" type="date" [(value)]="startDate" />
+                  <ui-field label="Hasta" type="date" [(value)]="endDate" />
+                </div>
+              </div>
+              <div>
+                <div class="wizard-toggle-card">
+                  <ui-toggle label="Se combina con otras promociones" [(checked)]="stackable" />
+                  <hr class="wizard-hr" />
+                  <p class="wizard-toggle-text">
+                    <strong>Activado:</strong> si el pedido también califica para otra campaña, el cliente recibe
+                    los premios de las dos.
+                  </p>
+                  <p class="wizard-toggle-text wizard-toggle-text-muted">
+                    <strong>Desactivado:</strong> solo se aplica esta y se descartan las demás. Se usa cuando la
+                    campaña ya regala mucho y no quiere sumarse a un descuento.
+                  </p>
+                </div>
+              </div>
+            </div>
+          }
+          @case (1) {
+            <div>
+              <h2>¿Qué debe comprar el cliente?</h2>
+              <p class="wizard-lede">Elige cómo se cuenta la compra. Puedes cambiarlo sin perder lo que agregaste.</p>
+
+              <div class="wizard-mode-cards">
                 <button
                   type="button"
-                  class="type-card"
-                  [class.selected]="promoType() === t.code"
-                  (click)="onTypeChange(t.code)"
+                  class="wizard-mode-card"
+                  [class.selected]="mode() === 'ambito'"
+                  (click)="mode.set('ambito')"
                 >
-                  <mat-icon>{{ t.icon }}</mat-icon>
-                  <span class="t-label">{{ t.label }}</span>
-                  <span class="t-desc">{{ t.desc }}</span>
+                  <span class="wizard-mode-eyebrow">Opción A</span>
+                  <span class="wizard-mode-title">Todo de una marca o familia</span>
+                  <span class="wizard-mode-body"
+                    >«50 unidades de la marca Gaseosas Andinas». Cuenta cualquier producto de la marca, incluso los
+                    que entren al catálogo mañana.</span
+                  >
                 </button>
+                <button
+                  type="button"
+                  class="wizard-mode-card"
+                  [class.selected]="mode() === 'surtido'"
+                  (click)="mode.set('surtido')"
+                >
+                  <span class="wizard-mode-eyebrow">Opción B · la más usada</span>
+                  <span class="wizard-mode-title">Una lista de productos que se suman</span>
+                  <span class="wizard-mode-body"
+                    >«10 unidades entre Inca Kola, Coca Cola y Sprite». El cliente los combina como quiera.</span
+                  >
+                </button>
+              </div>
+
+              @if (mode() === 'surtido') {
+                <div class="wizard-2col-wide">
+                  <div>
+                    <ui-typeahead
+                      label="Agregar producto, familia o marca — busca escribiendo el nombre"
+                      placeholder="Ej. Inca Kola"
+                      [clearOnPick]="true"
+                      [search]="scopeSearch"
+                      (picked)="addCondition($event)"
+                    />
+                    <div class="wizard-condition-block">
+                      <div class="wizard-condition-eyebrow">Estas cantidades se suman entre sí</div>
+                      <div class="wizard-condition-list">
+                        @for (c of conditions(); track c.name + c.scope) {
+                          <div class="wizard-condition-row">
+                            <div>
+                              <div class="wizard-condition-name">{{ c.name }}</div>
+                              <div class="wizard-condition-meta">{{ scopeLabel(c.scope) }}</div>
+                            </div>
+                            <div class="wizard-condition-actions">
+                              <span class="wizard-condition-hint">cuenta cualquier cantidad</span>
+                              <button uiButton variant="icon" title="Quitar" (click)="removeCondition(c)">✕</button>
+                            </div>
+                          </div>
+                        }
+                      </div>
+                      <div class="wizard-total-block">
+                        <span class="wizard-total-eq">=</span>
+                        <ui-field label="Total mínimo" type="number" [(value)]="tier1Quantity" />
+                        <span class="wizard-total-text"
+                          >unidades <strong>en total</strong>, repartidas como el cliente quiera.</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                  <div class="wizard-side-card">
+                    <div class="wizard-side-eyebrow">Cómo se calcula</div>
+                    <p class="wizard-side-text">
+                      El pedido suma las unidades de {{ conditions().length || 'los' }}
+                      {{ conditions().length === 1 ? 'producto agregado' : 'productos agregados' }}, en cualquier
+                      combinación. Cuando la suma llega a {{ tier1Quantity() || '—' }}, el cliente califica.
+                    </p>
+                  </div>
+                </div>
+              } @else {
+                <div class="wizard-2col-wide">
+                  <div>
+                    <ui-typeahead
+                      label="Marca o familia — busca escribiendo el nombre"
+                      placeholder="Ej. Gaseosas Andinas"
+                      [clearOnPick]="false"
+                      [search]="brandFamilySearch"
+                      [selected]="ambitoSelected()"
+                      (picked)="setAmbito($event)"
+                    />
+                    <div class="wizard-ambito-total">
+                      <ui-field label="Cantidad mínima" type="number" [(value)]="tier1Quantity" />
+                      <span class="wizard-total-text"
+                        >unidades de <strong>cualquier producto</strong> de {{ ambitoSelected()?.name || 'la marca o familia elegida' }}.</span
+                      >
+                    </div>
+                    @if (ambitoSelected()) {
+                      <div class="wizard-ambito-hint">
+                        Los productos que se den de alta más adelante entran solos, sin tocar la campaña.
+                      </div>
+                    }
+                  </div>
+                  <div class="wizard-side-card">
+                    <div class="wizard-side-eyebrow">Productos que cuentan hoy</div>
+                    @if (ambitoProductCount() === null) {
+                      <p class="wizard-side-text wizard-side-muted">Elige una marca o familia para ver cuántos.</p>
+                    } @else {
+                      <p class="wizard-side-text"><strong>{{ ambitoProductCount() }}</strong> productos hoy.</p>
+                    }
+                  </div>
+                </div>
               }
             </div>
-
-            <div class="grid2">
-              <mat-form-field appearance="outline"
-              >
-                <mat-label>Nombre</mat-label>
-                <input matInput [value]="name()" (input)="onNameInput($any($event.target).value)"
-                /></mat-form-field>
-              <mat-form-field appearance="outline"
-              >
-                <mat-label>Código</mat-label>
-                <input
-                  matInput
-                  [value]="code()"
-                  (input)="onCodeInput($any($event.target).value)"
-                />
-                <mat-hint>Se genera solo desde el nombre — edítalo si quieres otro.</mat-hint>
-              </mat-form-field>
-              <mat-form-field appearance="outline"
-              >
-                <mat-label>Canal (vacío = todos)</mat-label>
-                <mat-select
-                  [value]="salesChannelId()"
-                  (valueChange)="salesChannelId.set($event)"
-                >
-                  <mat-option [value]="null">Todos los canales</mat-option>
-                  @for (c of salesChannels(); track c.salesChannelId) {
-                    <mat-option [value]="c.salesChannelId">{{ c.name }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline"
-              >
-                <mat-label>Desde</mat-label>
-                <input
-                  matInput
-                  type="date"
-                  [value]="startDate()"
-                  (input)="startDate.set($any($event.target).value)"
-                /></mat-form-field>
-              <mat-form-field appearance="outline"
-              >
-                <mat-label>Hasta</mat-label>
-                <input
-                  matInput
-                  type="date"
-                  [value]="endDate()"
-                  (input)="endDate.set($any($event.target).value)"
-                /></mat-form-field>
-            </div>
-            @if (typeNote(); as note) {
-              <p class="hint">
-                <mat-icon inline="">info</mat-icon>
-                {{ note }}
+          }
+          @case (2) {
+            <div>
+              <h2>Tramos y premios</h2>
+              <p class="wizard-lede">
+                Mientras más compra, mejor premio. <strong>Se otorga solo el tramo más alto que alcance</strong> —
+                los tramos no se suman.
               </p>
-            }
-            <mat-form-field appearance="outline" class="full"
-            >
-              <mat-label>Descripción</mat-label>
-              <input
-                matInput
-                [value]="description()"
-                (input)="description.set($any($event.target).value)"
-              /></mat-form-field>
-            @if (promoType() !== 'CUSTOMER_LIST') {
-              <mat-checkbox [checked]="repeats()" (change)="repeats.set($any($event).checked)">
-                Se repite por cada múltiplo (compra 36 con umbral 12 → 3× el beneficio)
-              </mat-checkbox>
-            } @else {
-              <p class="hint">
-                <mat-icon inline="">info</mat-icon>
-                No aplica: una promo de lista de clientes siempre se otorga una vez por pedido
-                calificado, sin multiplicar.
-              </p>
-            }
-          </mat-card>
-        }
 
-        <!-- 2. Condiciones -->
-        @case (2) {
-          <mat-card class="card">
-            <p class="muted">{{ conditionHint() }}</p>
-            @if (allowedScopes().length) {
-              <div class="addrow">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Agregar condición (scope)</mat-label>
-                  <mat-select [value]="null" (valueChange)="addCondition($event)">
-                    @for (s of allowedScopes(); track s.code) {
-                      <mat-option [value]="s.code">{{ s.label }}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-              </div>
-            }
-
-            @for (c of conditions(); track c.uid) {
-              <div class="cond">
-                <span class="tag">{{ scopeLabel(c.scope) }}</span>
-                @if (c.scope === 'PRODUCT' || c.scope === 'COMBO_ITEM') {
-                  <button mat-stroked-button (click)="pickCondProduct(c)">
-                    {{ c.productName ?? 'Elegir producto' }}
+              <div class="wizard-tier-ladder">
+                @for (t of tiers(); track t.key; let i = $index) {
+                  <button
+                    type="button"
+                    class="wizard-tier-step"
+                    [class.selected]="i === selectedTier()"
+                    (click)="selectedTier.set(i)"
+                  >
+                    <span class="wizard-tier-step-eyebrow">Tramo {{ t.tier }}</span>
+                    <span class="wizard-tier-step-value">{{ t.fromQuantity }}</span>
+                    <span class="wizard-tier-step-hint">{{ tierBenefitSummary(t) }}</span>
                   </button>
                 }
-                @if (c.scope === 'FAMILY') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                  >
-                    <mat-label>Familia</mat-label>
-                    <mat-select
-                      [value]="c.familyId ?? null"
-                      (valueChange)="updateCond(c.uid, { familyId: $event })"
-                    >
-                      @for (f of families(); track f.familyId) {
-                        <mat-option [value]="f.familyId">{{ f.name }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field
-                  >
-                }
-                @if (c.scope === 'BRAND') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                  >
-                    <mat-label>Marca</mat-label>
-                    <mat-select
-                      [value]="c.brandId ?? null"
-                      (valueChange)="updateCond(c.uid, { brandId: $event })"
-                    >
-                      @for (b of brands(); track b.brandId) {
-                        <mat-option [value]="b.brandId">{{ b.name }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field
-                  >
-                }
-                @if (c.scope === 'ORDER') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                  >
-                    <mat-label>Monto mínimo (S/)</mat-label>
-                    <input
-                      matInput
-                      type="number"
-                      [value]="c.minAmount ?? ''"
-                      (input)="
-                        updateCond(c.uid, { minAmount: +$any($event.target).value || undefined })
-                      "
-                    /></mat-form-field>
-                } @else {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                  >
-                    <mat-label>Cant. mínima</mat-label>
-                    <input
-                      matInput
-                      type="number"
-                      [value]="c.minQuantity ?? ''"
-                      (input)="
-                        updateCond(c.uid, { minQuantity: +$any($event.target).value || undefined })
-                      "
-                    /></mat-form-field>
-                }
-                <button mat-icon-button (click)="removeCond(c.uid)" aria-label="Quitar">
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </div>
-            } @empty {
-              <p class="muted">Sin condiciones (para CUSTOMER_LIST está bien).</p>
-            }
-          </mat-card>
-        }
-
-        <!-- 3. Tramos y beneficios -->
-        @case (3) {
-          <mat-card class="card">
-            @if (canAddTier()) {
-              <button mat-stroked-button (click)="addTier()">
-                <mat-icon>add</mat-icon>
-                Agregar tramo
-              </button>
-            } @else {
-              <p class="hint">
-                <mat-icon inline="">info</mat-icon>
-                {{ typeLabel(promoType()) }} solo usa el primer tramo — el motor ignora tramos
-                adicionales para este tipo. Si necesitas otro nivel de beneficio, crea otra promo.
-              </p>
-            }
-            @for (t of tiers(); track t.uid) {
-              <div class="tier">
-                <div class="trow">
-                  <strong>Tramo {{ t.tier }}</strong>
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                  >
-                    <mat-label>Desde cant.</mat-label>
-                    <input
-                      matInput
-                      type="number"
-                      [value]="t.fromQuantity"
-                      (input)="
-                        updateTier(t.uid, { fromQuantity: +$any($event.target).value || 0 })
-                      "
-                    /></mat-form-field>
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                  >
-                    <mat-label>Desde monto</mat-label>
-                    <input
-                      matInput
-                      type="number"
-                      [value]="t.fromAmount"
-                      (input)="updateTier(t.uid, { fromAmount: +$any($event.target).value || 0 })"
-                    /></mat-form-field>
-                  <button mat-icon-button (click)="removeTier(t.uid)" aria-label="Quitar tramo">
-                    <mat-icon>delete</mat-icon>
-                  </button>
+                <div class="wizard-ladder-note">
+                  Un pedido que alcance el tramo más alto disponible gana ese, no todos.
                 </div>
+              </div>
 
-                <div class="benefits">
-                  <div class="addrow">
-                    <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                    >
-                      <mat-label>Agregar beneficio</mat-label>
-                      <mat-select [value]="null" (valueChange)="addBenefit(t.uid, $event)">
-                        @for (b of benefitTypes; track b.code) {
-                          <mat-option [value]="b.code">{{ b.label }}</mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field
-                    >
-                  </div>
-                  @for (b of t.benefits; track b.uid) {
-                    <div class="benefit">
-                      <span class="tag">{{ benefitLabel(b.benefitType) }}</span>
-                      @if (b.benefitType === 'FREE_PRODUCT') {
-                        <button mat-stroked-button (click)="pickBenefitProduct(t.uid, b)">
-                          {{ b.productName ?? 'Elegir producto' }}
-                        </button>
-                        <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                        >
-                          <mat-label>Cant.</mat-label>
-                          <input
-                            matInput
-                            type="number"
-                            [value]="b.quantity ?? 1"
-                            (input)="
-                              updateBenefit(t.uid, b.uid, {
-                                quantity: +$any($event.target).value || 1,
-                              })
-                            "
-                          /></mat-form-field>
-                      }
-                      @if (b.benefitType === 'DISCOUNT_AMOUNT') {
-                        <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                        >
-                          <mat-label>S/</mat-label>
-                          <input
-                            matInput
-                            type="number"
-                            [value]="b.discountAmount ?? ''"
-                            (input)="
-                              updateBenefit(t.uid, b.uid, {
-                                discountAmount: +$any($event.target).value || undefined,
-                              })
-                            "
-                          /></mat-form-field>
-                      }
-                      @if (b.benefitType === 'DISCOUNT_PERCENT') {
-                        <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                        >
-                          <mat-label>%</mat-label>
-                          <input
-                            matInput
-                            type="number"
-                            [value]="b.discountPercent ?? ''"
-                            (input)="
-                              updateBenefit(t.uid, b.uid, {
-                                discountPercent: +$any($event.target).value || undefined,
-                              })
-                            "
-                          /></mat-form-field>
-                      }
-                      <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                      >
-                        <mat-label>Etiqueta (opcional)</mat-label>
-                        <input
-                          matInput
-                          [value]="b.label ?? ''"
-                          (input)="
-                            updateBenefit(t.uid, b.uid, { label: $any($event.target).value })
-                          "
-                        /></mat-form-field>
-                      <button
-                        mat-icon-button
-                        (click)="removeBenefit(t.uid, b.uid)"
-                        aria-label="Quitar beneficio"
-                      >
-                        <mat-icon>delete</mat-icon>
-                      </button>
+              @if (currentTier(); as t) {
+                <div class="wizard-tier-editor">
+                  <div class="wizard-tier-editor-head">
+                    <div class="wizard-tier-editor-from">
+                      <ui-field label="Desde (unidades)" type="number" [(value)]="tierFromQuantityModel" />
+                      <span class="wizard-total-text">unidades compradas · el cliente recibe:</span>
                     </div>
-                  } @empty {
-                    <p class="muted small">
-                      Agrega al menos un beneficio (puedes poner varios: producto gratis +
-                      descuento).
-                    </p>
+                    <button uiButton variant="secondary" (click)="duplicateTier()">Duplicar tramo</button>
+                  </div>
+
+                  <div class="wizard-2col">
+                    <div class="wizard-group-card">
+                      <div class="wizard-group-head">
+                        <span>El cliente elige 1 de 2</span>
+                        <span class="wizard-group-hint">se decide al entregar</span>
+                      </div>
+                      <div class="wizard-group-body">
+                        @for (b of chooseGroup(t).benefits; track b.key) {
+                          <div class="wizard-benefit-row">
+                            <ng-container *ngTemplateOutlet="benefitEditor; context: { $implicit: b }" />
+                          </div>
+                        }
+                        <button uiButton variant="ghost" (click)="addBenefit(t, 'CHOOSE')">+ Agregar opción</button>
+                      </div>
+                    </div>
+                    <div class="wizard-group-card">
+                      <div class="wizard-group-head">
+                        <span>Se entrega siempre</span>
+                        <span class="wizard-group-hint">todo lo de este grupo</span>
+                      </div>
+                      <div class="wizard-group-body">
+                        @for (b of allGroup(t).benefits; track b.key) {
+                          <div class="wizard-benefit-row">
+                            <ng-container *ngTemplateOutlet="benefitEditor; context: { $implicit: b }" />
+                          </div>
+                        }
+                        <button uiButton variant="ghost" (click)="addBenefit(t, 'ALL')">+ Agregar premio</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="wizard-tier-phrase">{{ tierPhrase(t) }}</div>
+                </div>
+              }
+
+              <button uiButton variant="secondary" class="wizard-add-tier" (click)="addTier()">
+                + Agregar otro tramo
+              </button>
+            </div>
+          }
+          @case (3) {
+            <div class="wizard-audience-grid">
+              <div>
+                <h2>¿A quiénes llega?</h2>
+                @if (audience().length === 0) {
+                  <div class="wizard-audience-banner">
+                    <strong>Ahora mismo llega a todos los clientes del canal elegido.</strong> Agrega segmentos o
+                    clientes solo si quieres limitarla.
+                  </div>
+                }
+                <ui-typeahead
+                  label="Agregar segmento o cliente — busca escribiendo el nombre"
+                  placeholder="Ej. Bodegas Lima Norte"
+                  [clearOnPick]="true"
+                  [search]="audienceSearch"
+                  (picked)="addAudience($event)"
+                />
+                <div class="wizard-audience-list">
+                  @for (a of audience(); track a.kind + a.id) {
+                    <div class="wizard-condition-row">
+                      <div>
+                        <div class="wizard-condition-name">{{ a.name }}</div>
+                        <div class="wizard-condition-meta">{{ a.kind === 'segment' ? 'Segmento' : 'Cliente' }}</div>
+                      </div>
+                      <div class="wizard-condition-actions">
+                        <button uiButton variant="secondary" (click)="toggleAudienceMode(a)">
+                          {{ a.mode === 'INCLUDE' ? 'Incluir' : 'Excluir' }}
+                        </button>
+                        <button uiButton variant="icon" title="Quitar" (click)="removeAudience(a)">✕</button>
+                      </div>
+                    </div>
                   }
                 </div>
               </div>
-            } @empty {
-              <p class="muted">Agrega un tramo con sus beneficios.</p>
-            }
-          </mat-card>
-        }
-
-        <!-- 4. Targeting -->
-        @case (4) {
-          <mat-card class="card">
-            @if (segmentRepeatsWarning()) {
-              <p class="warn">
-                <mat-icon inline="true">warning</mat-icon>
-                Esta promo "no se repite", pero ese límite de una sola vez <strong>no se aplica
-                a clientes que califican solo por segmento</strong> — es un límite conocido del
-                backend (solo lo controla para clientes agregados individualmente abajo). Si
-                necesitas que sea estrictamente una vez por cliente, agrégalos uno por uno en vez
-                de por segmento.
-              </p>
-            }
-            <h3>Segmentos</h3>
-            <div class="addrow">
-              <mat-form-field appearance="outline" subscriptSizing="dynamic"
-              >
-                <mat-label>Agregar segmento</mat-label>
-                <mat-select [value]="null" (valueChange)="addSegment($event)">
-                  @for (s of segments(); track s.segmentId) {
-                    <mat-option [value]="s.segmentId">{{ s.name }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field
-              >
-            </div>
-            @for (s of targetSegments(); track s.segmentId) {
-              <div class="target">
-                <span>{{ s.name }}</span>
-                <div class="modes">
-                  <button
-                    [class.on]="s.mode === 'INCLUDE'"
-                    (click)="setSegMode(s.segmentId, 'INCLUDE')"
-                  >
-                    Incluir
-                  </button>
-                  <button
-                    [class.on]="s.mode === 'EXCLUDE'"
-                    (click)="setSegMode(s.segmentId, 'EXCLUDE')"
-                  >
-                    Excluir
-                  </button>
-                </div>
-                <button mat-icon-button (click)="removeSeg(s.segmentId)">
-                  <mat-icon>close</mat-icon>
-                </button>
-              </div>
-            }
-
-            <h3>Clientes</h3>
-            <div class="addrow">
-              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="grow">
-                <mat-icon matPrefix>search</mat-icon>
-                <mat-label>Buscar cliente</mat-label>
-                <input
-                  matInput
-                  [value]="custQuery()"
-                  (input)="custQuery.set($any($event.target).value)"
-                  (keyup.enter)="searchCustomers()"
-                /></mat-form-field>
-              <button mat-stroked-button (click)="searchCustomers()">Buscar</button>
-            </div>
-            @if (custResults().length) {
-              <div class="results">
-                @for (c of custResults(); track c.customerId) {
-                  <button class="row-item" (click)="addCustomer(c)">
-                    <span>{{ c.businessName }}</span
-                    >
-                    <mat-icon>add</mat-icon>
-                  </button>
+              <div class="wizard-side-card">
+                <div class="wizard-side-eyebrow">Clientes alcanzados</div>
+                @if (reachLoading()) {
+                  <div class="wizard-metric">…</div>
+                } @else if (reach(); as r) {
+                  <div class="wizard-metric">{{ r.reachedCustomers ?? 0 }}</div>
+                  <div class="wizard-side-text wizard-side-muted">
+                    {{ r.fromSegments ?? 0 }} por segmento · {{ r.fromDirectCustomers ?? 0 }} directos
+                    @if (r.excluded) {
+                      · {{ r.excluded }} excluidos
+                    }
+                  </div>
+                } @else {
+                  <div class="wizard-side-text wizard-side-muted">Se recalcula al agregar o quitar.</div>
                 }
               </div>
-            }
-            @for (c of targetCustomers(); track c.customerId) {
-              <div class="target">
-                <span>{{ c.name }}</span>
-                <div class="modes">
-                  <button
-                    [class.on]="c.mode === 'INCLUDE'"
-                    (click)="setCustMode(c.customerId, 'INCLUDE')"
-                  >
-                    Incluir
+            </div>
+          }
+          @case (4) {
+            <div class="wizard-summary-grid">
+              <div>
+                <h2>Resumen</h2>
+                <div class="wizard-prose">{{ summaryPhrase() }}</div>
+                <hr class="wizard-hr" />
+                <div class="wizard-summary-facts">
+                  <div><span>Vigencia</span><span>{{ vigenciaSummary() }}</span></div>
+                  <div><span>Canal</span><span>{{ selectedChannelName() || '—' }}</span></div>
+                  <div><span>Se combina</span><span>{{ stackable() ? 'Sí, con otras promociones' : 'No' }}</span></div>
+                  <div><span>Alcance</span><span>{{ audienceSummary() }}</span></div>
+                </div>
+                <div class="wizard-summary-actions">
+                  <button uiButton variant="primary" [loading]="activating()" (click)="activatePromo()">
+                    Activar promoción
                   </button>
-                  <button
-                    [class.on]="c.mode === 'EXCLUDE'"
-                    (click)="setCustMode(c.customerId, 'EXCLUDE')"
-                  >
-                    Excluir
+                  <button uiButton variant="secondary" [loading]="savingDraft()" (click)="saveOff()">
+                    Guardar apagada
                   </button>
                 </div>
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="maxq"
-                >
-                  <mat-label>Máx.</mat-label>
-                  <input
-                    matInput
-                    type="number"
-                    [value]="c.maxQuantity ?? ''"
-                    (input)="setCustMax(c.customerId, +$any($event.target).value || undefined)"
-                  /></mat-form-field>
-                <button mat-icon-button (click)="removeCust(c.customerId)">
-                  <mat-icon>close</mat-icon>
-                </button>
+                @if (saveError()) {
+                  <div class="wizard-save-error">{{ saveError() }}</div>
+                }
               </div>
-            }
-            <p class="muted small">
-              Sin ningún INCLUDE → la promo aplica a todos (según canal y condiciones).
-            </p>
-          </mat-card>
-        }
-
-        <!-- 5. Revisar -->
-        @case (5) {
-          <mat-card class="card">
-            <h3>Revisar</h3>
-            <p>
-              <strong>{{ name() }}</strong> ({{ code() }}) · {{ typeLabel(promoType()) }}
-            </p>
-            <p class="muted">
-              Vigencia {{ startDate() }} – {{ endDate() }} ·
-              {{ repeats() ? 'Se repite' : 'No se repite' }}
-            </p>
-            <p>
-              Condiciones: {{ conditions().length }} · Tramos: {{ tiers().length }} · Segmentos:
-              {{ targetSegments().length }} · Clientes: {{ targetCustomers().length }}
-            </p>
-            @if (!canCreate()) {
-              <p class="err">Faltan datos: código, nombre, tipo y fechas son obligatorios.</p>
-            }
-          </mat-card>
-        }
-      }
-
-      <div class="nav">
-        <button mat-stroked-button [disabled]="step() === 1" (click)="prev()">Atrás</button>
-        @if (step() < 5) {
-          <button mat-flat-button color="primary" (click)="next()">Siguiente</button>
-        } @else {
-          <button
-            mat-flat-button
-            color="tertiary"
-            [disabled]="!canCreate() || submitting()"
-            (click)="create()"
-          >
-            <mat-icon>check</mat-icon>
-            Crear promoción
-          </button>
+              <div class="wizard-side-card wizard-simulator">
+                <h3>Simular un pedido</h3>
+                <p class="wizard-side-text wizard-side-muted">
+                  El resultado es un estimado: el premio definitivo se calcula al facturar.
+                </p>
+                @if (!draftId()) {
+                  <p class="wizard-side-text">Guarda la promoción (aunque sea apagada) para poder simular.</p>
+                  <button uiButton variant="secondary" [loading]="savingDraft()" (click)="saveOff()">
+                    Guardar apagada
+                  </button>
+                } @else {
+                  <ui-typeahead
+                    label="Cliente"
+                    [clearOnPick]="false"
+                    [search]="customerSearch"
+                    [selected]="simCustomer()"
+                    (picked)="simCustomer.set($event)"
+                  />
+                  <div class="wizard-sim-line">
+                    <ui-typeahead
+                      label="Producto"
+                      [clearOnPick]="false"
+                      [search]="scopeProductSearch"
+                      [selected]="simProduct()"
+                      (picked)="simProduct.set($event)"
+                    />
+                    <ui-field label="Cantidad" type="number" [(value)]="simQuantity" />
+                  </div>
+                  <button uiButton variant="secondary" class="ui-btn-block" [loading]="simulating()" (click)="simulate()">
+                    Simular
+                  </button>
+                  <hr class="wizard-hr" />
+                  @if (simResult(); as r) {
+                    <div class="wizard-side-eyebrow">Otorgaría (estimado)</div>
+                    @if (r.qualifies) {
+                      @for (g of r.granted; track g.benefitLine) {
+                        <div class="wizard-sim-result">{{ g.displayText }}</div>
+                      }
+                      @for (p of r.pendingChoices; track p.benefitGroup) {
+                        <div class="wizard-sim-result">Elección pendiente — {{ p.modeText }}</div>
+                      }
+                    } @else {
+                      <div class="wizard-sim-result">{{ r.progressText || 'Todavía no califica.' }}</div>
+                    }
+                  }
+                }
+              </div>
+            </div>
+          }
         }
       </div>
-    </div>
+
+      <div class="wizard-footer">
+        <button uiButton variant="secondary" [disabled]="step() === 0" (click)="prevStep()">Atrás</button>
+        <div class="wizard-footer-hint">{{ stepHint() }}</div>
+        @if (step() < 4) {
+          <button uiButton variant="primary" (click)="nextStep()">Continuar</button>
+        }
+      </div>
+    </section>
+
+    <ng-template #benefitEditor let-b>
+      <div class="wizard-benefit-editor">
+        <ui-field label="Tipo de premio" type="select" [options]="benefitTypeOptions" [(value)]="b.benefitType" />
+        @if (b.benefitType === 'FREE_PRODUCT') {
+          <div class="wizard-benefit-catalog-toggle">
+            <button
+              type="button"
+              uiButton
+              [variant]="b.catalog ? 'secondary' : 'ghost'"
+              (click)="b.catalog = true"
+            >
+              Del catálogo
+            </button>
+            <button
+              type="button"
+              uiButton
+              [variant]="!b.catalog ? 'secondary' : 'ghost'"
+              (click)="b.catalog = false"
+            >
+              Material promocional
+            </button>
+          </div>
+          @if (b.catalog) {
+            <ui-typeahead
+              label="Producto"
+              [clearOnPick]="false"
+              [search]="scopeProductSearch"
+              [selected]="benefitProductSelected(b)"
+              (picked)="setBenefitProduct(b, $event)"
+            />
+          } @else {
+            <ui-field label="Nombre del material" [value]="b.label || ''" (valueChange)="b.label = $event" />
+          }
+          <ui-field label="Cantidad" type="number" [value]="String(b.quantity ?? 1)" (valueChange)="b.quantity = numberOr(1, $event)" />
+        } @else if (b.benefitType === 'DISCOUNT_AMOUNT') {
+          <ui-field
+            label="Monto (S/)"
+            type="number"
+            [value]="String(b.discountAmount ?? '')"
+            (valueChange)="b.discountAmount = numberOr(0, $event)"
+          />
+        } @else {
+          <ui-field
+            label="Porcentaje (%)"
+            type="number"
+            [value]="String(b.discountPercent ?? '')"
+            (valueChange)="b.discountPercent = numberOr(0, $event)"
+          />
+        }
+        <button uiButton variant="icon" title="Quitar" (click)="removeBenefit(b)">✕</button>
+      </div>
+    </ng-template>
   `,
   styles: [
     `
-      .steps {
-        display: flex;
-        gap: 4px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
+      .wizard-page {
+        width: 100%;
+        box-sizing: border-box;
       }
-      .step {
-        border: 0;
-        background: transparent;
-        cursor: pointer;
-        padding: 8px 12px;
-        font: inherit;
-        color: var(--mat-sys-on-surface-variant);
-        border-bottom: 2px solid transparent;
+      .wizard-head {
         display: flex;
         align-items: center;
-        gap: 6px;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 22px var(--sp-8) 18px;
       }
-      .step.active {
-        color: var(--mat-sys-primary);
-        border-bottom-color: var(--mat-sys-primary);
-        font-weight: 600;
+      .wizard-eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
       }
-      .step.done {
-        color: var(--mat-sys-primary);
+      h1 {
+        font-size: 28px;
+        margin: 2px 0 0;
+        color: var(--ink);
       }
-      .step .n {
-        display: inline-grid;
-        place-items: center;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        background: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent);
-        font-size: 0.78rem;
-      }
-      .card {
-        padding: var(--sp-5);
-        margin-bottom: var(--sp-4);
-        max-width: var(--card-w-lg);
-      }
-      .picker-h {
-        margin: 0 0 10px;
-        font-size: 0.95rem;
-      }
-      .type-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
-        margin-bottom: 20px;
-      }
-      @media (max-width: 900px) {
-        .type-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-      }
-      @media (max-width: 560px) {
-        .type-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-      .type-card {
+      .wizard-head-actions {
         display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
-        text-align: left;
-        border: 1px solid var(--mat-sys-outline-variant);
-        border-radius: var(--radius-md);
-        padding: 14px;
-        background: var(--mat-sys-surface-container-low);
-        cursor: pointer;
-        font: inherit;
-        color: inherit;
-        transition: border-color 0.15s ease, background 0.15s ease;
+        align-items: center;
+        gap: 10px;
       }
-      @media (prefers-reduced-motion: reduce) {
-        .type-card {
-          transition: none;
-        }
+      .wizard-saved {
+        font-size: 12px;
+        color: var(--ink-muted);
       }
-      .type-card:hover {
-        border-color: var(--mat-sys-primary);
+      .wizard-body {
+        padding: var(--sp-8);
+        width: 100%;
+        box-sizing: border-box;
       }
-      .type-card.selected {
-        border-color: var(--mat-sys-primary);
-        border-width: 2px;
-        background: color-mix(in srgb, var(--mat-sys-primary) 8%, var(--mat-sys-surface-container-low));
+      h2 {
+        font-size: 24px;
+        margin: 0 0 4px;
+        color: var(--ink);
       }
-      .type-card mat-icon {
-        color: var(--mat-sys-primary);
+      .wizard-lede {
+        color: var(--ink-muted);
+        max-width: 620px;
+        font-size: 14px;
       }
-      .type-card .t-label {
-        font-weight: 600;
-        font-size: 0.9rem;
+      .wizard-step1-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 40px;
       }
-      .type-card .t-desc {
-        font-size: 0.78rem;
-        color: var(--mat-sys-on-surface-variant);
+      .wizard-col {
+        display: grid;
+        gap: 18px;
       }
-      .grid2 {
+      .wizard-2col {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
+        gap: 18px;
       }
-      @media (max-width: 640px) {
-        .grid2 {
-          grid-template-columns: 1fr;
-        }
+      .wizard-2col-wide {
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        gap: 32px;
+        align-items: start;
       }
-      .full {
-        width: 100%;
+      .wizard-toggle-card {
+        border: 1px solid var(--divider);
+        padding: 18px;
       }
-      .addrow {
-        margin: 8px 0;
+      .wizard-hr {
+        border: 0;
+        border-top: var(--border-hair);
+        margin: 16px 0;
       }
-      .cond,
-      .benefit {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        flex-wrap: wrap;
-        padding: 8px 0;
-        border-bottom: 1px solid var(--mat-sys-outline-variant);
+      .wizard-toggle-text {
+        font-size: 14px;
+        margin: 0 0 10px;
+        color: var(--ink);
       }
-      .tag {
-        font-size: 0.72rem;
-        background: var(--mat-sys-surface-container-high);
-        padding: 2px 8px;
-        border-radius: 999px;
+      .wizard-toggle-text-muted {
+        color: var(--ink-muted);
+        margin: 0;
       }
-      .tier {
-        border: 1px solid var(--mat-sys-outline-variant);
-        border-radius: 10px;
-        padding: 12px;
-        margin: 12px 0;
+      .wizard-mode-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin: 20px 0 28px;
       }
-      .trow {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-      .benefits {
-        margin-top: 8px;
-        padding-left: 8px;
-        border-left: 2px solid var(--mat-sys-outline-variant);
-      }
-      .target {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        padding: 6px 0;
-      }
-      .modes {
-        display: flex;
-        gap: 4px;
-      }
-      .modes button {
-        border: 1px solid var(--mat-sys-outline);
-        background: transparent;
+      .wizard-mode-card {
+        text-align: left;
+        border: 1px solid var(--divider);
+        background: var(--bg);
+        padding: 16px;
         cursor: pointer;
-        padding: 4px 10px;
-        border-radius: 999px;
-        font: inherit;
-      }
-      .modes button.on {
-        background: var(--mat-sys-primary);
-        color: var(--mat-sys-on-primary);
-        border-color: var(--mat-sys-primary);
-      }
-      .maxq {
-        width: 90px;
-      }
-      .grow {
-        flex: 1 1 auto;
-      }
-      .results {
         display: flex;
         flex-direction: column;
-        border: 1px solid var(--mat-sys-outline-variant);
-        border-radius: 8px;
-        margin: 8px 0;
+        gap: 4px;
       }
-      .row-item {
+      .wizard-mode-card.selected {
+        border: 2px solid var(--accent);
+      }
+      .wizard-mode-eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+      .wizard-mode-title {
+        font-weight: 800;
+        font-size: 18px;
+      }
+      .wizard-mode-body {
+        font-size: 14px;
+        color: var(--ink-muted);
+        line-height: 1.5;
+      }
+      .wizard-condition-block {
         display: flex;
-        justify-content: space-between;
+        margin-top: 22px;
+      }
+      .wizard-condition-eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+        font-weight: 800;
+        margin-bottom: 10px;
+      }
+      .wizard-condition-list {
+        display: grid;
+        gap: 2px;
+      }
+      .wizard-condition-row {
+        display: flex;
         align-items: center;
-        width: 100%;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 14px;
+        background: var(--faint);
+        border: 1px solid var(--hairline);
+        min-height: 56px;
+      }
+      .wizard-condition-name {
+        font-weight: 800;
+      }
+      .wizard-condition-meta {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .wizard-condition-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .wizard-condition-hint {
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+      .wizard-total-block {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 14px;
+        padding: 14px 16px;
+        border: 2px solid var(--accent);
+      }
+      .wizard-total-eq {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .wizard-total-text {
+        font-size: 15px;
+      }
+      .wizard-ambito-total {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 22px;
+        padding: 18px;
+        border: 2px solid var(--accent);
+      }
+      .wizard-ambito-hint {
+        margin-top: 16px;
+        font-size: 13px;
+        color: var(--ink-muted);
+        border-left: 3px solid var(--hairline);
+        padding-left: 12px;
+      }
+      .wizard-side-card {
+        border: 1px solid var(--divider);
+        padding: 18px;
+      }
+      .wizard-side-eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+      .wizard-side-text {
+        font-size: 14px;
+        margin: 10px 0 0;
+        line-height: 1.5;
+      }
+      .wizard-side-muted {
+        color: var(--ink-muted);
+      }
+      .wizard-metric {
+        font-size: 44px;
+        font-weight: 800;
+        line-height: 1.05;
+        margin: 6px 0 2px;
+        font-variant-numeric: var(--tnum);
+      }
+      .wizard-tier-ladder {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        margin: 24px 0 28px;
+        border: 1px solid var(--hairline);
+      }
+      .wizard-tier-step {
         text-align: left;
         border: 0;
-        background: transparent;
+        border-right: 1px solid var(--hairline);
+        background: var(--bg);
+        padding: 14px 18px;
         cursor: pointer;
-        padding: 8px 12px;
-        font: inherit;
+        min-width: 130px;
       }
-      .row-item:hover {
-        background: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent);
+      .wizard-tier-step.selected {
+        background: var(--faint);
+        box-shadow: inset 0 -3px 0 var(--accent);
       }
-      h3 {
-        margin: 16px 0 8px;
-        font-size: 1rem;
+      .wizard-tier-step-eyebrow {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
       }
-      .small {
-        font-size: 0.82rem;
+      .wizard-tier-step-value {
+        display: block;
+        font-size: 26px;
+        font-weight: 800;
+        margin-top: 2px;
       }
-      .err {
-        color: var(--mat-sys-error);
+      .wizard-tier-step-hint {
+        display: block;
+        font-size: 13px;
+        color: var(--ink-muted);
       }
-      .hint {
+      .wizard-ladder-note {
+        flex: 1;
+        padding: 16px;
+        font-size: 13px;
+        color: var(--ink-muted);
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 0.82rem;
-        color: var(--mat-sys-on-surface-variant);
-        margin: 4px 0 12px;
       }
-      .warn {
+      .wizard-tier-editor {
+        border: 2px solid var(--divider);
+        padding: 22px;
+      }
+      .wizard-tier-editor-head {
         display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        font-size: 0.85rem;
-        color: var(--mat-sys-on-error-container, var(--mat-sys-error));
-        background: color-mix(in srgb, var(--mat-sys-error) 12%, transparent);
-        border-radius: var(--radius-sm);
-        padding: 10px 12px;
-        margin-bottom: 12px;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
       }
-      .nav {
+      .wizard-tier-editor-from {
+        display: flex;
+        align-items: flex-end;
+        gap: 14px;
+      }
+      .wizard-group-card {
+        border: 1px solid var(--divider);
+        margin-top: 22px;
+      }
+      .wizard-group-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--hairline);
+        background: var(--faint);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .wizard-group-hint {
+        text-transform: none;
+        font-weight: 400;
+        font-size: 12px;
+        color: var(--ink-muted);
+        letter-spacing: normal;
+      }
+      .wizard-group-body {
+        padding: 14px 16px;
+        display: grid;
+        gap: 10px;
+      }
+      .wizard-benefit-row {
+        border: 1px solid var(--hairline);
+        padding: 12px 14px;
+      }
+      .wizard-benefit-editor {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 10px;
+        align-items: end;
+      }
+      .wizard-benefit-catalog-toggle {
+        display: flex;
+        gap: 6px;
+        grid-column: 1 / -1;
+      }
+      .wizard-tier-phrase {
+        margin-top: 18px;
+        padding: 14px 16px;
+        background: var(--faint);
+        border-left: 3px solid var(--accent);
+        font-size: 15px;
+      }
+      .wizard-add-tier {
+        margin-top: 18px;
+      }
+      .wizard-audience-grid {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 32px;
+        align-items: start;
+      }
+      .wizard-audience-banner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px;
+        border: 2px solid var(--divider);
+        margin: 16px 0 24px;
+        font-size: 15px;
+      }
+      .wizard-audience-list {
+        display: grid;
+        gap: 2px;
+        margin-top: 20px;
+      }
+      .wizard-summary-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: 36px;
+        align-items: start;
+      }
+      .wizard-prose {
+        border-left: 3px solid var(--accent);
+        padding: 4px 0 4px 18px;
+        font-size: 20px;
+        line-height: 1.45;
+        color: var(--ink);
+      }
+      .wizard-summary-facts {
+        display: grid;
+        gap: 10px;
+        font-size: 14px;
+      }
+      .wizard-summary-facts div {
         display: flex;
         justify-content: space-between;
-        max-width: 900px;
+        gap: 16px;
+      }
+      .wizard-summary-facts span:first-child {
+        color: var(--ink-muted);
+      }
+      .wizard-summary-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 26px;
+      }
+      .wizard-save-error {
+        margin-top: 14px;
+        color: var(--accent-ink);
+        font-size: 13px;
+      }
+      .wizard-sim-line {
+        display: grid;
+        grid-template-columns: 1fr 96px;
+        gap: 10px;
+        align-items: end;
+        margin-top: 10px;
+      }
+      .wizard-sim-result {
+        padding: 10px 12px;
+        background: var(--faint);
+        font-size: 14px;
+        margin-top: 8px;
+      }
+      .wizard-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-top: var(--border-rule);
+        padding: 16px var(--sp-8);
+        position: sticky;
+        bottom: 0;
+        background: var(--bg);
+      }
+      .wizard-footer-hint {
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+
+      @media (max-width: 900px) {
+        .wizard-step1-grid,
+        .wizard-2col-wide,
+        .wizard-audience-grid,
+        .wizard-summary-grid {
+          grid-template-columns: 1fr;
+        }
       }
     `,
   ],
 })
 export class PromoWizardPage {
-  private promoSvc = inject(PromoService);
-  private catalog = inject(CatalogService);
-  private segmentsSvc = inject(SegmentService);
-  private customers = inject(CustomerService);
-  private dialog = inject(MatDialog);
-  private toast = inject(ToastService);
+  private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private promoSvc = inject(PromoService);
+  private lookupSvc = inject(LookupService);
 
-  readonly stepLabels = ['General', 'Condiciones', 'Tramos', 'Targeting', 'Revisar'];
-  readonly step = signal(1);
-
-  readonly promoTypes = [
-    {
-      code: 'PRODUCT_QTY',
-      label: PROMO_TYPE_LABELS['PRODUCT_QTY'],
-      icon: 'inventory_2',
-      desc: 'Compra X unidades de un producto y recibe el beneficio.',
-    },
-    {
-      code: 'BRAND_FAMILY',
-      label: PROMO_TYPE_LABELS['BRAND_FAMILY'],
-      icon: 'category',
-      desc: 'Aplica a toda una marca o familia desde cierta cantidad o monto.',
-    },
-    {
-      code: 'TIERED',
-      label: PROMO_TYPE_LABELS['TIERED'],
-      icon: 'stacked_line_chart',
-      desc: 'Varios escalones: a mayor compra, mejor beneficio.',
-    },
-    {
-      code: 'ORDER_TOTAL',
-      label: PROMO_TYPE_LABELS['ORDER_TOTAL'],
-      icon: 'shopping_cart',
-      desc: 'El pedido completo supera un monto mínimo.',
-    },
-    {
-      code: 'COMBO',
-      label: PROMO_TYPE_LABELS['COMBO'],
-      icon: 'redeem',
-      desc: 'Combina varios productos distintos en un mismo pedido.',
-    },
-    {
-      code: 'CUSTOMER_LIST',
-      label: PROMO_TYPE_LABELS['CUSTOMER_LIST'],
-      icon: 'group',
-      desc: 'Solo para clientes o segmentos elegidos, sin condiciones de compra.',
-    },
+  protected stepDefs: UiWizardStep[] = [
+    { label: 'Datos generales' },
+    { label: 'Qué debe comprar' },
+    { label: 'Tramos y premios' },
+    { label: 'A quiénes llega' },
+    { label: 'Resumen y simulación' },
   ];
-  readonly scopes = [
-    { code: 'PRODUCT', label: 'Producto' },
-    { code: 'FAMILY', label: 'Familia' },
-    { code: 'BRAND', label: 'Marca' },
-    { code: 'ORDER', label: 'Pedido total' },
-    { code: 'COMBO_ITEM', label: 'Ítem de combo' },
-  ];
-  readonly benefitTypes = [
-    { code: 'FREE_PRODUCT', label: 'Producto gratis' },
-    { code: 'DISCOUNT_AMOUNT', label: 'Descuento S/' },
-    { code: 'DISCOUNT_PERCENT', label: 'Descuento %' },
-  ];
+  protected step = signal(0);
+  protected visited = signal<number[]>([0]);
+  protected errorSteps = signal<number[]>([]);
 
   // Paso 1
-  readonly code = signal('');
-  readonly codeTouched = signal(false);
-  readonly name = signal('');
-  readonly description = signal('');
-  readonly promoType = signal('PRODUCT_QTY');
-  readonly salesChannelId = signal<number | null>(null);
-  readonly startDate = signal('');
-  readonly endDate = signal('');
-  readonly repeats = signal(false);
+  protected name = signal('');
+  protected description = signal('');
+  protected salesChannelId = signal('');
+  protected priority = signal('5');
+  protected priorityOptions: UiFieldOption[] = [
+    { value: '1', label: 'Alta — se evalúa primero' },
+    { value: '5', label: 'Media' },
+    { value: '9', label: 'Baja' },
+  ];
+  protected startDate = signal('');
+  protected endDate = signal('');
+  protected stackable = signal(true);
+  protected channelOptions = signal<UiFieldOption[]>([]);
 
-  // Paso 2/3
-  readonly conditions = signal<CondDraft[]>([]);
-  readonly tiers = signal<TierDraft[]>([]);
-  readonly families = signal<Family[]>([]);
-  readonly brands = signal<Brand[]>([]);
-  readonly salesChannels = signal<SalesChannel[]>([]);
+  // Paso 2
+  protected mode = signal<'surtido' | 'ambito'>('surtido');
+  protected conditions = signal<ConditionDraft[]>([]);
+  protected ambitoSelected = signal<UiLookupItem | null>(null);
+  protected ambitoProductCount = signal<number | null>(null);
+  protected tier1Quantity = signal('10');
+
+  // Paso 3
+  protected tiers = signal<TierDraft[]>([emptyTier(1)]);
+  protected selectedTier = signal(0);
+  protected benefitTypeOptions: UiFieldOption[] = [
+    { value: 'FREE_PRODUCT', label: 'Producto gratis' },
+    { value: 'DISCOUNT_AMOUNT', label: 'Descuento en soles' },
+    { value: 'DISCOUNT_PERCENT', label: 'Descuento en %' },
+  ];
 
   // Paso 4
-  readonly segments = signal<Segment[]>([]);
-  readonly targetSegments = signal<SegTarget[]>([]);
-  readonly custQuery = signal('');
-  readonly custResults = signal<CustomerSummary[]>([]);
-  readonly targetCustomers = signal<CustTarget[]>([]);
+  protected audience = signal<AudienceDraft[]>([]);
+  protected reach = signal<{ reachedCustomers?: number; fromSegments?: number; fromDirectCustomers?: number; excluded?: number } | null>(null);
+  protected reachLoading = signal(false);
 
-  readonly submitting = signal(false);
+  // Paso 5
+  protected draftId = signal<number | null>(null);
+  protected savedAt = signal<Date | null>(null);
+  protected savingDraft = signal(false);
+  protected activating = signal(false);
+  protected saveError = signal('');
+  protected simCustomer = signal<UiLookupItem | null>(null);
+  protected simProduct = signal<UiLookupItem | null>(null);
+  protected simQuantity = signal('1');
+  protected simulating = signal(false);
+  protected simResult = signal<import('./promo.types').PreviewResult | null>(null);
 
-  readonly conditionHint = computed(() => {
-    switch (this.promoType()) {
-      case 'PRODUCT_QTY':
-        return 'Agrega una condición PRODUCTO con cantidad mínima.';
-      case 'BRAND_FAMILY':
-        return 'Agrega una condición de FAMILIA o MARCA (por cantidad o monto).';
-      case 'ORDER_TOTAL':
-        return 'Sin condiciones: el umbral se define con "Desde monto" en el tramo (paso siguiente).';
-      case 'COMBO':
-        return 'Agrega una condición ÍTEM DE COMBO por cada producto exigido.';
-      case 'CUSTOMER_LIST':
-        return 'Sin condiciones: solo la lista de clientes (paso Targeting).';
-      case 'TIERED':
-        return 'Define los umbrales en los tramos (paso siguiente).';
-      default:
-        return '';
-    }
-  });
+  protected editingId = signal<number | null>(null);
 
-  /** Scopes de condición que el motor realmente usa para cada tipo (evita 409 al enviar). */
-  readonly allowedScopes = computed(() => {
-    switch (this.promoType()) {
-      case 'PRODUCT_QTY':
-        return this.scopes.filter((s) => s.code === 'PRODUCT');
-      case 'BRAND_FAMILY':
-        return this.scopes.filter((s) => s.code === 'FAMILY' || s.code === 'BRAND');
-      case 'TIERED':
-        return this.scopes.filter((s) => ['PRODUCT', 'FAMILY', 'BRAND'].includes(s.code));
-      case 'COMBO':
-        return this.scopes.filter((s) => s.code === 'COMBO_ITEM');
-      case 'ORDER_TOTAL':
-      case 'CUSTOMER_LIST':
-      default:
-        return [];
-    }
-  });
+  protected scopeSearch = (q: string) => this.combinedScopeSearch(q);
+  protected brandFamilySearch = (q: string) => this.combinedBrandFamilySearch(q);
+  protected scopeProductSearch = (q: string) => this.lookupSvc.products(q).pipe(map((items) => this.toLookup(items)));
+  protected customerSearch = (q: string) => this.lookupSvc.customers(q).pipe(map((items) => this.toLookup(items)));
+  protected audienceSearch = (q: string) => this.combinedAudienceSearch(q);
 
-  /** PRODUCT_QTY/BRAND_FAMILY/TIERED comparten el mismo motor — solo cambia la etiqueta. */
-  readonly typeNote = computed(() => {
-    if (['PRODUCT_QTY', 'BRAND_FAMILY', 'TIERED'].includes(this.promoType())) {
-      return 'Nota: este tipo, "Por cantidad de producto", "Por marca/familia" y "Escalonada" funcionan exactamente igual por dentro — el nombre es solo para identificar la promo, no cambia el comportamiento.';
-    }
-    return null;
-  });
-
-  /** COMBO y CUSTOMER_LIST solo usan el tramo 1; el resto son código muerto en el motor. */
-  readonly canAddTier = computed(() => {
-    const single = this.promoType() === 'COMBO' || this.promoType() === 'CUSTOMER_LIST';
-    return !single || this.tiers().length < 1;
-  });
-
-  /** Bug conocido de backend: repeats=false no limita a clientes que califican por segmento. */
-  readonly segmentRepeatsWarning = computed(
-    () => !this.repeats() && this.targetSegments().some((s) => s.mode === 'INCLUDE'),
-  );
+  protected String = String;
 
   constructor() {
-    this.catalog.families().subscribe({ next: (f) => this.families.set(f), error: () => {} });
-    this.catalog.brands().subscribe({ next: (b) => this.brands.set(b), error: () => {} });
-    this.catalog
-      .salesChannels()
-      .subscribe({ next: (c) => this.salesChannels.set(c), error: () => {} });
-    this.segmentsSvc.list().subscribe({ next: (s) => this.segments.set(s), error: () => {} });
-  }
+    this.lookupSvc.salesChannels().subscribe((items) => {
+      this.channelOptions.set(items.map((i) => ({ value: String(i.id), label: i.name ?? '' })));
+    });
 
-  typeLabel(code: string) {
-    return PROMO_TYPE_LABELS[code] ?? code;
-  }
+    effect(() => {
+      const brand = this.ambitoSelected();
+      if (this.mode() === 'ambito' && brand && brand.name) {
+        this.lookupSvc.products('', { brandId: brand.id, limit: 50 }).subscribe((items) => {
+          this.ambitoProductCount.set(items.length);
+        });
+      } else {
+        this.ambitoProductCount.set(null);
+      }
+    });
 
-  onNameInput(v: string) {
-    this.name.set(v);
-    if (!this.codeTouched()) this.code.set(this.slugify(v));
-  }
-  onCodeInput(v: string) {
-    this.codeTouched.set(true);
-    this.code.set(v.toUpperCase());
-  }
-  private slugify(v: string): string {
-    return v
-      .normalize('NFD')
-      .replace(new RegExp('[̀-ͯ]', 'g'), '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '')
-      .slice(0, 40);
-  }
+    effect(() => {
+      // se leen para reaccionar a cualquier cambio de audiencia
+      const list = this.audience();
+      if (list.length === 0) {
+        this.reach.set(null);
+        return;
+      }
+      this.reachLoading.set(true);
+      this.promoSvc
+        .previewTargets({
+          segments: list
+            .filter((a) => a.kind === 'segment')
+            .map((a) => ({ segmentId: a.id, mode: a.mode })),
+          customers: list
+            .filter((a) => a.kind === 'customer')
+            .map((a) => ({ customerId: a.id, mode: a.mode })),
+        })
+        .subscribe({
+          next: (r) => {
+            this.reach.set(r);
+            this.reachLoading.set(false);
+          },
+          error: () => this.reachLoading.set(false),
+        });
+    });
 
-  onTypeChange(code: string) {
-    this.promoType.set(code);
-    const single = code === 'COMBO' || code === 'CUSTOMER_LIST';
-    if (single && this.tiers().length > 1) {
-      this.tiers.update((l) => l.slice(0, 1));
-      this.toast.info(
-        `Se conservó solo el tramo 1: ${this.typeLabel(code)} no usa tramos adicionales.`,
-      );
+    const editId = this.route.snapshot.paramMap.get('id');
+    const duplicateFrom = this.route.snapshot.queryParamMap.get('duplicateFrom');
+    if (editId) {
+      this.editingId.set(Number(editId));
+      this.loadInto(Number(editId), true);
+    } else if (duplicateFrom) {
+      this.loadInto(Number(duplicateFrom), false);
     }
   }
-  scopeLabel(code: string) {
-    return this.scopes.find((s) => s.code === code)?.label ?? code;
-  }
-  benefitLabel(code: string) {
-    return this.benefitTypes.find((b) => b.code === code)?.label ?? code;
+
+  private toLookup(items: LookupItem[]): UiLookupItem[] {
+    return items.map((i) => ({ id: i.id!, code: i.code, name: i.name ?? '', extraInfo: i.extraInfo }));
   }
 
-  goStep(n: number) {
-    this.step.set(n);
-  }
-  next() {
-    this.step.update((s) => Math.min(5, s + 1));
-  }
-  prev() {
-    this.step.update((s) => Math.max(1, s - 1));
-  }
-
-  // ── Condiciones ──
-  addCondition(scope: string) {
-    if (!scope) return;
-    this.conditions.update((l) => [...l, { uid: uid(), scope }]);
-  }
-  updateCond(u: number, patch: Partial<CondDraft>) {
-    this.conditions.update((l) => l.map((c) => (c.uid === u ? { ...c, ...patch } : c)));
-  }
-  removeCond(u: number) {
-    this.conditions.update((l) => l.filter((c) => c.uid !== u));
-  }
-  pickCondProduct(c: CondDraft) {
-    this.dialog
-      .open(ProductPickerDialog, { width: '460px' })
-      .afterClosed()
-      .subscribe((p?: Product) => {
-        if (p) this.updateCond(c.uid, { productId: p.productId, productName: p.name });
-      });
-  }
-
-  // ── Tramos / beneficios ──
-  addTier() {
-    this.tiers.update((l) => [
-      ...l,
-      { uid: uid(), tier: l.length + 1, fromQuantity: 0, fromAmount: 0, benefits: [] },
-    ]);
-  }
-  updateTier(u: number, patch: Partial<TierDraft>) {
-    this.tiers.update((l) => l.map((t) => (t.uid === u ? { ...t, ...patch } : t)));
-  }
-  removeTier(u: number) {
-    this.tiers.update((l) => l.filter((t) => t.uid !== u).map((t, i) => ({ ...t, tier: i + 1 })));
-  }
-  addBenefit(tierUid: number, type: string) {
-    if (!type) return;
-    this.tiers.update((l) =>
-      l.map((t) =>
-        t.uid === tierUid
-          ? { ...t, benefits: [...t.benefits, { uid: uid(), benefitType: type, quantity: 1 }] }
-          : t,
-      ),
+  private combinedScopeSearch(q: string): Observable<UiLookupItem[]> {
+    return forkJoin([
+      this.lookupSvc.products(q, { limit: 6 }).pipe(catchError(() => of([]))),
+      this.lookupSvc.families(q, { limit: 6 }).pipe(catchError(() => of([]))),
+      this.lookupSvc.brands(q, { limit: 6 }).pipe(catchError(() => of([]))),
+    ]).pipe(
+      map(([products, families, brands]) => [
+        ...products.map((i) => this.tag(i, 'PRODUCT')),
+        ...families.map((i) => this.tag(i, 'FAMILY')),
+        ...brands.map((i) => this.tag(i, 'BRAND')),
+      ]),
     );
   }
-  updateBenefit(tierUid: number, bUid: number, patch: Partial<BenefDraft>) {
-    this.tiers.update((l) =>
-      l.map((t) =>
-        t.uid === tierUid
-          ? { ...t, benefits: t.benefits.map((b) => (b.uid === bUid ? { ...b, ...patch } : b)) }
-          : t,
-      ),
+
+  private combinedBrandFamilySearch(q: string): Observable<UiLookupItem[]> {
+    return forkJoin([
+      this.lookupSvc.brands(q, { limit: 8 }).pipe(catchError(() => of([]))),
+      this.lookupSvc.families(q, { limit: 8 }).pipe(catchError(() => of([]))),
+    ]).pipe(
+      map(([brands, families]) => [
+        ...brands.map((i) => this.tag(i, 'BRAND')),
+        ...families.map((i) => this.tag(i, 'FAMILY')),
+      ]),
     );
-  }
-  removeBenefit(tierUid: number, bUid: number) {
-    this.tiers.update((l) =>
-      l.map((t) =>
-        t.uid === tierUid ? { ...t, benefits: t.benefits.filter((b) => b.uid !== bUid) } : t,
-      ),
-    );
-  }
-  pickBenefitProduct(tierUid: number, b: BenefDraft) {
-    this.dialog
-      .open(ProductPickerDialog, { width: '460px' })
-      .afterClosed()
-      .subscribe((p?: Product) => {
-        if (p) this.updateBenefit(tierUid, b.uid, { productId: p.productId, productName: p.name });
-      });
   }
 
-  // ── Targeting ──
-  addSegment(segmentId: number) {
-    if (!segmentId || this.targetSegments().some((s) => s.segmentId === segmentId)) return;
-    const seg = this.segments().find((s) => s.segmentId === segmentId);
-    this.targetSegments.update((l) => [
-      ...l,
-      { segmentId, name: seg?.name ?? '#' + segmentId, mode: 'INCLUDE' },
-    ]);
-  }
-  setSegMode(id: number, mode: string) {
-    this.targetSegments.update((l) => l.map((s) => (s.segmentId === id ? { ...s, mode } : s)));
-  }
-  removeSeg(id: number) {
-    this.targetSegments.update((l) => l.filter((s) => s.segmentId !== id));
-  }
-
-  searchCustomers() {
-    const q = this.custQuery().trim();
-    if (!q) return;
-    this.customers
-      .search(q, 0, 10)
-      .subscribe({
-        next: (r) => this.custResults.set(r.content),
-        error: () => this.custResults.set([]),
-      });
-  }
-  addCustomer(c: CustomerSummary) {
-    if (this.targetCustomers().some((x) => x.customerId === c.customerId)) return;
-    this.targetCustomers.update((l) => [
-      ...l,
-      { customerId: c.customerId, name: c.businessName, mode: 'INCLUDE' },
-    ]);
-    this.custResults.set([]);
-    this.custQuery.set('');
-  }
-  setCustMode(id: number, mode: string) {
-    this.targetCustomers.update((l) => l.map((c) => (c.customerId === id ? { ...c, mode } : c)));
-  }
-  setCustMax(id: number, max?: number) {
-    this.targetCustomers.update((l) =>
-      l.map((c) => (c.customerId === id ? { ...c, maxQuantity: max } : c)),
+  private combinedAudienceSearch(q: string): Observable<UiLookupItem[]> {
+    return forkJoin([
+      this.lookupSvc.segments(q, { limit: 8 }).pipe(catchError(() => of([]))),
+      this.lookupSvc.customers(q, { limit: 8 }).pipe(catchError(() => of([]))),
+    ]).pipe(
+      map(([segments, customers]) => [
+        ...segments.map((i) => this.tag(i, 'segment' as never, 'Segmento')),
+        ...customers.map((i) => this.tag(i, 'customer' as never, 'Cliente')),
+      ]),
     );
   }
-  removeCust(id: number) {
-    this.targetCustomers.update((l) => l.filter((c) => c.customerId !== id));
+
+  private tag(i: LookupItem, kind: 'PRODUCT' | 'FAMILY' | 'BRAND' | 'segment' | 'customer', label?: string): UiLookupItem {
+    return {
+      id: i.id!,
+      code: i.code,
+      name: i.name ?? '',
+      extraInfo: label ?? this.scopeLabel(kind as 'PRODUCT' | 'FAMILY' | 'BRAND'),
+      recent: i.recent,
+    };
   }
 
-  // ── Crear ──
-  canCreate() {
-    return (
-      !!this.code().trim() &&
-      !!this.name().trim() &&
-      !!this.promoType() &&
-      !!this.startDate() &&
-      !!this.endDate()
-    );
+  protected scopeLabel(scope: 'PRODUCT' | 'FAMILY' | 'BRAND'): string {
+    return { PRODUCT: 'Producto', FAMILY: 'Familia', BRAND: 'Marca' }[scope];
   }
-  create() {
-    if (!this.canCreate()) return;
-    this.submitting.set(true);
-    const cmd: CreatePromoCommand = {
-      code: this.code().trim(),
-      name: this.name().trim(),
-      description: this.description() || undefined,
-      promoType: this.promoType(),
-      salesChannelId: this.salesChannelId(),
-      repeats: this.repeats(),
-      startDate: this.startDate(),
-      endDate: this.endDate(),
-      conditions: this.conditions().map((c) => ({
-        scope: c.scope,
-        productId: c.productId,
-        familyId: c.familyId,
-        brandId: c.brandId,
-        minQuantity: c.minQuantity,
-        minAmount: c.minAmount,
-      })),
-      tiers: this.tiers().map((t) => ({
-        tier: t.tier,
-        fromQuantity: t.fromQuantity,
-        fromAmount: t.fromAmount,
-        benefits: t.benefits.map((b) => ({
-          benefitType: b.benefitType,
-          productId: b.productId,
-          quantity: b.quantity,
-          discountAmount: b.discountAmount,
-          discountPercent: b.discountPercent,
-          label: b.label || undefined,
-        })),
+
+  protected addCondition(item: UiLookupItem) {
+    const scope = (item.extraInfo === 'Marca' ? 'BRAND' : item.extraInfo === 'Familia' ? 'FAMILY' : 'PRODUCT') as
+      | 'PRODUCT'
+      | 'FAMILY'
+      | 'BRAND';
+    if (this.conditions().some((c) => c.name === item.name && c.scope === scope)) return;
+    const draft: ConditionDraft = { scope, name: item.name };
+    if (scope === 'PRODUCT') draft.productId = item.id;
+    if (scope === 'FAMILY') draft.familyId = item.id;
+    if (scope === 'BRAND') draft.brandId = item.id;
+    this.conditions.update((list) => [...list, draft]);
+  }
+
+  protected removeCondition(c: ConditionDraft) {
+    this.conditions.update((list) => list.filter((x) => x !== c));
+  }
+
+  protected setAmbito(item: UiLookupItem) {
+    this.ambitoSelected.set(item);
+  }
+
+  protected addAudience(item: UiLookupItem) {
+    const kind = item.extraInfo === 'Cliente' ? 'customer' : 'segment';
+    if (this.audience().some((a) => a.id === item.id && a.kind === kind)) return;
+    this.audience.update((list) => [...list, { kind, id: item.id, name: item.name, mode: 'INCLUDE' }]);
+  }
+
+  protected removeAudience(a: AudienceDraft) {
+    this.audience.update((list) => list.filter((x) => x !== a));
+  }
+
+  protected toggleAudienceMode(a: AudienceDraft) {
+    a.mode = a.mode === 'INCLUDE' ? 'EXCLUDE' : 'INCLUDE';
+    this.audience.update((list) => [...list]);
+  }
+
+  protected currentTier(): TierDraft | null {
+    return this.tiers()[this.selectedTier()] ?? null;
+  }
+
+  protected get tierFromQuantityModel() {
+    const t = this.currentTier();
+    return String(t?.fromQuantity ?? '');
+  }
+  protected set tierFromQuantityModel(v: string) {
+    const t = this.currentTier();
+    if (!t) return;
+    t.fromQuantity = this.numberOr(t.fromQuantity, v);
+    this.tiers.update((list) => [...list]);
+  }
+
+  protected chooseGroup(t: TierDraft): BenefitGroupDraft {
+    let g = t.benefitGroups.find((x) => x.selectionMode === 'CHOOSE');
+    if (!g) {
+      g = { benefitGroup: this.nextGroupNumber(t), selectionMode: 'CHOOSE', chooseCount: 1, benefits: [] };
+      t.benefitGroups.push(g);
+    }
+    return g;
+  }
+
+  protected allGroup(t: TierDraft): BenefitGroupDraft {
+    let g = t.benefitGroups.find((x) => x.selectionMode === 'ALL');
+    if (!g) {
+      g = { benefitGroup: this.nextGroupNumber(t), selectionMode: 'ALL', chooseCount: 1, benefits: [] };
+      t.benefitGroups.push(g);
+    }
+    return g;
+  }
+
+  private nextGroupNumber(t: TierDraft): number {
+    return t.benefitGroups.length + 1;
+  }
+
+  protected addBenefit(t: TierDraft, mode: 'CHOOSE' | 'ALL') {
+    const group = mode === 'CHOOSE' ? this.chooseGroup(t) : this.allGroup(t);
+    group.benefits.push({ key: benefitKeySeq++, benefitType: 'FREE_PRODUCT', catalog: true, quantity: 1 });
+    group.chooseCount = Math.min(group.chooseCount, group.benefits.length || 1);
+    this.tiers.update((list) => [...list]);
+  }
+
+  protected removeBenefit(b: BenefitDraft) {
+    for (const t of this.tiers()) {
+      for (const g of t.benefitGroups) {
+        g.benefits = g.benefits.filter((x) => x !== b);
+      }
+      t.benefitGroups = t.benefitGroups.filter((g) => g.benefits.length > 0);
+    }
+    this.tiers.update((list) => [...list]);
+  }
+
+  protected benefitProductSelected(b: BenefitDraft): UiLookupItem | null {
+    return b.productId ? { id: b.productId, name: b.productName ?? '' } : null;
+  }
+  protected setBenefitProduct(b: BenefitDraft, item: UiLookupItem) {
+    b.productId = item.id;
+    b.productName = item.name;
+    this.tiers.update((list) => [...list]);
+  }
+
+  protected numberOr(fallback: number, raw: string): number {
+    const n = Number(raw);
+    return Number.isFinite(n) && raw !== '' ? n : fallback;
+  }
+
+  protected addTier() {
+    const nextNum = Math.max(0, ...this.tiers().map((t) => t.tier)) + 1;
+    this.tiers.update((list) => [...list, emptyTier(nextNum)]);
+    this.selectedTier.set(this.tiers().length - 1);
+  }
+
+  protected duplicateTier() {
+    const t = this.currentTier();
+    if (!t) return;
+    const nextNum = Math.max(0, ...this.tiers().map((x) => x.tier)) + 1;
+    const clone: TierDraft = {
+      key: tierKeySeq++,
+      tier: nextNum,
+      fromQuantity: t.fromQuantity,
+      benefitGroups: t.benefitGroups.map((g) => ({
+        ...g,
+        benefits: g.benefits.map((b) => ({ ...b, key: benefitKeySeq++ })),
       })),
     };
-    this.promoSvc.create(cmd).subscribe({
-      next: (res) => {
-        const id = res.promoId;
-        const targets = this.buildTargets();
-        if (targets.segments.length || targets.customers.length) {
-          this.promoSvc
-            .setTargets(id, targets)
-            .subscribe({ next: () => this.done(id), error: () => this.done(id) });
-        } else {
-          this.done(id);
-        }
-      },
-      error: () => this.submitting.set(false),
+    this.tiers.update((list) => [...list, clone]);
+    this.selectedTier.set(this.tiers().length - 1);
+  }
+
+  protected tierBenefitSummary(t: TierDraft): string {
+    const all = t.benefitGroups.filter((g) => g.selectionMode === 'ALL').flatMap((g) => g.benefits);
+    const choose = t.benefitGroups.filter((g) => g.selectionMode === 'CHOOSE').flatMap((g) => g.benefits);
+    const parts: string[] = [];
+    if (choose.length) parts.push(`Elige 1 de ${choose.length}`);
+    if (all.length) parts.push(this.benefitLabel(all[0]));
+    return parts.join(' + ') || 'Sin premios todavía';
+  }
+
+  protected benefitLabel(b: BenefitDraft): string {
+    switch (b.benefitType) {
+      case 'FREE_PRODUCT':
+        return `${b.catalog ? b.productName : b.label} × ${b.quantity ?? 1} gratis`;
+      case 'DISCOUNT_AMOUNT':
+        return `S/ ${b.discountAmount ?? 0} de descuento`;
+      case 'DISCOUNT_PERCENT':
+        return `${b.discountPercent ?? 0}% de descuento`;
+    }
+  }
+
+  protected tierPhrase(t: TierDraft): string {
+    const choose = t.benefitGroups.find((g) => g.selectionMode === 'CHOOSE');
+    const all = t.benefitGroups.find((g) => g.selectionMode === 'ALL');
+    const parts: string[] = [];
+    if (choose?.benefits.length) {
+      parts.push(`elige entre ${choose.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
+    }
+    if (all?.benefits.length) {
+      parts.push(`recibe ${all.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
+    }
+    if (!parts.length) return 'Agrega al menos un premio para este tramo.';
+    return `Con este tramo: ${parts.join(', y además ')}.`;
+  }
+
+  protected summaryPhrase(): string {
+    const t1 = this.tiers()[0];
+    const scopeText =
+      this.mode() === 'surtido'
+        ? `${this.tier1Quantity()} unidades entre ${this.conditions().map((c) => c.name).join(', ') || 'los productos elegidos'}`
+        : `${this.tier1Quantity()} unidades de ${this.ambitoSelected()?.name ?? 'la marca o familia elegida'}`;
+    const benefitText = t1 ? this.tierPhraseInline(t1) : 'sin premios definidos';
+    return `Comprando ${scopeText}, el cliente ${benefitText}.`;
+  }
+
+  private tierPhraseInline(t: TierDraft): string {
+    const choose = t.benefitGroups.find((g) => g.selectionMode === 'CHOOSE');
+    const all = t.benefitGroups.find((g) => g.selectionMode === 'ALL');
+    const parts: string[] = [];
+    if (choose?.benefits.length) parts.push(`elige entre ${choose.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
+    if (all?.benefits.length) parts.push(`recibe ${all.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
+    return parts.join(', y ') || 'no recibe premios todavía';
+  }
+
+  protected vigenciaSummary(): string {
+    if (!this.startDate() && !this.endDate()) return 'Sin fecha de inicio';
+    return `${dateText(this.startDate())} – ${dateText(this.endDate())}`;
+  }
+
+  protected selectedChannelName(): string {
+    return this.channelOptions().find((o) => o.value === this.salesChannelId())?.label ?? '';
+  }
+
+  protected audienceSummary(): string {
+    if (this.audience().length === 0) return 'Todos los clientes del canal';
+    const n = this.reach()?.reachedCustomers;
+    return n != null ? `${n} clientes` : `${this.audience().length} reglas de alcance`;
+  }
+
+  protected stepHint(): string {
+    return [
+      'Guarda los datos generales de la campaña.',
+      'Define qué compra cuenta para esta promoción.',
+      'Arma los tramos y sus premios.',
+      'Elige a quién llega la promoción.',
+      'Revisa todo y actívala.',
+    ][this.step()];
+  }
+
+  protected fieldError(field: string): string {
+    if (this.step() !== 0) return '';
+    if (field === 'name' && this.errorSteps().includes(0) && !this.name().trim()) {
+      return 'Escribe un nombre para la promoción.';
+    }
+    return '';
+  }
+
+  private validateStep(n: number): boolean {
+    if (n === 0) return !!this.name().trim();
+    if (n === 2) return this.tiers().some((t) => t.benefitGroups.some((g) => g.benefits.length > 0));
+    return true;
+  }
+
+  protected nextStep() {
+    if (!this.validateStep(this.step())) {
+      this.errorSteps.update((s) => Array.from(new Set([...s, this.step()])));
+      return;
+    }
+    this.errorSteps.update((s) => s.filter((x) => x !== this.step()));
+    const next = Math.min(4, this.step() + 1);
+    this.step.set(next);
+    this.visited.update((v) => Array.from(new Set([...v, next])));
+  }
+
+  protected prevStep() {
+    this.step.update((s) => Math.max(0, s - 1));
+  }
+
+  protected goToStep(index: number) {
+    if (index === this.step() || this.visited().includes(index)) this.step.set(index);
+  }
+
+  private buildTiersCommand() {
+    return this.tiers()
+      .filter((t) => t.benefitGroups.some((g) => g.benefits.length > 0))
+      .map((t) => ({
+        tier: t.tier,
+        fromQuantity: t.fromQuantity,
+        benefitGroups: t.benefitGroups
+          .filter((g) => g.benefits.length > 0)
+          .map((g) => ({
+            benefitGroup: g.benefitGroup,
+            selectionMode: g.selectionMode,
+            chooseCount: g.selectionMode === 'CHOOSE' ? g.chooseCount || 1 : undefined,
+            benefits: g.benefits.map((b, i) => ({
+              benefitLine: i + 1,
+              benefitType: b.benefitType,
+              productId: b.benefitType === 'FREE_PRODUCT' && b.catalog ? b.productId : undefined,
+              quantity: b.benefitType === 'FREE_PRODUCT' ? b.quantity : undefined,
+              discountAmount: b.benefitType === 'DISCOUNT_AMOUNT' ? b.discountAmount : undefined,
+              discountPercent: b.benefitType === 'DISCOUNT_PERCENT' ? b.discountPercent : undefined,
+              label: b.benefitType === 'FREE_PRODUCT' && !b.catalog ? b.label : undefined,
+            })),
+          })),
+      }));
+  }
+
+  private buildConditionsCommand() {
+    if (this.mode() === 'ambito' && this.ambitoSelected()) {
+      const sel = this.ambitoSelected()!;
+      const isFamily = sel.extraInfo === 'Familia';
+      return isFamily
+        ? [{ scope: 'FAMILY' as const, familyId: sel.id }]
+        : [{ scope: 'BRAND' as const, brandId: sel.id }];
+    }
+    return this.conditions().map((c) => ({
+      scope: c.scope,
+      productId: c.productId,
+      familyId: c.familyId,
+      brandId: c.brandId,
+    }));
+  }
+
+  private buildCreateCommand(): CreatePromoCommand {
+    return {
+      code: slugCode(this.name()),
+      name: this.name(),
+      description: this.description() || undefined,
+      promoType: 'TIERED',
+      salesChannelId: this.salesChannelId() ? Number(this.salesChannelId()) : undefined,
+      measureType: 'QUANTITY',
+      priority: Number(this.priority()),
+      stackable: this.stackable(),
+      startDate: this.startDate() || undefined,
+      endDate: this.endDate() || undefined,
+      conditions: this.buildConditionsCommand(),
+      tiers: this.buildTiersCommand(),
+    };
+  }
+
+  private buildUpdateCommand(): UpdatePromoCommand {
+    return {
+      name: this.name(),
+      description: this.description() || undefined,
+      salesChannelId: this.salesChannelId() ? Number(this.salesChannelId()) : undefined,
+      measureType: 'QUANTITY',
+      priority: Number(this.priority()),
+      stackable: this.stackable(),
+      startDate: this.startDate() || undefined,
+      endDate: this.endDate() || undefined,
+      conditions: this.buildConditionsCommand(),
+      tiers: this.buildTiersCommand(),
+    };
+  }
+
+  private buildTargetsCommand() {
+    return {
+      segments: this.audience()
+        .filter((a) => a.kind === 'segment')
+        .map((a) => ({ segmentId: a.id, mode: a.mode })),
+      customers: this.audience()
+        .filter((a) => a.kind === 'customer')
+        .map((a) => ({ customerId: a.id, mode: a.mode })),
+    };
+  }
+
+  private loadInto(id: number, keepId: boolean) {
+    this.promoSvc.detail(id).subscribe((p: PromoDetail) => {
+      this.name.set(keepId ? p.name ?? '' : `${p.name ?? ''} (copia)`);
+      this.description.set(p.description ?? '');
+      this.salesChannelId.set(p.salesChannelId ? String(p.salesChannelId) : '');
+      this.priority.set(p.priority ? String(p.priority) : '5');
+      this.startDate.set(p.startDate ?? '');
+      this.endDate.set(p.endDate ?? '');
+      this.stackable.set(!!p.stackable);
+      const brandCond = (p.conditions ?? []).find((c) => c.scope === 'BRAND' || c.scope === 'FAMILY');
+      if (brandCond) {
+        this.mode.set('ambito');
+        this.ambitoSelected.set({
+          id: (brandCond.brandId ?? brandCond.familyId)!,
+          name: brandCond.brandName ?? brandCond.familyName ?? '',
+        });
+      } else {
+        this.mode.set('surtido');
+        this.conditions.set(
+          (p.conditions ?? []).map((c) => ({
+            scope: (c.scope as 'PRODUCT' | 'FAMILY' | 'BRAND') ?? 'PRODUCT',
+            productId: c.productId ?? undefined,
+            familyId: c.familyId ?? undefined,
+            brandId: c.brandId ?? undefined,
+            name: c.productName ?? c.familyName ?? c.brandName ?? '',
+          })),
+        );
+      }
+      const firstTier = (p.tiers ?? [])[0];
+      this.tier1Quantity.set(String(firstTier?.fromQuantity ?? 10));
+      this.tiers.set(
+        (p.tiers ?? [emptyTier(1)]).map((t) => ({
+          key: tierKeySeq++,
+          tier: t.tier ?? 1,
+          fromQuantity: t.fromQuantity ?? 10,
+          benefitGroups: (t.benefitGroups ?? []).map((g) => ({
+            benefitGroup: g.benefitGroup ?? 1,
+            selectionMode: (g.selectionMode as 'ALL' | 'CHOOSE') ?? 'ALL',
+            chooseCount: g.chooseCount ?? 1,
+            benefits: (g.benefits ?? []).map((b) => ({
+              key: benefitKeySeq++,
+              benefitType: (b.benefitType as BenefitDraft['benefitType']) ?? 'FREE_PRODUCT',
+              catalog: !!b.productId,
+              productId: b.productId ?? undefined,
+              productName: b.productName ?? undefined,
+              quantity: b.quantity ?? undefined,
+              discountAmount: b.discountAmount ?? undefined,
+              discountPercent: b.discountPercent ?? undefined,
+              label: b.label ?? undefined,
+            })),
+          })),
+        })),
+      );
+      if (keepId) {
+        this.draftId.set(id);
+        this.audience.set([
+          ...(p.segments ?? []).map((s) => ({
+            kind: 'segment' as const,
+            id: s.segmentId!,
+            name: s.segmentName ?? '',
+            mode: (s.mode as 'INCLUDE' | 'EXCLUDE') ?? 'INCLUDE',
+          })),
+          ...(p.customers ?? []).map((c) => ({
+            kind: 'customer' as const,
+            id: c.customerId!,
+            name: c.customerName ?? '',
+            mode: (c.mode as 'INCLUDE' | 'EXCLUDE') ?? 'INCLUDE',
+          })),
+        ]);
+      }
     });
   }
 
-  private buildTargets(): PromoTargets {
-    return {
-      segments: this.targetSegments().map((s) => ({ segmentId: s.segmentId, mode: s.mode })),
-      customers: this.targetCustomers().map((c) => ({
-        customerId: c.customerId,
-        mode: c.mode,
-        maxQuantity: c.maxQuantity,
-      })),
-    };
+  private ensureSaved(): Observable<number> {
+    if (this.draftId()) return of(this.draftId()!);
+    this.savingDraft.set(true);
+    this.saveError.set('');
+    const obs = this.editingId()
+      ? this.promoSvc.update(this.editingId()!, this.buildUpdateCommand()).pipe(map((p) => p.promoId!))
+      : this.promoSvc.create(this.buildCreateCommand()).pipe(map((p) => p.promoId!));
+    return obs.pipe(
+      map((id) => {
+        this.draftId.set(id);
+        this.savedAt.set(new Date());
+        this.savingDraft.set(false);
+        if (this.audience().length) {
+          this.promoSvc.setTargets(id, this.buildTargetsCommand()).subscribe();
+        }
+        return id;
+      }),
+      catchError((err) => {
+        this.savingDraft.set(false);
+        this.saveError.set('No pudimos guardar la promoción. Revisa los datos e intenta de nuevo.');
+        throw err;
+      }),
+    );
   }
-  private done(id: number) {
-    this.toast.success('Promoción creada (apagada). Apruébala para encenderla.');
-    void this.router.navigate(['/promos', id]);
+
+  protected saveOff() {
+    this.ensureSaved().subscribe({ next: () => this.router.navigate(['/promociones']) });
+  }
+
+  protected activatePromo() {
+    this.activating.set(true);
+    this.ensureSaved().subscribe({
+      next: (id) => {
+        this.promoSvc.approve(id).subscribe({
+          next: () => {
+            this.activating.set(false);
+            this.router.navigate(['/promociones', id]);
+          },
+          error: () => this.activating.set(false),
+        });
+      },
+      error: () => this.activating.set(false),
+    });
+  }
+
+  protected simulate() {
+    const id = this.draftId();
+    const customer = this.simCustomer();
+    const product = this.simProduct();
+    if (!id || !customer || !product) return;
+    this.simulating.set(true);
+    this.promoSvc
+      .previewOrder(id, {
+        customerId: customer.id,
+        lines: [{ productId: product.id, quantity: this.numberOr(1, this.simQuantity()) }],
+      })
+      .subscribe({
+        next: (r) => {
+          this.simResult.set(r);
+          this.simulating.set(false);
+        },
+        error: () => this.simulating.set(false),
+      });
+  }
+
+  protected exit() {
+    this.router.navigate(['/promociones']);
   }
 }

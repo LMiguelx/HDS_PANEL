@@ -7,7 +7,12 @@ export interface NavItem {
   route: string;
   anyOf: string[]; // basta tener uno
   group?: string; // agrupador visual
+  /** Módulo todavía no rediseñado: se muestra apagado con «Próximamente». */
+  comingSoon?: boolean;
 }
+
+/** Permisos que ya dan acceso a alguna pantalla del módulo de Promociones. */
+export const PROMO_ANY_PERMISSION = ['promo.create', 'promo.approve', 'promo.allocate'];
 
 export const NAV: NavItem[] = [
   { label: 'Inicio', icon: 'home', route: '/dashboard', anyOf: [] },
@@ -19,6 +24,7 @@ export const NAV: NavItem[] = [
     route: '/clientes',
     anyOf: ['customer.view'],
     group: 'Clientes',
+    comingSoon: true,
   },
   {
     label: 'Aprobaciones',
@@ -26,6 +32,7 @@ export const NAV: NavItem[] = [
     route: '/aprobaciones',
     anyOf: ['customer.approve'],
     group: 'Clientes',
+    comingSoon: true,
   },
   {
     label: 'Asignaciones',
@@ -33,6 +40,7 @@ export const NAV: NavItem[] = [
     route: '/asignaciones',
     anyOf: ['customer.assign'],
     group: 'Clientes',
+    comingSoon: true,
   },
   {
     label: 'Segmentos',
@@ -40,6 +48,7 @@ export const NAV: NavItem[] = [
     route: '/segmentos',
     anyOf: ['segments.manage'],
     group: 'Clientes',
+    comingSoon: true,
   },
 
   // Ventas
@@ -49,6 +58,7 @@ export const NAV: NavItem[] = [
     route: '/pedidos',
     anyOf: ['order.view_all', 'order.create'],
     group: 'Ventas',
+    comingSoon: true,
   },
   {
     label: 'Bonificaciones pendientes',
@@ -56,21 +66,15 @@ export const NAV: NavItem[] = [
     route: '/pedidos/bonificaciones-pendientes',
     anyOf: ['order.view_all'],
     group: 'Ventas',
+    comingSoon: true,
   },
 
-  // Promos
+  // Promos — módulo rediseñado, una sola entrada para las 5 pantallas
   {
     label: 'Promociones',
     icon: 'local_offer',
-    route: '/promos',
-    anyOf: ['promo.create', 'promo.approve'],
-    group: 'Promos',
-  },
-  {
-    label: 'Dotaciones',
-    icon: 'redeem',
-    route: '/dotaciones',
-    anyOf: ['promo.allocate'],
+    route: '/promociones',
+    anyOf: PROMO_ANY_PERMISSION,
     group: 'Promos',
   },
 
@@ -81,6 +85,7 @@ export const NAV: NavItem[] = [
     route: '/reparto',
     anyOf: ['delivery.deliver', 'delivery.settle'],
     group: 'Reparto',
+    comingSoon: true,
   },
   {
     label: 'Flota',
@@ -88,6 +93,7 @@ export const NAV: NavItem[] = [
     route: '/flota',
     anyOf: ['delivery.settle'],
     group: 'Reparto',
+    comingSoon: true,
   },
 
   // Facturación
@@ -97,6 +103,7 @@ export const NAV: NavItem[] = [
     route: '/facturas',
     anyOf: ['invoice.reconcile'],
     group: 'Facturación',
+    comingSoon: true,
   },
 
   // Administración
@@ -106,6 +113,7 @@ export const NAV: NavItem[] = [
     route: '/precios',
     anyOf: ['price.view'],
     group: 'Administración',
+    comingSoon: true,
   },
   {
     label: 'Inventario',
@@ -113,6 +121,7 @@ export const NAV: NavItem[] = [
     route: '/inventario',
     anyOf: ['report.view'],
     group: 'Administración',
+    comingSoon: true,
   },
   {
     label: 'Empresa',
@@ -120,5 +129,6 @@ export const NAV: NavItem[] = [
     route: '/empresa',
     anyOf: ['config.edit'],
     group: 'Administración',
+    comingSoon: true,
   },
 ];

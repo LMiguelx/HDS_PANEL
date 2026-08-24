@@ -43,6 +43,25 @@ a.active {
   background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
   color: var(--mat-sys-primary);
 }
+.coming-soon-item {
+  opacity: 0.6;
+}
+.coming-soon-tag {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--mat-sys-outline-variant);
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+.pending-badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--bg, #fff);
+  background: var(--st-pendiente, #b03a00);
+  padding: 1px 6px;
+  border-radius: 0;
+}
 .content {
   padding: 16px;
 }

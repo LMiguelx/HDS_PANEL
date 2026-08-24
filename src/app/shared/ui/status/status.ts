@@ -1,0 +1,58 @@
+import { Component, computed, input } from '@angular/core';
+
+const NORMALIZED_MAP: Record<string, string> = {
+  vigente: 'vigente',
+  programada: 'programada',
+  vencida: 'vencida',
+  apagada: 'apagada',
+  pendiente: 'pendiente',
+  'sin stock': 'sin-stock',
+  agotado: 'sin-stock',
+};
+
+function normalize(text: string): string {
+  return text.toLowerCase().trim();
+}
+
+/**
+ * Cuadro de color + palabra. El estado nunca se comunica solo con color.
+ * `label` es el texto que arma el backend (statusLabel) y se pinta tal cual;
+ * `status` es opcional y solo sirve para forzar el color cuando el texto no
+ * coincide con el vocabulario esperado.
+ */
+@Component({
+  selector: 'ui-status',
+  template: `
+    <span class="ui-status">
+      <span class="ui-status-dot" [style.background]="dotColor()"></span>
+      {{ label() }}
+    </span>
+  `,
+  styles: [
+    `
+      .ui-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .ui-status-dot {
+        width: 8px;
+        height: 8px;
+        flex: none;
+      }
+    `,
+  ],
+})
+export class UiStatus {
+  label = input.required<string>();
+  status = input<string>('');
+
+  protected dotColor = computed(() => {
+    const key = normalize(this.status() || this.label());
+    const slug = NORMALIZED_MAP[key] ?? 'pendiente';
+    return `var(--st-${slug})`;
+  });
+}

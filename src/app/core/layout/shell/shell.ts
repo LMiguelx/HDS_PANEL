@@ -12,6 +12,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from '../../auth/auth';
 import { ThemeService } from '../../theme/theme.service';
 import { NAV, NavItem } from '../nav.config';
+import { PendingCountStore } from '../../../features/promos/pending-count';
 
 @Component({
   selector: 'app-shell',
@@ -33,8 +34,15 @@ export class ShellComponent {
   private auth = inject(AuthService);
   private breakpoints = inject(BreakpointObserver);
   readonly theme = inject(ThemeService);
+  readonly pendingCount = inject(PendingCountStore);
 
   readonly user = this.auth.currentUser;
+
+  constructor() {
+    if (this.auth.hasAny('promo.create', 'promo.approve', 'promo.allocate')) {
+      this.pendingCount.refresh();
+    }
+  }
 
   readonly isHandset = toSignal(
     this.breakpoints.observe([Breakpoints.Handset]).pipe(map((r) => r.matches)),

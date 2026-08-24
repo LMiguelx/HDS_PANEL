@@ -185,7 +185,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Listado paginado de promociones, con filtros por nombre/estado/marca/canal */
+        get: operations["promoList"];
         put?: never;
         /** Crear promoción (nace apagada; CU-26). Doble bonificación = varios beneficios en el mismo tramo */
         post: operations["create_1"];
@@ -888,9 +889,11 @@ export interface paths {
         };
         /** Detalle de la regla: condiciones, tramos y beneficios */
         get: operations["detail"];
-        put?: never;
+        /** Actualiza nombre, vigencia, condiciones, tramos y premios (la promo debe estar apagada) */
+        put: operations["promoUpdate"];
         post?: never;
-        delete?: never;
+        /** Elimina la promoción (solo si nunca se activó) */
+        delete: operations["promoDelete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1457,6 +1460,210 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/promos/{promoId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Simula si un pedido de ejemplo califica y qué otorgaría */
+        post: operations["promoPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/promos/targets/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cuántos clientes alcanza un targeting antes de guardarlo */
+        post: operations["promoTargetsPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/promos/pending-choices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Premios a elección pendientes de resolver */
+        get: operations["promoPendingChoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/promos/pending-choices/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conteo de premios pendientes, para el badge del menú */
+        get: operations["promoPendingChoicesCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/promos/pending-choices/{promoApplicationId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resuelve un premio a elección pendiente */
+        post: operations["promoPendingChoiceResolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lookup/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Búsqueda de vendedores/usuarios por nombre, para typeahead */
+        get: operations["lookupUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lookup/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Búsqueda de segmentos por nombre, para typeahead */
+        get: operations["lookupSegments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lookup/sales-channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista de canales de venta, para selects */
+        get: operations["lookupSalesChannels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lookup/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Búsqueda de productos por nombre, para typeahead */
+        get: operations["lookupProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lookup/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Búsqueda de familias por nombre, para typeahead */
+        get: operations["lookupFamilies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lookup/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Búsqueda de clientes por nombre, para typeahead */
+        get: operations["lookupCustomers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lookup/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Búsqueda de marcas por nombre, para typeahead */
+        get: operations["lookupBrands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1588,46 +1795,159 @@ export interface components {
             endLocation?: string;
         };
         BenefitCommand: {
-            benefitType: string;
+            /** Format: int32 */
+            benefitLine: number;
+            /** @enum {string} */
+            benefitType: 'FREE_PRODUCT' | 'DISCOUNT_AMOUNT' | 'DISCOUNT_PERCENT';
             /** Format: int32 */
             productId?: number;
+            /** Format: double */
             quantity?: number;
+            /** Format: double */
             discountAmount?: number;
+            /** Format: double */
             discountPercent?: number;
             label?: string;
+            payloadValid?: boolean;
+        };
+        BenefitGroupCommand: {
+            /** Format: int32 */
+            benefitGroup: number;
+            /** @enum {string} */
+            selectionMode: 'ALL' | 'CHOOSE';
+            /** Format: int32 */
+            chooseCount?: number;
+            label?: string;
+            benefits: components["schemas"]["BenefitCommand"][];
+            modeValid?: boolean;
+            chooseCountValid?: boolean;
+            choiceMeaningful?: boolean;
         };
         ConditionCommand: {
-            scope: string;
+            /** @enum {string} */
+            scope: 'PRODUCT' | 'FAMILY' | 'BRAND';
             /** Format: int32 */
             productId?: number;
             /** Format: int32 */
             familyId?: number;
             /** Format: int32 */
             brandId?: number;
-            minQuantity?: number;
-            minAmount?: number;
+            targetValid?: boolean;
+        };
+        TierCommand: {
+            /** Format: int32 */
+            tier: number;
+            /** Format: double */
+            fromQuantity?: number;
+            /** Format: double */
+            fromAmount?: number;
+            benefitGroups: components["schemas"]["BenefitGroupCommand"][];
+            thresholdValid?: boolean;
         };
         CreatePromoCommand: {
             code: string;
             name: string;
             description?: string;
-            promoType: string;
+            /** @enum {string} */
+            promoType: 'TIERED' | 'CUSTOMER_LIST';
             /** Format: int32 */
             salesChannelId?: number;
+            /** @enum {string} */
+            measureType: 'QUANTITY' | 'AMOUNT';
             repeats?: boolean;
+            /** Format: int32 */
+            maxRepeatsPerOrder?: number;
+            /** Format: int32 */
+            maxApplicationsPerCustomer?: number;
+            /** Format: int32 */
+            priority: number;
+            stackable?: boolean;
             /** Format: date */
             startDate?: string;
             /** Format: date */
             endDate?: string;
             conditions?: components["schemas"]["ConditionCommand"][];
             tiers: components["schemas"]["TierCommand"][];
+            scopeValid?: boolean;
+            dateRangeValid?: boolean;
+            customerListValid?: boolean;
         };
-        TierCommand: {
+        UpdatePromoCommand: {
+            name?: string;
+            description?: string;
             /** Format: int32 */
-            tier: number;
-            fromQuantity: number;
-            fromAmount: number;
-            benefits: components["schemas"]["BenefitCommand"][];
+            salesChannelId?: number;
+            /** @enum {string} */
+            measureType: 'QUANTITY' | 'AMOUNT';
+            repeats?: boolean;
+            /** Format: int32 */
+            maxRepeatsPerOrder?: number;
+            /** Format: int32 */
+            maxApplicationsPerCustomer?: number;
+            /** Format: int32 */
+            priority: number;
+            stackable?: boolean;
+            /** Format: date */
+            startDate?: string;
+            /** Format: date */
+            endDate?: string;
+            conditions?: components["schemas"]["ConditionCommand"][];
+            tiers: components["schemas"]["TierCommand"][];
+            dateRangeValid?: boolean;
+        };
+        BenefitGroupView: {
+            /** Format: int32 */
+            benefitGroup?: number;
+            selectionMode?: string;
+            /** Format: int32 */
+            chooseCount?: number;
+            label?: string;
+            modeText?: string;
+            benefits?: components["schemas"]["BenefitView"][];
+        };
+        ConditionView: {
+            /** Format: int32 */
+            lineNumber?: number;
+            scope?: string;
+            scopeName?: string;
+            /** Format: int32 */
+            productId?: number;
+            productName?: string;
+            productCode?: string;
+            /** Format: int32 */
+            familyId?: number;
+            familyName?: string;
+            /** Format: int32 */
+            brandId?: number;
+            brandName?: string;
+            displayText?: string;
+        };
+        TierView: {
+            /** Format: int32 */
+            tier?: number;
+            /** Format: double */
+            fromQuantity?: number;
+            /** Format: double */
+            fromAmount?: number;
+            thresholdText?: string;
+            benefitGroups?: components["schemas"]["BenefitGroupView"][];
+        };
+        SegmentTargetView: {
+            /** Format: int32 */
+            segmentId?: number;
+            segmentName?: string;
+            mode?: string;
+            /** Format: int32 */
+            customerCount?: number;
+        };
+        CustomerTargetView: {
+            /** Format: int32 */
+            customerId?: number;
+            customerName?: string;
+            customerCode?: string;
+            mode?: string;
+            /** Format: double */
+            maxQuantity?: number;
         };
         PromoDetail: {
             /** Format: int32 */
@@ -1636,23 +1956,28 @@ export interface components {
             name?: string;
             description?: string;
             promoType?: string;
+            promoTypeName?: string;
             /** Format: int32 */
             salesChannelId?: number;
+            salesChannelName?: string;
+            measureType?: string;
             repeats?: boolean;
+            /** Format: int32 */
+            maxRepeatsPerOrder?: number;
+            /** Format: int32 */
+            maxApplicationsPerCustomer?: number;
+            /** Format: int32 */
+            priority?: number;
+            stackable?: boolean;
             /** Format: date */
             startDate?: string;
             /** Format: date */
             endDate?: string;
             active?: boolean;
-            conditions?: components["schemas"]["ConditionCommand"][];
+            conditions?: components["schemas"]["ConditionView"][];
             tiers?: components["schemas"]["TierView"][];
-        };
-        TierView: {
-            /** Format: int32 */
-            tier?: number;
-            fromQuantity?: number;
-            fromAmount?: number;
-            benefits?: components["schemas"]["BenefitCommand"][];
+            segments?: components["schemas"]["SegmentTargetView"][];
+            customers?: components["schemas"]["CustomerTargetView"][];
         };
         AllocateCommand: {
             /** Format: int32 */
@@ -2109,12 +2434,28 @@ export interface components {
             code?: string;
             name?: string;
             promoType?: string;
+            promoTypeName?: string;
+            salesChannelName?: string;
+            scopeSummary?: string;
+            benefitSummary?: string;
             repeats?: boolean;
             /** Format: date */
             startDate?: string;
             /** Format: date */
             endDate?: string;
             active?: boolean;
+            statusLabel?: string;
+        };
+        PageResponsePromoSummary: {
+            content?: components["schemas"]["PromoSummary"][];
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
         };
         ApplicationView: {
             /** Format: int64 */
@@ -2501,6 +2842,144 @@ export interface components {
             brandId?: number;
             code?: string;
             name?: string;
+        };
+        PreviewLineCommand: {
+            /** Format: int32 */
+            productId: number;
+            /** Format: double */
+            quantity: number;
+        };
+        PreviewCommand: {
+            /** Format: int32 */
+            customerId: number;
+            lines: components["schemas"]["PreviewLineCommand"][];
+        };
+        BenefitView: {
+            /** Format: int32 */
+            benefitLine?: number;
+            benefitType?: string;
+            benefitTypeName?: string;
+            /** Format: int32 */
+            productId?: number;
+            productName?: string;
+            productCode?: string;
+            /** Format: double */
+            quantity?: number;
+            /** Format: double */
+            discountAmount?: number;
+            /** Format: double */
+            discountPercent?: number;
+            label?: string;
+            displayText?: string;
+        };
+        PendingChoicePreview: {
+            /** Format: int32 */
+            tier?: number;
+            /** Format: int32 */
+            benefitGroup?: number;
+            groupLabel?: string;
+            /** Format: int32 */
+            chooseCount?: number;
+            modeText?: string;
+            options?: components["schemas"]["BenefitView"][];
+        };
+        PreviewResult: {
+            /** Format: int32 */
+            promoId?: number;
+            promoName?: string;
+            qualifies?: boolean;
+            measureType?: string;
+            /** Format: double */
+            measuredValue?: number;
+            /** Format: int32 */
+            reachedTier?: number;
+            /** Format: double */
+            nextThreshold?: number;
+            /** Format: double */
+            missingForNextTier?: number;
+            progressText?: string;
+            granted?: components["schemas"]["BenefitView"][];
+            pendingChoices?: components["schemas"]["PendingChoicePreview"][];
+            /** Format: double */
+            totalDiscount?: number;
+        };
+        TargetReachView: {
+            /** Format: int32 */
+            reachedCustomers?: number;
+            /** Format: int32 */
+            fromSegments?: number;
+            /** Format: int32 */
+            fromDirectCustomers?: number;
+            /** Format: int32 */
+            excluded?: number;
+            openToAll?: boolean;
+        };
+        ChoiceOptionView: {
+            /** Format: int64 */
+            optionId?: number;
+            /** Format: int32 */
+            benefitLine?: number;
+            benefitType?: string;
+            benefitTypeName?: string;
+            /** Format: int32 */
+            productId?: number;
+            productName?: string;
+            productCode?: string;
+            /** Format: double */
+            quantity?: number;
+            /** Format: double */
+            discountAmount?: number;
+            /** Format: double */
+            discountPercent?: number;
+            label?: string;
+            displayText?: string;
+            /** Format: double */
+            availableStock?: number;
+            chosen?: boolean;
+        };
+        PendingChoiceView: {
+            /** Format: int64 */
+            promoApplicationId?: number;
+            /** Format: int32 */
+            orderId?: number;
+            /** Format: date */
+            orderDate?: string;
+            /** Format: int32 */
+            customerId?: number;
+            customerName?: string;
+            customerCode?: string;
+            /** Format: int32 */
+            salespersonId?: number;
+            salespersonName?: string;
+            /** Format: int32 */
+            promoId?: number;
+            promoName?: string;
+            /** Format: int32 */
+            tier?: number;
+            /** Format: int32 */
+            benefitGroup?: number;
+            groupLabel?: string;
+            /** Format: int32 */
+            chooseCount?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            options?: components["schemas"]["ChoiceOptionView"][];
+        };
+        PendingCountView: {
+            /** Format: int32 */
+            pending?: number;
+        };
+        ResolveChoiceCommand: {
+            /** Format: int64 */
+            chosenOptionIds: number[];
+        };
+        LookupItem: {
+            /** Format: int32 */
+            id?: number;
+            code?: string;
+            name?: string;
+            extraInfo?: string;
+            recent?: boolean;
         };
     };
     responses: never;
@@ -4583,6 +5062,366 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    promoList: {
+        parameters: {
+            query?: {
+                name?: string;
+                status?: string;
+                brandId?: number;
+                channelId?: number;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PageResponsePromoSummary"];
+                };
+            };
+        };
+    };
+    promoUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePromoCommand"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PromoDetail"];
+                };
+            };
+        };
+    };
+    promoDelete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    promoPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewCommand"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PreviewResult"];
+                };
+            };
+        };
+    };
+    promoTargetsPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TargetsCommand"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TargetReachView"];
+                };
+            };
+        };
+    };
+    promoPendingChoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PendingChoiceView"][];
+                };
+            };
+        };
+    };
+    promoPendingChoicesCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PendingCountView"];
+                };
+            };
+        };
+    };
+    promoPendingChoiceResolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promoApplicationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveChoiceCommand"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    lookupUsers: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                excludeIds?: number[];
+                includeInactive?: boolean;
+                role?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LookupItem"][];
+                };
+            };
+        };
+    };
+    lookupSegments: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                excludeIds?: number[];
+                includeInactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LookupItem"][];
+                };
+            };
+        };
+    };
+    lookupSalesChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LookupItem"][];
+                };
+            };
+        };
+    };
+    lookupProducts: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                excludeIds?: number[];
+                includeInactive?: boolean;
+                brandId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LookupItem"][];
+                };
+            };
+        };
+    };
+    lookupFamilies: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                excludeIds?: number[];
+                includeInactive?: boolean;
+                brandId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LookupItem"][];
+                };
+            };
+        };
+    };
+    lookupCustomers: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                excludeIds?: number[];
+                includeInactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LookupItem"][];
+                };
+            };
+        };
+    };
+    lookupBrands: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                excludeIds?: number[];
+                includeInactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LookupItem"][];
+                };
             };
         };
     };

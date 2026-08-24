@@ -40,3 +40,42 @@
 .status-chip[data-status="ATTENDED"]        { --c: var(--st-attended); }
 .status-chip[data-status="CLOSED"]          { --c: var(--st-closed); }
 .status-chip[data-status="NO_PURCHASE"]     { --c: var(--st-no-purchase); }
+
+// ============================================================================
+// Módulo de Promociones — tabla densa del sistema nuevo (sin Material).
+// La usan las pantallas de Promociones directamente sobre <table>, y
+// shared/ui/table/table.ts solo aporta los estados (cargando/vacía/error).
+// ============================================================================
+.ui-table-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-dense);
+  font-family: var(--font-sans);
+  color: var(--ink);
+
+  th {
+    text-align: left;
+    padding: 14px 12px 10px 0;
+    font-size: var(--fs-label);
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    font-weight: 800;
+    border-bottom: var(--border-rule);
+  }
+  td {
+    padding: 14px 12px 14px 0;
+    border-bottom: var(--border-hair);
+    vertical-align: top;
+  }
+  tbody tr {
+    transition: background var(--dur-fast) var(--ease-standard);
+  }
+  tbody tr:hover {
+    background: var(--faint);
+  }
+  tbody tr:focus-within {
+    outline: var(--border-focus);
+    outline-offset: -2px;
+  }
+}

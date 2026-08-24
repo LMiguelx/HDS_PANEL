@@ -1,269 +1,343 @@
-﻿import { Component, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
-import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatDialog } from '@angular/material/dialog';
-import { PageHeaderComponent } from '../../shared/components/page-header';
-import { HasPermissionDirective } from '../../shared/directives/has-permission';
-import { ToastService } from '../../core/ui/toast';
-import { AllocationService } from '../sales/allocation';
-import { ProductPickerDialog } from './product-picker-dialog';
-import { AllocationView, CreateAllocationCommand } from '../../shared/models/allocation.models';
-import { Product } from '../../shared/models/catalog.models';
+import { Component, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { map } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
+import { UiButton } from '../../shared/ui/button/button';
+import { UiField, UiFieldOption } from '../../shared/ui/field/field';
+import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
+import { UiEmpty } from '../../shared/ui/empty/empty';
+import { PromoModuleTabs } from './ui/module-tabs';
+import { PromoService } from './promo';
+import { LookupService, toUiLookup } from './lookup';
+import { dateText } from './promo-format';
+
+interface AllocationView {
+  allocationId?: number;
+  promoId?: number;
+  userId?: number;
+  productId?: number;
+  productName?: string;
+  allocatedQuantity?: number;
+  usedQuantity?: number;
+  availableQuantity?: number;
+  periodStart?: string;
+  periodEnd?: string;
+}
 
 @Component({
   selector: 'app-allocations-admin',
-  imports: [
-    DatePipe,
-    MatCardModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatButtonModule,
-    MatIconModule,
-    PageHeaderComponent,
-    HasPermissionDirective,
-  ],
+  imports: [UiButton, UiField, UiTypeahead, UiEmpty, PromoModuleTabs],
   template: `
-    <div class="page">
-      <app-page-header title="Dotaciones" subtitle="Producto asignado a un vendedor para regalar"></app-page-header>
-
-      <mat-card class="card">
-        <div class="row">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>ID del vendedor</mat-label>
-            <input
-              matInput
-              type="number"
-              [value]="userId() ?? ''"
-              (input)="userId.set(+$any($event.target).value || null)"
-              (keyup.enter)="loadUser()"
-            />
-          </mat-form-field>
-          <button mat-flat-button color="primary" [disabled]="!userId()" (click)="loadUser()">
-            Ver dotaciones
-          </button>
+    <app-promo-module-tabs />
+    <section class="alloc-page">
+      <div class="alloc-head">
+        <div>
+          <h1>Dotaciones a vendedores</h1>
+          <p class="alloc-sub">Material promocional asignado para repartir. El saldo disponible es el número grande.</p>
         </div>
-        <p class="muted small">
-          Temporal: se ingresa el ID. Falta el endpoint para listar/autocompletar vendedores.
-        </p>
-      </mat-card>
+        <button uiButton variant="primary" (click)="showCreate.set(!showCreate())">Nueva dotación</button>
+      </div>
+      <hr class="alloc-rule" />
 
-      @if (loaded(); as uid) {
-        <mat-card class="card">
-          <h3>Dotaciones del vendedor #{{ uid }}</h3>
-          @if (allocations().length) {
-            <div class="table">
-              <div class="trow head">
-                <span>Producto</span><span>Asignado</span><span>Usado</span><span>Saldo</span
-              ><span>Período</span>
-              </div>
-              @for (a of allocations(); track a.allocationId) {
-                <div class="trow">
-                  <span>{{ a.productName }}</span>
-                  <span class="num">{{ a.allocatedQuantity }}</span>
-                  <span class="num">{{ a.usedQuantity }}</span>
-                  <span class="num" [class.zero]="a.availableQuantity <= 0">{{
-                      a.availableQuantity
-                    }}</span>
-                  <span class="muted"
-                  >{{ a.periodStart | date: 'dd/MM/yy' }} –
-                    {{ a.periodEnd ? (a.periodEnd | date: 'dd/MM/yy') : '∞' }}</span
-                  >
-                </div>
-              }
-            </div>
-          } @else {
-            <p class="muted">Este vendedor no tiene dotaciones.</p>
-          }
-        </mat-card>
-
-        <mat-card class="card" *hasPermission="'promo.allocate'">
+      @if (showCreate()) {
+        <div class="alloc-create">
           <h3>Nueva dotación</h3>
-          <div class="form">
-            <button mat-stroked-button (click)="pickProduct()">
-              <mat-icon>inventory_2</mat-icon>
-              {{ productName() || 'Elegir producto' }}
-            </button>
-            <mat-form-field appearance="outline" subscriptSizing="dynamic"
-            >
-              <mat-label>Cantidad</mat-label>
-              <input
-                matInput
-                type="number"
-                [value]="quantity() || ''"
-                (input)="quantity.set(+$any($event.target).value || 0)"
-              /></mat-form-field>
-            <mat-form-field appearance="outline" subscriptSizing="dynamic"
-            >
-              <mat-label>Desde</mat-label>
-              <input
-                matInput
-                type="date"
-                [value]="periodStart()"
-                (input)="periodStart.set($any($event.target).value)"
-              /></mat-form-field>
-            <mat-form-field appearance="outline" subscriptSizing="dynamic"
-            >
-              <mat-label>Hasta (opcional)</mat-label>
-              <input
-                matInput
-                type="date"
-                [value]="periodEnd()"
-                (input)="periodEnd.set($any($event.target).value)"
-              /></mat-form-field>
-            <mat-form-field appearance="outline" subscriptSizing="dynamic"
-            >
-              <mat-label>Promo ID (opcional)</mat-label>
-              <input
-                matInput
-                type="number"
-                [value]="promoId() ?? ''"
-                (input)="promoId.set(+$any($event.target).value || null)"
-              /></mat-form-field>
+          <div class="alloc-create-grid">
+            <ui-typeahead
+              label="Vendedor — busca por nombre"
+              [clearOnPick]="false"
+              [search]="userSearch"
+              [selected]="createVendor()"
+              (picked)="createVendor.set($event)"
+            />
+            <ui-field label="Promoción" type="select" [(value)]="createPromoId" [options]="promoOptions()" />
+            <ui-typeahead
+              label="Producto — busca por nombre"
+              [clearOnPick]="false"
+              [search]="productSearch"
+              [selected]="createProduct()"
+              (picked)="createProduct.set($event)"
+            />
+            <ui-field label="Cantidad" type="number" [(value)]="createQuantity" />
+            <ui-field label="Desde" type="date" [(value)]="createFrom" />
+            <ui-field label="Hasta (opcional)" type="date" [(value)]="createTo" />
           </div>
-          <button mat-flat-button color="tertiary" [disabled]="!canSave()" (click)="save()">
-            <mat-icon>add</mat-icon>
-            Asignar dotación
-          </button>
-        </mat-card>
+          @if (createError()) {
+            <div class="alloc-error">{{ createError() }}</div>
+          }
+          <div class="alloc-create-actions">
+            <button uiButton variant="secondary" (click)="showCreate.set(false)">Cancelar</button>
+            <button uiButton variant="primary" [loading]="creating()" (click)="submitCreate()">Guardar dotación</button>
+          </div>
+        </div>
       }
-    </div>
+
+      <div class="alloc-lookup">
+        <ui-typeahead
+          label="Ver dotaciones de un vendedor — busca por nombre"
+          [clearOnPick]="false"
+          [search]="userSearch"
+          [selected]="selectedVendor()"
+          (picked)="selectVendor($event)"
+        />
+      </div>
+
+      @if (!selectedVendor()) {
+        <ui-empty
+          title="Elige un vendedor para ver sus dotaciones"
+          body="Busca por nombre arriba para ver el saldo disponible de cada producto asignado."
+        />
+      } @else if (loading()) {
+        <div class="alloc-skeleton" role="status" aria-label="Cargando"></div>
+      } @else if (allocations().length === 0) {
+        <ui-empty title="Sin dotaciones" body="Este vendedor todavía no tiene material promocional asignado." />
+      } @else {
+        <table class="ui-table-grid alloc-table-desktop">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Disponible</th>
+              <th>Asignado</th>
+              <th>Usado</th>
+              <th>Vigencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of allocations(); track a.allocationId) {
+              <tr>
+                <td class="alloc-product">{{ a.productName }}</td>
+                <td>
+                  <span class="alloc-balance" [style.color]="balanceColor(a)">{{ a.availableQuantity ?? 0 }}</span>
+                </td>
+                <td class="alloc-muted">{{ a.allocatedQuantity ?? 0 }}</td>
+                <td class="alloc-muted">{{ a.usedQuantity ?? 0 }}</td>
+                <td class="alloc-muted">{{ dateText(a.periodStart) }} – {{ a.periodEnd ? dateText(a.periodEnd) : 'sin fin' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <div class="alloc-cards-mobile">
+          @for (a of allocations(); track a.allocationId) {
+            <div class="alloc-card-mobile">
+              <div class="alloc-product">{{ a.productName }}</div>
+              <div class="alloc-card-mobile-cols">
+                <div>
+                  <div class="alloc-balance" [style.color]="balanceColor(a)">{{ a.availableQuantity ?? 0 }}</div>
+                  <div class="alloc-muted-sm">Disponible</div>
+                </div>
+                <div>
+                  <div class="alloc-balance-sm">{{ a.allocatedQuantity ?? 0 }}</div>
+                  <div class="alloc-muted-sm">Asignado</div>
+                </div>
+                <div>
+                  <div class="alloc-balance-sm">{{ a.usedQuantity ?? 0 }}</div>
+                  <div class="alloc-muted-sm">Usado</div>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </section>
   `,
   styles: [
     `
-      .card {
-        padding: var(--sp-5);
-        margin-bottom: var(--sp-4);
-        max-width: var(--card-w-md);
+      .alloc-page {
+        width: 100%;
+        box-sizing: border-box;
+        padding: var(--sp-8);
       }
-      h3 {
-        margin: 0 0 12px;
-        font-size: 1rem;
-      }
-      .row {
+      .alloc-head {
         display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      .small {
-        font-size: 0.8rem;
-        margin: 8px 0 0;
-      }
-      .table {
-        display: flex;
-        flex-direction: column;
-      }
-      .trow {
-        display: grid;
-        grid-template-columns: 1fr 90px 90px 90px 160px;
-        gap: 8px;
-        padding: 6px 0;
-        border-bottom: 1px solid var(--mat-sys-outline-variant);
-        align-items: center;
-      }
-      .trow.head {
-        color: var(--mat-sys-on-surface-variant);
-        font-size: 0.8rem;
-        border-bottom: 2px solid var(--mat-sys-outline-variant);
-      }
-      .num {
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
-      .zero {
-        color: var(--mat-sys-error);
-      }
-      .form {
-        display: flex;
-        gap: 12px;
-        align-items: center;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
         flex-wrap: wrap;
-        margin-bottom: 12px;
+      }
+      h1 {
+        font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
+        margin: 0 0 4px;
+        color: var(--ink);
+      }
+      .alloc-sub {
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: 14px;
+      }
+      .alloc-rule {
+        border: 0;
+        border-top: var(--border-hair);
+        margin: 16px 0 20px;
+      }
+      .alloc-create {
+        border: 2px solid var(--divider);
+        padding: 18px;
+        margin-bottom: 24px;
+      }
+      .alloc-create h3 {
+        margin: 0 0 14px;
+      }
+      .alloc-create-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      .alloc-create-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .alloc-error {
+        margin-top: 12px;
+        color: var(--accent-ink);
+        font-size: 13px;
+      }
+      .alloc-lookup {
+        max-width: 460px;
+        margin-bottom: 24px;
+      }
+      .alloc-skeleton {
+        height: 160px;
+        background: var(--faint);
+      }
+      .alloc-product {
+        font-weight: 800;
+      }
+      .alloc-balance {
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 1.1;
+        font-variant-numeric: var(--tnum);
+      }
+      .alloc-muted {
+        color: var(--ink-muted);
+      }
+      .alloc-cards-mobile {
+        display: none;
+      }
+
+      @media (max-width: 767px) {
+        .alloc-create-grid {
+          grid-template-columns: 1fr;
+        }
+        .alloc-table-desktop {
+          display: none;
+        }
+        .alloc-cards-mobile {
+          display: grid;
+          gap: 10px;
+        }
+        .alloc-card-mobile {
+          border: 1px solid var(--hairline);
+          padding: 12px 14px;
+        }
+        .alloc-card-mobile-cols {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 8px;
+          margin-top: 8px;
+        }
+        .alloc-balance-sm {
+          font-size: 20px;
+          font-weight: 800;
+        }
+        .alloc-muted-sm {
+          font-size: 11px;
+          color: var(--ink-muted);
+        }
       }
     `,
   ],
 })
 export class AllocationsAdminPage {
-  private allocSvc = inject(AllocationService);
-  private dialog = inject(MatDialog);
-  private toast = inject(ToastService);
+  private http = inject(HttpClient);
+  private base = `${environment.apiUrl}/promo-allocations`;
+  private lookupSvc = inject(LookupService);
+  private promoSvc = inject(PromoService);
 
-  readonly userId = signal<number | null>(null);
-  readonly loaded = signal<number | null>(null);
-  readonly allocations = signal<AllocationView[]>([]);
+  protected dateText = dateText;
 
-  // Formulario
-  readonly productId = signal<number | null>(null);
-  readonly productName = signal('');
-  readonly quantity = signal(0);
-  readonly periodStart = signal('');
-  readonly periodEnd = signal('');
-  readonly promoId = signal<number | null>(null);
-  readonly saving = signal(false);
+  protected selectedVendor = signal<UiLookupItem | null>(null);
+  protected allocations = signal<AllocationView[]>([]);
+  protected loading = signal(false);
 
-  loadUser() {
-    const id = this.userId();
-    if (!id) return;
-    this.allocSvc.byUser(id).subscribe({
-      next: (a) => {
-        this.allocations.set(a);
-        this.loaded.set(id);
-      },
-      error: () => {
-        this.allocations.set([]);
-        this.loaded.set(id);
-      },
+  protected showCreate = signal(false);
+  protected createVendor = signal<UiLookupItem | null>(null);
+  protected createProduct = signal<UiLookupItem | null>(null);
+  protected createPromoId = signal('');
+  protected createQuantity = signal('');
+  protected createFrom = signal('');
+  protected createTo = signal('');
+  protected creating = signal(false);
+  protected createError = signal('');
+
+  protected promoOptions = signal<UiFieldOption[]>([]);
+
+  protected userSearch = (q: string) => this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
+  protected productSearch = (q: string) => this.lookupSvc.products(q).pipe(map((items) => toUiLookup(items)));
+
+  constructor() {
+    this.promoSvc.list({ size: 100 }).subscribe((page) => {
+      this.promoOptions.set(
+        (page.content ?? []).map((p) => ({ value: String(p.promoId), label: p.name ?? '' })),
+      );
     });
   }
 
-  pickProduct() {
-    this.dialog
-      .open(ProductPickerDialog, { width: '460px' })
-      .afterClosed()
-      .subscribe((p?: Product) => {
-        if (p) {
-          this.productId.set(p.productId);
-          this.productName.set(p.name);
-        }
+  protected selectVendor(item: UiLookupItem) {
+    this.selectedVendor.set(item);
+    this.loading.set(true);
+    this.http.get<AllocationView[]>(`${this.base}/by-user/${item.id}`).subscribe({
+      next: (list) => {
+        this.allocations.set(list);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  protected balanceColor(a: AllocationView): string {
+    const avail = a.availableQuantity ?? 0;
+    if (avail <= 0) return 'var(--st-sin-stock)';
+    if (avail <= 8) return 'var(--st-pendiente)';
+    return 'var(--ink)';
+  }
+
+  protected submitCreate() {
+    const vendor = this.createVendor();
+    const product = this.createProduct();
+    const promoId = Number(this.createPromoId());
+    const qty = Number(this.createQuantity());
+    if (!vendor || !product || !promoId || !qty || !this.createFrom()) {
+      this.createError.set('Completa vendedor, promoción, producto, cantidad y fecha de inicio.');
+      return;
+    }
+    this.creating.set(true);
+    this.createError.set('');
+    this.http
+      .post(this.base, {
+        promoId,
+        userId: vendor.id,
+        productId: product.id,
+        allocatedQuantity: qty,
+        periodStart: this.createFrom(),
+        periodEnd: this.createTo() || undefined,
+      })
+      .subscribe({
+        next: () => {
+          this.creating.set(false);
+          this.showCreate.set(false);
+          this.createVendor.set(null);
+          this.createProduct.set(null);
+          this.createQuantity.set('');
+          if (this.selectedVendor()?.id === vendor.id) this.selectVendor(vendor);
+        },
+        error: () => {
+          this.creating.set(false);
+          this.createError.set('No pudimos guardar la dotación.');
+        },
       });
-  }
-
-  canSave() {
-    return (
-      !!this.loaded() &&
-      !!this.productId() &&
-      this.quantity() > 0 &&
-      !!this.periodStart() &&
-      !this.saving()
-    );
-  }
-
-  save() {
-    if (!this.canSave()) return;
-    this.saving.set(true);
-    const cmd: CreateAllocationCommand = {
-      userId: this.loaded()!,
-      productId: this.productId()!,
-      quantity: this.quantity(),
-      periodStart: this.periodStart(),
-      periodEnd: this.periodEnd() || undefined,
-      promoId: this.promoId() ?? undefined,
-    };
-    this.allocSvc.create(cmd).subscribe({
-      next: () => {
-        this.saving.set(false);
-        this.toast.success('Dotación asignada');
-        this.productId.set(null);
-        this.productName.set('');
-        this.quantity.set(0);
-        this.periodEnd.set('');
-        this.promoId.set(null);
-        this.loadUser();
-      },
-      error: () => this.saving.set(false),
-    });
   }
 }

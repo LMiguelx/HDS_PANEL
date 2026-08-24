@@ -15,10 +15,16 @@
             mat-list-item
             [routerLink]="item.route"
             routerLinkActive="active"
+            [class.coming-soon-item]="item.comingSoon"
             (click)="isHandset() && sidenav.close()"
           >
             <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
             <span matListItemTitle>{{ item.label }}</span>
+            @if (item.comingSoon) {
+              <span matListItemMeta class="coming-soon-tag">Próximamente</span>
+            } @else if (item.route === '/promociones' && pendingCount.count()) {
+              <span matListItemMeta class="pending-badge">{{ pendingCount.count() }}</span>
+            }
           </a>
         }
       }

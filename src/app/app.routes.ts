@@ -2,6 +2,9 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
 import { permissionGuard } from './core/auth/permission-guard';
 
+const comingSoon = () =>
+  import('./shared/ui/coming-soon/coming-soon').then((m) => m.ComingSoonPage);
+
 export const routes: Routes = [
   {
     path: 'login',
@@ -18,86 +21,93 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardPage),
       },
 
-      // Clientes (módulo 2)
+      // Clientes (módulo 2) — sin rediseñar todavía, ver _archive/customers/
       {
         path: 'clientes',
         canActivate: [permissionGuard('customer.view')],
-        loadChildren: () =>
-          import('./features/customers/customers.routes').then((m) => m.CUSTOMER_ROUTES),
+        loadComponent: comingSoon,
+        data: { title: 'Clientes', icon: 'store' },
       },
       {
         path: 'aprobaciones',
         canActivate: [permissionGuard('customer.approve')],
-        loadComponent: () => import('./features/customers/approvals').then((m) => m.ApprovalsPage),
+        loadComponent: comingSoon,
+        data: { title: 'Aprobaciones', icon: 'how_to_reg' },
       },
       {
         path: 'asignaciones',
         canActivate: [permissionGuard('customer.assign')],
-        loadComponent: () =>
-          import('./features/customers/assignments').then((m) => m.AssignmentsPage),
+        loadComponent: comingSoon,
+        data: { title: 'Asignaciones', icon: 'assignment_ind' },
       },
       {
         path: 'segmentos',
         canActivate: [permissionGuard('segments.manage')],
-        loadComponent: () => import('./features/segments/segments').then((m) => m.SegmentsPage),
+        loadComponent: comingSoon,
+        data: { title: 'Segmentos', icon: 'group_work' },
       },
 
-      // Pedidos (módulo 3)
+      // Pedidos (módulo 3) — sin rediseñar todavía, ver _archive/sales/
       {
         path: 'pedidos',
         canActivate: [permissionGuard('order.view_all', 'order.create')],
-        loadChildren: () => import('./features/sales/sales.routes').then((m) => m.SALES_ROUTES),
+        loadComponent: comingSoon,
+        data: { title: 'Pedidos', icon: 'receipt' },
+      },
+      {
+        path: 'pedidos/bonificaciones-pendientes',
+        canActivate: [permissionGuard('order.view_all')],
+        loadComponent: comingSoon,
+        data: { title: 'Bonificaciones pendientes', icon: 'production_quantity_limits' },
       },
 
-      // Promociones (módulo 4)
+      // Promociones (módulo 4) — rediseñado
       {
-        path: 'promos',
-        canActivate: [permissionGuard('promo.create', 'promo.approve')],
+        path: 'promociones',
+        canActivate: [permissionGuard('promo.create', 'promo.approve', 'promo.allocate')],
         loadChildren: () => import('./features/promos/promos.routes').then((m) => m.PROMO_ROUTES),
       },
-      {
-        path: 'dotaciones',
-        canActivate: [permissionGuard('promo.allocate')],
-        loadComponent: () =>
-          import('./features/promos/allocations-admin').then((m) => m.AllocationsAdminPage),
-      },
 
-      // Reparto (módulo 5)
+      // Reparto (módulo 5) — sin rediseñar todavía, ver _archive/delivery/
       {
         path: 'reparto',
         canActivate: [permissionGuard('delivery.deliver', 'delivery.settle')],
-        loadChildren: () =>
-          import('./features/delivery/delivery.routes').then((m) => m.DELIVERY_ROUTES),
+        loadComponent: comingSoon,
+        data: { title: 'Reparto', icon: 'local_shipping' },
       },
       {
         path: 'flota',
         canActivate: [permissionGuard('delivery.settle')],
-        loadComponent: () => import('./features/delivery/fleet-page').then((m) => m.FleetPage),
+        loadComponent: comingSoon,
+        data: { title: 'Flota', icon: 'directions_car' },
       },
 
-      // Facturación (módulo 6)
+      // Facturación (módulo 6) — sin rediseñar todavía, ver _archive/billing/
       {
         path: 'facturas',
         canActivate: [permissionGuard('invoice.reconcile')],
-        loadChildren: () =>
-          import('./features/billing/billing.routes').then((m) => m.BILLING_ROUTES),
+        loadComponent: comingSoon,
+        data: { title: 'Facturas', icon: 'description' },
       },
 
-      // Administración (módulo 7)
+      // Administración (módulo 7) — sin rediseñar todavía, ver _archive/admin/
       {
         path: 'empresa',
         canActivate: [permissionGuard('config.edit')],
-        loadChildren: () => import('./features/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
+        loadComponent: comingSoon,
+        data: { title: 'Empresa', icon: 'business' },
       },
       {
         path: 'precios',
         canActivate: [permissionGuard('price.view')],
-        loadComponent: () => import('./features/admin/prices').then((m) => m.PricesPage),
+        loadComponent: comingSoon,
+        data: { title: 'Precios', icon: 'sell' },
       },
       {
         path: 'inventario',
         canActivate: [permissionGuard('report.view')],
-        loadComponent: () => import('./features/admin/kardex').then((m) => m.KardexPage),
+        loadComponent: comingSoon,
+        data: { title: 'Inventario', icon: 'inventory' },
       },
     ],
   },
