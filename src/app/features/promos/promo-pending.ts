@@ -126,7 +126,9 @@ import { dateText, waitingText } from './promo-format';
       }
       .pending-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+        /* min() evita que las tarjetas fuercen 420px y provoquen scroll
+           horizontal a 360px (regla 4 del traspaso). */
+        grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
         gap: 18px;
         margin-top: 20px;
       }
@@ -177,6 +179,15 @@ import { dateText, waitingText } from './promo-format';
       .pending-option-stock {
         font-size: 12px;
         color: var(--ink-muted);
+      }
+
+      @media (max-width: 767px) {
+        .pending-page {
+          padding: var(--sp-4);
+        }
+        .pending-filter {
+          width: 100%;
+        }
       }
     `,
   ],

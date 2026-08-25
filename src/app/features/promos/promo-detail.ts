@@ -181,6 +181,20 @@ import { vigenciaText } from './promo-format';
         color: var(--ink-muted);
         line-height: 1.5;
       }
+
+      @media (max-width: 767px) {
+        .promo-detail-page {
+          padding: var(--sp-4);
+        }
+        .promo-detail-prose {
+          font-size: 16px;
+        }
+        /* Las celdas de tramo se apilan: el borde derecho pasa a inferior. */
+        .promo-tier-cell {
+          border-right: 0;
+          border-bottom: 1px solid var(--hairline);
+        }
+      }
     `,
   ],
 })

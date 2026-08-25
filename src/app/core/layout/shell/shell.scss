@@ -1,67 +1,196 @@
+// Shell del sistema nuevo (sin Material). Estructura del mockup:
+// cabecera de 60px con regla de 2px + lateral de 232px con regla de 2px.
+
+:host {
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+
 .shell {
-  height: 100vh;
-}
-mat-sidenav {
-  width: 256px;
-  border-right: 1px solid var(--mat-sys-outline-variant);
-  background: var(--mat-sys-surface-container-low);
-}
-.brand {
+  min-height: 100vh;
+  background: var(--bg);
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px;
-  font-weight: 700;
-  font-size: 1.15rem;
-  color: var(--mat-sys-primary);
+  flex-direction: column;
 }
-.group-label {
-  padding: 14px 16px 4px;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--mat-sys-on-surface-variant);
-}
+
+// ---- Cabecera ----
 .topbar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: var(--border-rule);
+  padding: 0 var(--sp-6);
+  min-height: 60px;
   position: sticky;
   top: 0;
-  z-index: 2;
-  gap: 4px;
-  background: var(--mat-sys-surface);
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  z-index: 5;
+  background: var(--bg);
 }
-.title {
-  font-weight: 600;
+.brand-zone {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
 }
-.spacer {
-  flex: 1 1 auto;
+.menu-btn {
+  font-size: 18px;
+  margin-left: calc(var(--sp-3) * -1);
+}
+.brand {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.brand-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--divider);
+}
+.brand-sub {
+  font-size: var(--fs-meta);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
 }
 .user-name {
-  margin-left: 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-a.active {
-  background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
-  color: var(--mat-sys-primary);
+
+// ---- Cuerpo: lateral + contenido ----
+.body {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  flex: 1;
+  min-height: 0;
 }
-.coming-soon-item {
+.sidebar {
+  border-right: var(--border-rule);
+  padding: var(--sp-5) 0;
+  display: flex;
+  flex-direction: column;
+}
+.group-label {
+  padding: 0 var(--sp-5) 10px;
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.group-label:not(:first-child) {
+  padding-top: var(--sp-4);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  // 23px a la izquierda = 20 + los 3 del borde que solo tiene el activo,
+  // para que las etiquetas queden alineadas entre sí.
+  padding: 10px var(--sp-5) 10px 23px;
+  min-height: var(--touch-min);
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.nav-item:hover {
+  background: var(--faint);
+}
+.nav-item:focus-visible {
+  outline: var(--border-focus);
+  outline-offset: -2px;
+}
+.nav-item.active {
+  border-left-color: var(--accent);
+  background: var(--faint);
+  font-weight: 800;
+  padding-left: var(--sp-5);
+}
+// Módulos todavía sin rediseñar: apagados, pero navegables.
+.nav-item.is-coming-soon {
+  color: var(--ink-muted);
   opacity: 0.6;
 }
-.coming-soon-tag {
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-tag {
+  flex: none;
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  border: 1px solid var(--mat-sys-outline-variant);
+  border: 1px solid var(--hairline);
   padding: 1px 5px;
   white-space: nowrap;
 }
-.pending-badge {
-  font-size: 12px;
+.nav-badge {
+  flex: none;
+  font-size: var(--fs-meta);
   font-weight: 800;
-  color: var(--bg, #fff);
-  background: var(--st-pendiente, #b03a00);
+  color: var(--bg);
+  background: var(--st-pendiente);
   padding: 1px 6px;
-  border-radius: 0;
+  font-variant-numeric: var(--tnum);
 }
+
 .content {
-  padding: 16px;
+  min-width: 0;
+}
+
+// ---- Móvil: el lateral se vuelve cajón ----
+@media (max-width: 767px) {
+  .topbar {
+    padding: 0 var(--sp-4);
+    gap: var(--sp-2);
+  }
+  .body {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    top: 60px;
+    bottom: 0;
+    left: 0;
+    width: 260px;
+    max-width: 84vw;
+    background: var(--bg);
+    z-index: 4;
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-standard);
+    overflow-y: auto;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--elev-menu);
+  }
+  .scrim {
+    position: fixed;
+    inset: 60px 0 0 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }

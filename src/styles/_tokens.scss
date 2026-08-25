@@ -44,6 +44,10 @@
   // Ver "Traspaso Claude Code.dc.html" sección 1. No reemplaza nada de arriba.
   // ==========================================================================
 
+  // De esto depende light-dark(). El ThemeService lo fuerza con
+  // html.theme-light / html.theme-dark (ver _material.scss).
+  color-scheme: light dark;
+
   /* — Superficies y tinta — */
   --bg:            light-dark(#f3f2f2, #1a1918);
   --surface:       light-dark(#eae9e9, #242221);

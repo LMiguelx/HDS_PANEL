@@ -35,13 +35,22 @@ import { vigenciaText } from './promo-format';
           <h1>Promociones</h1>
           <p class="promo-page-sub">{{ countText() }}</p>
         </div>
-        <button uiButton variant="primary" *hasPermission="'promo.create'" routerLink="/promociones/nueva">
+        <button
+          uiButton
+          variant="primary"
+          *hasPermission="'promo.create'"
+          routerLink="/promociones/nueva"
+        >
           Nueva promoción
         </button>
       </div>
 
       <div class="promo-filters">
-        <ui-field label="Buscar por nombre" placeholder="Escribe el nombre de la campaña" [(value)]="nameQuery" />
+        <ui-field
+          label="Buscar por nombre"
+          placeholder="Escribe el nombre de la campaña"
+          [(value)]="nameQuery"
+        />
         <ui-field label="Estado" type="select" [(value)]="status" [options]="statusOptions" />
         <ui-field label="Marca" type="select" [(value)]="brandId" [options]="brandOptions()" />
         <ui-field label="Canal" type="select" [(value)]="channelId" [options]="channelOptions()" />
@@ -90,7 +99,9 @@ import { vigenciaText } from './promo-format';
             @for (p of promos(); track p.promoId) {
               <tr>
                 <td>
-                  <a [routerLink]="['/promociones', p.promoId]" class="promo-name-link">{{ p.name }}</a>
+                  <a [routerLink]="['/promociones', p.promoId]" class="promo-name-link">{{
+                    p.name
+                  }}</a>
                 </td>
                 <td>{{ p.promoTypeName || p.promoType }}</td>
                 <td>{{ p.scopeSummary }}</td>
@@ -133,8 +144,8 @@ import { vigenciaText } from './promo-format';
       </ui-table>
 
       <div class="promo-menu-hint">
-        <strong>Menú de fila</strong> — ver y duplicar siempre; editar solo si la promoción está apagada; activar
-        o desactivar según el estado. Nunca más de un botón visible por fila.
+        <strong>Menú de fila</strong> — ver y duplicar siempre; editar solo si la promoción está
+        apagada; activar o desactivar según el estado. Nunca más de un botón visible por fila.
       </div>
     </section>
   `,
@@ -255,7 +266,16 @@ export class PromoListPage implements OnInit, OnDestroy {
   private lookupSvc = inject(LookupService);
   private router = inject(Router);
 
-  protected columns = ['Nombre', 'Tipo', 'Qué debe comprar', 'Qué gana', 'Vigencia', 'Canal', 'Estado', ''];
+  protected columns = [
+    'Nombre',
+    'Tipo',
+    'Qué debe comprar',
+    'Qué gana',
+    'Vigencia',
+    'Canal',
+    'Estado',
+    '',
+  ];
 
   protected nameQuery = signal('');
   protected status = signal('');
@@ -312,11 +332,12 @@ export class PromoListPage implements OnInit, OnDestroy {
   }
 
   protected clearFilters() {
+    // No llama a load(): al cambiar las señales, el effect de filtros ya
+    // dispara la recarga (llamarlo aquí además pediría dos veces lo mismo).
     this.nameQuery.set('');
     this.status.set('');
     this.brandId.set('');
     this.channelId.set('');
-    this.load();
   }
 
   load() {
@@ -333,7 +354,7 @@ export class PromoListPage implements OnInit, OnDestroy {
       .subscribe({
         next: (page) => {
           this.promos.set(page.content ?? []);
-          this.totalElements.set(page.totalElements ?? (page.content?.length ?? 0));
+          this.totalElements.set(page.totalElements ?? page.content?.length ?? 0);
           this.loading.set(false);
         },
         error: () => {

@@ -58,7 +58,6 @@ let nextId = 0;
         height: 30px;
         min-height: 0;
         flex: none;
-        border-radius: 999px;
         border: 1px solid var(--divider);
         background: var(--surface-sunk);
         cursor: pointer;
@@ -85,7 +84,6 @@ let nextId = 0;
         width: 22px;
         height: 22px;
         background: var(--bg);
-        border-radius: 50%;
         transition: transform var(--dur-fast) var(--ease-standard);
       }
       .ui-toggle-track.on .ui-toggle-knob {

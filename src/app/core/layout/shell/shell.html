@@ -1,68 +1,63 @@
-<mat-sidenav-container class="shell">
-  <mat-sidenav [mode]="isHandset() ? 'over' : 'side'" [opened]="!isHandset()" #sidenav>
-    <div class="brand">
-      <mat-icon>local_shipping</mat-icon>
-      <span>hdsapp</span>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand-zone">
+      @if (isHandset()) {
+        <button
+          uiButton
+          variant="ghost"
+          class="menu-btn"
+          type="button"
+          aria-label="Abrir menú"
+          (click)="drawerOpen.set(!drawerOpen())"
+        >
+          ☰
+        </button>
+      }
+      <span class="brand">HDSAPP</span>
+      <span class="brand-sep"></span>
+      <span class="brand-sub">Panel de control</span>
     </div>
 
-    <mat-nav-list>
+    <div class="topbar-actions">
+      @if (!isHandset()) {
+        <span class="user-name">{{ user()?.fullName || user()?.username }}</span>
+      }
+      <button uiButton variant="secondary" sizes="sm" type="button" (click)="theme.toggle()">
+        {{ themeLabel() }}
+      </button>
+      <button uiButton variant="ghost" sizes="sm" type="button" (click)="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <nav class="sidebar" [class.open]="drawerOpen()">
       @for (group of groups(); track group.name) {
-        @if (group.name) {
-          <div class="group-label">{{ group.name }}</div>
-        }
+        <div class="group-label">{{ group.name || 'Módulos' }}</div>
         @for (item of group.items; track item.route) {
           <a
-            mat-list-item
+            class="nav-item"
             [routerLink]="item.route"
             routerLinkActive="active"
-            [class.coming-soon-item]="item.comingSoon"
-            (click)="isHandset() && sidenav.close()"
+            [class.is-coming-soon]="item.comingSoon"
+            (click)="closeDrawer()"
           >
-            <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-            <span matListItemTitle>{{ item.label }}</span>
+            <span class="nav-label">{{ item.label }}</span>
             @if (item.comingSoon) {
-              <span matListItemMeta class="coming-soon-tag">Próximamente</span>
+              <span class="nav-tag">Próximamente</span>
             } @else if (item.route === '/promociones' && pendingCount.count()) {
-              <span matListItemMeta class="pending-badge">{{ pendingCount.count() }}</span>
+              <span class="nav-badge">{{ pendingCount.count() }}</span>
             }
           </a>
         }
       }
-    </mat-nav-list>
-  </mat-sidenav>
+    </nav>
 
-  <mat-sidenav-content>
-    <mat-toolbar class="topbar">
-      @if (isHandset()) {
-        <button mat-icon-button (click)="sidenav.toggle()" aria-label="Menú">
-          <mat-icon>menu</mat-icon>
-        </button>
-      }
-      <span class="title">hdsapp</span>
-      <span class="spacer"></span>
-
-      <button mat-icon-button (click)="theme.toggle()" aria-label="Cambiar tema">
-        <mat-icon>{{ theme.resolved() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
-      </button>
-
-      <button mat-icon-button aria-label="Notificaciones">
-        <mat-icon>notifications</mat-icon>
-      </button>
-
-      <button mat-button [matMenuTriggerFor]="userMenu">
-        <mat-icon>account_circle</mat-icon>
-        <span class="user-name">{{ user()?.fullName || user()?.username }}</span>
-      </button>
-      <mat-menu #userMenu="matMenu">
-        <button mat-menu-item (click)="logout()">
-          <mat-icon>logout</mat-icon>
-          <span>Cerrar sesión</span>
-        </button>
-      </mat-menu>
-    </mat-toolbar>
+    @if (isHandset() && drawerOpen()) {
+      <div class="scrim" (click)="closeDrawer()"></div>
+    }
 
     <main class="content">
       <router-outlet />
     </main>
-  </mat-sidenav-content>
-</mat-sidenav-container>
+  </div>
+</div>

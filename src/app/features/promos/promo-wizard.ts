@@ -70,8 +70,43 @@ function slugCode(name: string): string {
   return `${base || 'PROMO'}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
 }
 
+/**
+ * Un tramo nace siempre con sus dos grupos («elige 1 de N» y «se entrega
+ * siempre»), aunque estén vacíos: así la plantilla los lee sin tener que
+ * crearlos, y los grupos sin premios se descartan al armar el comando.
+ */
 function emptyTier(tierNumber: number): TierDraft {
-  return { key: tierKeySeq++, tier: tierNumber, fromQuantity: 10, benefitGroups: [] };
+  return {
+    key: tierKeySeq++,
+    tier: tierNumber,
+    fromQuantity: 10,
+    benefitGroups: [
+      { benefitGroup: 1, selectionMode: 'CHOOSE', chooseCount: 1, benefits: [] },
+      { benefitGroup: 2, selectionMode: 'ALL', chooseCount: 1, benefits: [] },
+    ],
+  };
+}
+
+/** Garantiza que un tramo traído del backend tenga los dos grupos. */
+function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
+  const result = [...groups];
+  if (!result.some((g) => g.selectionMode === 'CHOOSE')) {
+    result.push({
+      benefitGroup: result.length + 1,
+      selectionMode: 'CHOOSE',
+      chooseCount: 1,
+      benefits: [],
+    });
+  }
+  if (!result.some((g) => g.selectionMode === 'ALL')) {
+    result.push({
+      benefitGroup: result.length + 1,
+      selectionMode: 'ALL',
+      chooseCount: 1,
+      benefits: [],
+    });
+  }
+  return result;
 }
 
 @Component({
@@ -81,7 +116,9 @@ function emptyTier(tierNumber: number): TierDraft {
     <section class="wizard-page">
       <div class="wizard-head">
         <div>
-          <div class="wizard-eyebrow">{{ editingId() ? 'Editar promoción' : 'Nueva promoción' }}</div>
+          <div class="wizard-eyebrow">
+            {{ editingId() ? 'Editar promoción' : 'Nueva promoción' }}
+          </div>
           <h1>{{ name() || 'Sin nombre todavía' }}</h1>
         </div>
         <div class="wizard-head-actions">
@@ -105,7 +142,11 @@ function emptyTier(tierNumber: number): TierDraft {
           @case (0) {
             <div class="wizard-step1-grid">
               <div class="wizard-col">
-                <ui-field label="Nombre de la promoción" [(value)]="name" [error]="fieldError('name')" />
+                <ui-field
+                  label="Nombre de la promoción"
+                  [(value)]="name"
+                  [error]="fieldError('name')"
+                />
                 <ui-field
                   label="Descripción (la ve el vendedor en el celular)"
                   type="textarea"
@@ -118,7 +159,12 @@ function emptyTier(tierNumber: number): TierDraft {
                     [(value)]="salesChannelId"
                     [options]="channelOptions()"
                   />
-                  <ui-field label="Prioridad" type="select" [(value)]="priority" [options]="priorityOptions" />
+                  <ui-field
+                    label="Prioridad"
+                    type="select"
+                    [(value)]="priority"
+                    [options]="priorityOptions"
+                  />
                 </div>
                 <div class="wizard-2col">
                   <ui-field label="Desde" type="date" [(value)]="startDate" />
@@ -130,12 +176,12 @@ function emptyTier(tierNumber: number): TierDraft {
                   <ui-toggle label="Se combina con otras promociones" [(checked)]="stackable" />
                   <hr class="wizard-hr" />
                   <p class="wizard-toggle-text">
-                    <strong>Activado:</strong> si el pedido también califica para otra campaña, el cliente recibe
-                    los premios de las dos.
+                    <strong>Activado:</strong> si el pedido también califica para otra campaña, el
+                    cliente recibe los premios de las dos.
                   </p>
                   <p class="wizard-toggle-text wizard-toggle-text-muted">
-                    <strong>Desactivado:</strong> solo se aplica esta y se descartan las demás. Se usa cuando la
-                    campaña ya regala mucho y no quiere sumarse a un descuento.
+                    <strong>Desactivado:</strong> solo se aplica esta y se descartan las demás. Se
+                    usa cuando la campaña ya regala mucho y no quiere sumarse a un descuento.
                   </p>
                 </div>
               </div>
@@ -144,7 +190,9 @@ function emptyTier(tierNumber: number): TierDraft {
           @case (1) {
             <div>
               <h2>¿Qué debe comprar el cliente?</h2>
-              <p class="wizard-lede">Elige cómo se cuenta la compra. Puedes cambiarlo sin perder lo que agregaste.</p>
+              <p class="wizard-lede">
+                Elige cómo se cuenta la compra. Puedes cambiarlo sin perder lo que agregaste.
+              </p>
 
               <div class="wizard-mode-cards">
                 <button
@@ -156,8 +204,8 @@ function emptyTier(tierNumber: number): TierDraft {
                   <span class="wizard-mode-eyebrow">Opción A</span>
                   <span class="wizard-mode-title">Todo de una marca o familia</span>
                   <span class="wizard-mode-body"
-                    >«50 unidades de la marca Gaseosas Andinas». Cuenta cualquier producto de la marca, incluso los
-                    que entren al catálogo mañana.</span
+                    >«50 unidades de la marca Gaseosas Andinas». Cuenta cualquier producto de la
+                    marca, incluso los que entren al catálogo mañana.</span
                   >
                 </button>
                 <button
@@ -169,7 +217,8 @@ function emptyTier(tierNumber: number): TierDraft {
                   <span class="wizard-mode-eyebrow">Opción B · la más usada</span>
                   <span class="wizard-mode-title">Una lista de productos que se suman</span>
                   <span class="wizard-mode-body"
-                    >«10 unidades entre Inca Kola, Coca Cola y Sprite». El cliente los combina como quiera.</span
+                    >«10 unidades entre Inca Kola, Coca Cola y Sprite». El cliente los combina como
+                    quiera.</span
                   >
                 </button>
               </div>
@@ -195,7 +244,14 @@ function emptyTier(tierNumber: number): TierDraft {
                             </div>
                             <div class="wizard-condition-actions">
                               <span class="wizard-condition-hint">cuenta cualquier cantidad</span>
-                              <button uiButton variant="icon" title="Quitar" (click)="removeCondition(c)">✕</button>
+                              <button
+                                uiButton
+                                variant="icon"
+                                title="Quitar"
+                                (click)="removeCondition(c)"
+                              >
+                                ✕
+                              </button>
                             </div>
                           </div>
                         }
@@ -204,7 +260,8 @@ function emptyTier(tierNumber: number): TierDraft {
                         <span class="wizard-total-eq">=</span>
                         <ui-field label="Total mínimo" type="number" [(value)]="tier1Quantity" />
                         <span class="wizard-total-text"
-                          >unidades <strong>en total</strong>, repartidas como el cliente quiera.</span
+                          >unidades <strong>en total</strong>, repartidas como el cliente
+                          quiera.</span
                         >
                       </div>
                     </div>
@@ -213,8 +270,9 @@ function emptyTier(tierNumber: number): TierDraft {
                     <div class="wizard-side-eyebrow">Cómo se calcula</div>
                     <p class="wizard-side-text">
                       El pedido suma las unidades de {{ conditions().length || 'los' }}
-                      {{ conditions().length === 1 ? 'producto agregado' : 'productos agregados' }}, en cualquier
-                      combinación. Cuando la suma llega a {{ tier1Quantity() || '—' }}, el cliente califica.
+                      {{ conditions().length === 1 ? 'producto agregado' : 'productos agregados' }},
+                      en cualquier combinación. Cuando la suma llega a {{ tier1Quantity() || '—' }},
+                      el cliente califica.
                     </p>
                   </div>
                 </div>
@@ -232,21 +290,27 @@ function emptyTier(tierNumber: number): TierDraft {
                     <div class="wizard-ambito-total">
                       <ui-field label="Cantidad mínima" type="number" [(value)]="tier1Quantity" />
                       <span class="wizard-total-text"
-                        >unidades de <strong>cualquier producto</strong> de {{ ambitoSelected()?.name || 'la marca o familia elegida' }}.</span
+                        >unidades de <strong>cualquier producto</strong> de
+                        {{ ambitoSelected()?.name || 'la marca o familia elegida' }}.</span
                       >
                     </div>
                     @if (ambitoSelected()) {
                       <div class="wizard-ambito-hint">
-                        Los productos que se den de alta más adelante entran solos, sin tocar la campaña.
+                        Los productos que se den de alta más adelante entran solos, sin tocar la
+                        campaña.
                       </div>
                     }
                   </div>
                   <div class="wizard-side-card">
                     <div class="wizard-side-eyebrow">Productos que cuentan hoy</div>
                     @if (ambitoProductCount() === null) {
-                      <p class="wizard-side-text wizard-side-muted">Elige una marca o familia para ver cuántos.</p>
+                      <p class="wizard-side-text wizard-side-muted">
+                        Elige una marca o familia para ver cuántos.
+                      </p>
                     } @else {
-                      <p class="wizard-side-text"><strong>{{ ambitoProductCount() }}</strong> productos hoy.</p>
+                      <p class="wizard-side-text">
+                        <strong>{{ ambitoProductCount() }}</strong> productos hoy.
+                      </p>
                     }
                   </div>
                 </div>
@@ -257,8 +321,9 @@ function emptyTier(tierNumber: number): TierDraft {
             <div>
               <h2>Tramos y premios</h2>
               <p class="wizard-lede">
-                Mientras más compra, mejor premio. <strong>Se otorga solo el tramo más alto que alcance</strong> —
-                los tramos no se suman.
+                Mientras más compra, mejor premio.
+                <strong>Se otorga solo el tramo más alto que alcance</strong> — los tramos no se
+                suman.
               </p>
 
               <div class="wizard-tier-ladder">
@@ -283,10 +348,16 @@ function emptyTier(tierNumber: number): TierDraft {
                 <div class="wizard-tier-editor">
                   <div class="wizard-tier-editor-head">
                     <div class="wizard-tier-editor-from">
-                      <ui-field label="Desde (unidades)" type="number" [(value)]="tierFromQuantityModel" />
+                      <ui-field
+                        label="Desde (unidades)"
+                        type="number"
+                        [(value)]="tierFromQuantityModel"
+                      />
                       <span class="wizard-total-text">unidades compradas · el cliente recibe:</span>
                     </div>
-                    <button uiButton variant="secondary" (click)="duplicateTier()">Duplicar tramo</button>
+                    <button uiButton variant="secondary" (click)="duplicateTier()">
+                      Duplicar tramo
+                    </button>
                   </div>
 
                   <div class="wizard-2col">
@@ -298,10 +369,14 @@ function emptyTier(tierNumber: number): TierDraft {
                       <div class="wizard-group-body">
                         @for (b of chooseGroup(t).benefits; track b.key) {
                           <div class="wizard-benefit-row">
-                            <ng-container *ngTemplateOutlet="benefitEditor; context: { $implicit: b }" />
+                            <ng-container
+                              *ngTemplateOutlet="benefitEditor; context: { $implicit: b }"
+                            />
                           </div>
                         }
-                        <button uiButton variant="ghost" (click)="addBenefit(t, 'CHOOSE')">+ Agregar opción</button>
+                        <button uiButton variant="ghost" (click)="addBenefit(t, 'CHOOSE')">
+                          + Agregar opción
+                        </button>
                       </div>
                     </div>
                     <div class="wizard-group-card">
@@ -312,10 +387,14 @@ function emptyTier(tierNumber: number): TierDraft {
                       <div class="wizard-group-body">
                         @for (b of allGroup(t).benefits; track b.key) {
                           <div class="wizard-benefit-row">
-                            <ng-container *ngTemplateOutlet="benefitEditor; context: { $implicit: b }" />
+                            <ng-container
+                              *ngTemplateOutlet="benefitEditor; context: { $implicit: b }"
+                            />
                           </div>
                         }
-                        <button uiButton variant="ghost" (click)="addBenefit(t, 'ALL')">+ Agregar premio</button>
+                        <button uiButton variant="ghost" (click)="addBenefit(t, 'ALL')">
+                          + Agregar premio
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -335,8 +414,8 @@ function emptyTier(tierNumber: number): TierDraft {
                 <h2>¿A quiénes llega?</h2>
                 @if (audience().length === 0) {
                   <div class="wizard-audience-banner">
-                    <strong>Ahora mismo llega a todos los clientes del canal elegido.</strong> Agrega segmentos o
-                    clientes solo si quieres limitarla.
+                    <strong>Ahora mismo llega a todos los clientes del canal elegido.</strong>
+                    Agrega segmentos o clientes solo si quieres limitarla.
                   </div>
                 }
                 <ui-typeahead
@@ -351,13 +430,17 @@ function emptyTier(tierNumber: number): TierDraft {
                     <div class="wizard-condition-row">
                       <div>
                         <div class="wizard-condition-name">{{ a.name }}</div>
-                        <div class="wizard-condition-meta">{{ a.kind === 'segment' ? 'Segmento' : 'Cliente' }}</div>
+                        <div class="wizard-condition-meta">
+                          {{ a.kind === 'segment' ? 'Segmento' : 'Cliente' }}
+                        </div>
                       </div>
                       <div class="wizard-condition-actions">
                         <button uiButton variant="secondary" (click)="toggleAudienceMode(a)">
                           {{ a.mode === 'INCLUDE' ? 'Incluir' : 'Excluir' }}
                         </button>
-                        <button uiButton variant="icon" title="Quitar" (click)="removeAudience(a)">✕</button>
+                        <button uiButton variant="icon" title="Quitar" (click)="removeAudience(a)">
+                          ✕
+                        </button>
                       </div>
                     </div>
                   }
@@ -370,13 +453,16 @@ function emptyTier(tierNumber: number): TierDraft {
                 } @else if (reach(); as r) {
                   <div class="wizard-metric">{{ r.reachedCustomers ?? 0 }}</div>
                   <div class="wizard-side-text wizard-side-muted">
-                    {{ r.fromSegments ?? 0 }} por segmento · {{ r.fromDirectCustomers ?? 0 }} directos
+                    {{ r.fromSegments ?? 0 }} por segmento ·
+                    {{ r.fromDirectCustomers ?? 0 }} directos
                     @if (r.excluded) {
                       · {{ r.excluded }} excluidos
                     }
                   </div>
                 } @else {
-                  <div class="wizard-side-text wizard-side-muted">Se recalcula al agregar o quitar.</div>
+                  <div class="wizard-side-text wizard-side-muted">
+                    Se recalcula al agregar o quitar.
+                  </div>
                 }
               </div>
             </div>
@@ -388,16 +474,35 @@ function emptyTier(tierNumber: number): TierDraft {
                 <div class="wizard-prose">{{ summaryPhrase() }}</div>
                 <hr class="wizard-hr" />
                 <div class="wizard-summary-facts">
-                  <div><span>Vigencia</span><span>{{ vigenciaSummary() }}</span></div>
-                  <div><span>Canal</span><span>{{ selectedChannelName() || '—' }}</span></div>
-                  <div><span>Se combina</span><span>{{ stackable() ? 'Sí, con otras promociones' : 'No' }}</span></div>
-                  <div><span>Alcance</span><span>{{ audienceSummary() }}</span></div>
+                  <div>
+                    <span>Vigencia</span><span>{{ vigenciaSummary() }}</span>
+                  </div>
+                  <div>
+                    <span>Canal</span><span>{{ selectedChannelName() || '—' }}</span>
+                  </div>
+                  <div>
+                    <span>Se combina</span
+                    ><span>{{ stackable() ? 'Sí, con otras promociones' : 'No' }}</span>
+                  </div>
+                  <div>
+                    <span>Alcance</span><span>{{ audienceSummary() }}</span>
+                  </div>
                 </div>
                 <div class="wizard-summary-actions">
-                  <button uiButton variant="primary" [loading]="activating()" (click)="activatePromo()">
+                  <button
+                    uiButton
+                    variant="primary"
+                    [loading]="activating()"
+                    (click)="activatePromo()"
+                  >
                     Activar promoción
                   </button>
-                  <button uiButton variant="secondary" [loading]="savingDraft()" (click)="saveOff()">
+                  <button
+                    uiButton
+                    variant="secondary"
+                    [loading]="savingDraft()"
+                    (click)="saveOff()"
+                  >
                     Guardar apagada
                   </button>
                 </div>
@@ -411,8 +516,15 @@ function emptyTier(tierNumber: number): TierDraft {
                   El resultado es un estimado: el premio definitivo se calcula al facturar.
                 </p>
                 @if (!draftId()) {
-                  <p class="wizard-side-text">Guarda la promoción (aunque sea apagada) para poder simular.</p>
-                  <button uiButton variant="secondary" [loading]="savingDraft()" (click)="saveOff()">
+                  <p class="wizard-side-text">
+                    Guarda la promoción (aunque sea apagada) para poder simular.
+                  </p>
+                  <button
+                    uiButton
+                    variant="secondary"
+                    [loading]="savingDraft()"
+                    (click)="saveOff()"
+                  >
                     Guardar apagada
                   </button>
                 } @else {
@@ -433,7 +545,13 @@ function emptyTier(tierNumber: number): TierDraft {
                     />
                     <ui-field label="Cantidad" type="number" [(value)]="simQuantity" />
                   </div>
-                  <button uiButton variant="secondary" class="ui-btn-block" [loading]="simulating()" (click)="simulate()">
+                  <button
+                    uiButton
+                    variant="secondary"
+                    class="ui-btn-block"
+                    [loading]="simulating()"
+                    (click)="simulate()"
+                  >
                     Simular
                   </button>
                   <hr class="wizard-hr" />
@@ -447,7 +565,9 @@ function emptyTier(tierNumber: number): TierDraft {
                         <div class="wizard-sim-result">Elección pendiente — {{ p.modeText }}</div>
                       }
                     } @else {
-                      <div class="wizard-sim-result">{{ r.progressText || 'Todavía no califica.' }}</div>
+                      <div class="wizard-sim-result">
+                        {{ r.progressText || 'Todavía no califica.' }}
+                      </div>
                     }
                   }
                 }
@@ -458,7 +578,9 @@ function emptyTier(tierNumber: number): TierDraft {
       </div>
 
       <div class="wizard-footer">
-        <button uiButton variant="secondary" [disabled]="step() === 0" (click)="prevStep()">Atrás</button>
+        <button uiButton variant="secondary" [disabled]="step() === 0" (click)="prevStep()">
+          Atrás
+        </button>
         <div class="wizard-footer-hint">{{ stepHint() }}</div>
         @if (step() < 4) {
           <button uiButton variant="primary" (click)="nextStep()">Continuar</button>
@@ -468,7 +590,12 @@ function emptyTier(tierNumber: number): TierDraft {
 
     <ng-template #benefitEditor let-b>
       <div class="wizard-benefit-editor">
-        <ui-field label="Tipo de premio" type="select" [options]="benefitTypeOptions" [(value)]="b.benefitType" />
+        <ui-field
+          label="Tipo de premio"
+          type="select"
+          [options]="benefitTypeOptions"
+          [(value)]="b.benefitType"
+        />
         @if (b.benefitType === 'FREE_PRODUCT') {
           <div class="wizard-benefit-catalog-toggle">
             <button
@@ -497,9 +624,18 @@ function emptyTier(tierNumber: number): TierDraft {
               (picked)="setBenefitProduct(b, $event)"
             />
           } @else {
-            <ui-field label="Nombre del material" [value]="b.label || ''" (valueChange)="b.label = $event" />
+            <ui-field
+              label="Nombre del material"
+              [value]="b.label || ''"
+              (valueChange)="b.label = $event"
+            />
           }
-          <ui-field label="Cantidad" type="number" [value]="String(b.quantity ?? 1)" (valueChange)="b.quantity = numberOr(1, $event)" />
+          <ui-field
+            label="Cantidad"
+            type="number"
+            [value]="String(b.quantity ?? 1)"
+            (valueChange)="b.quantity = numberOr(1, $event)"
+          />
         } @else if (b.benefitType === 'DISCOUNT_AMOUNT') {
           <ui-field
             label="Monto (S/)"
@@ -639,9 +775,12 @@ function emptyTier(tierNumber: number): TierDraft {
         color: var(--ink-muted);
         line-height: 1.5;
       }
+      /* La barra roja del mockup es el borde izquierdo; los hijos (rótulo,
+         lista y bloque «=») se apilan, no van en fila. */
       .wizard-condition-block {
-        display: flex;
         margin-top: 22px;
+        border-left: 3px solid var(--accent);
+        padding-left: 16px;
       }
       .wizard-condition-eyebrow {
         font-size: 11px;
@@ -945,6 +1084,45 @@ function emptyTier(tierNumber: number): TierDraft {
           grid-template-columns: 1fr;
         }
       }
+
+      @media (max-width: 767px) {
+        .wizard-head,
+        .wizard-body,
+        .wizard-footer {
+          padding-left: var(--sp-4);
+          padding-right: var(--sp-4);
+        }
+        .wizard-2col,
+        .wizard-mode-cards,
+        .wizard-benefit-editor,
+        .wizard-sim-line {
+          grid-template-columns: 1fr;
+        }
+        /* La escalera envuelve en vez de desplazarse de lado (regla 4). */
+        .wizard-tier-ladder {
+          flex-wrap: wrap;
+        }
+        .wizard-tier-step {
+          flex: 1 0 auto;
+          min-width: 108px;
+        }
+        .wizard-ladder-note {
+          flex: 1 0 100%;
+          border-top: 1px solid var(--hairline);
+        }
+        .wizard-total-block,
+        .wizard-ambito-total,
+        .wizard-tier-editor-from {
+          flex-wrap: wrap;
+        }
+        .wizard-summary-facts div {
+          flex-direction: column;
+          gap: 2px;
+        }
+        .wizard-footer-hint {
+          display: none;
+        }
+      }
     `,
   ],
 })
@@ -998,7 +1176,12 @@ export class PromoWizardPage {
 
   // Paso 4
   protected audience = signal<AudienceDraft[]>([]);
-  protected reach = signal<{ reachedCustomers?: number; fromSegments?: number; fromDirectCustomers?: number; excluded?: number } | null>(null);
+  protected reach = signal<{
+    reachedCustomers?: number;
+    fromSegments?: number;
+    fromDirectCustomers?: number;
+    excluded?: number;
+  } | null>(null);
   protected reachLoading = signal(false);
 
   // Paso 5
@@ -1017,15 +1200,22 @@ export class PromoWizardPage {
 
   protected scopeSearch = (q: string) => this.combinedScopeSearch(q);
   protected brandFamilySearch = (q: string) => this.combinedBrandFamilySearch(q);
-  protected scopeProductSearch = (q: string) => this.lookupSvc.products(q).pipe(map((items) => this.toLookup(items)));
-  protected customerSearch = (q: string) => this.lookupSvc.customers(q).pipe(map((items) => this.toLookup(items)));
+  protected scopeProductSearch = (q: string) =>
+    this.lookupSvc.products(q).pipe(map((items) => this.toLookup(items)));
+  protected customerSearch = (q: string) =>
+    this.lookupSvc.customers(q).pipe(map((items) => this.toLookup(items)));
   protected audienceSearch = (q: string) => this.combinedAudienceSearch(q);
 
   protected String = String;
 
   constructor() {
     this.lookupSvc.salesChannels().subscribe((items) => {
-      this.channelOptions.set(items.map((i) => ({ value: String(i.id), label: i.name ?? '' })));
+      // Primera opción explícita: sin ella el navegador pinta el primer canal
+      // aunque el modelo esté vacío, y la promo se guardaría sin canal.
+      this.channelOptions.set([
+        { value: '', label: 'Todos los canales' },
+        ...items.map((i) => ({ value: String(i.id), label: i.name ?? '' })),
+      ]);
     });
 
     effect(() => {
@@ -1076,7 +1266,12 @@ export class PromoWizardPage {
   }
 
   private toLookup(items: LookupItem[]): UiLookupItem[] {
-    return items.map((i) => ({ id: i.id!, code: i.code, name: i.name ?? '', extraInfo: i.extraInfo }));
+    return items.map((i) => ({
+      id: i.id!,
+      code: i.code,
+      name: i.name ?? '',
+      extraInfo: i.extraInfo,
+    }));
   }
 
   private combinedScopeSearch(q: string): Observable<UiLookupItem[]> {
@@ -1117,7 +1312,11 @@ export class PromoWizardPage {
     );
   }
 
-  private tag(i: LookupItem, kind: 'PRODUCT' | 'FAMILY' | 'BRAND' | 'segment' | 'customer', label?: string): UiLookupItem {
+  private tag(
+    i: LookupItem,
+    kind: 'PRODUCT' | 'FAMILY' | 'BRAND' | 'segment' | 'customer',
+    label?: string,
+  ): UiLookupItem {
     return {
       id: i.id!,
       code: i.code,
@@ -1132,10 +1331,9 @@ export class PromoWizardPage {
   }
 
   protected addCondition(item: UiLookupItem) {
-    const scope = (item.extraInfo === 'Marca' ? 'BRAND' : item.extraInfo === 'Familia' ? 'FAMILY' : 'PRODUCT') as
-      | 'PRODUCT'
-      | 'FAMILY'
-      | 'BRAND';
+    const scope = (
+      item.extraInfo === 'Marca' ? 'BRAND' : item.extraInfo === 'Familia' ? 'FAMILY' : 'PRODUCT'
+    ) as 'PRODUCT' | 'FAMILY' | 'BRAND';
     if (this.conditions().some((c) => c.name === item.name && c.scope === scope)) return;
     const draft: ConditionDraft = { scope, name: item.name };
     if (scope === 'PRODUCT') draft.productId = item.id;
@@ -1155,7 +1353,10 @@ export class PromoWizardPage {
   protected addAudience(item: UiLookupItem) {
     const kind = item.extraInfo === 'Cliente' ? 'customer' : 'segment';
     if (this.audience().some((a) => a.id === item.id && a.kind === kind)) return;
-    this.audience.update((list) => [...list, { kind, id: item.id, name: item.name, mode: 'INCLUDE' }]);
+    this.audience.update((list) => [
+      ...list,
+      { kind, id: item.id, name: item.name, mode: 'INCLUDE' },
+    ]);
   }
 
   protected removeAudience(a: AudienceDraft) {
@@ -1182,41 +1383,34 @@ export class PromoWizardPage {
     this.tiers.update((list) => [...list]);
   }
 
+  /** Lectura pura para la plantilla: el grupo siempre existe (ver emptyTier). */
   protected chooseGroup(t: TierDraft): BenefitGroupDraft {
-    let g = t.benefitGroups.find((x) => x.selectionMode === 'CHOOSE');
-    if (!g) {
-      g = { benefitGroup: this.nextGroupNumber(t), selectionMode: 'CHOOSE', chooseCount: 1, benefits: [] };
-      t.benefitGroups.push(g);
-    }
-    return g;
+    return t.benefitGroups.find((x) => x.selectionMode === 'CHOOSE')!;
   }
 
   protected allGroup(t: TierDraft): BenefitGroupDraft {
-    let g = t.benefitGroups.find((x) => x.selectionMode === 'ALL');
-    if (!g) {
-      g = { benefitGroup: this.nextGroupNumber(t), selectionMode: 'ALL', chooseCount: 1, benefits: [] };
-      t.benefitGroups.push(g);
-    }
-    return g;
-  }
-
-  private nextGroupNumber(t: TierDraft): number {
-    return t.benefitGroups.length + 1;
+    return t.benefitGroups.find((x) => x.selectionMode === 'ALL')!;
   }
 
   protected addBenefit(t: TierDraft, mode: 'CHOOSE' | 'ALL') {
     const group = mode === 'CHOOSE' ? this.chooseGroup(t) : this.allGroup(t);
-    group.benefits.push({ key: benefitKeySeq++, benefitType: 'FREE_PRODUCT', catalog: true, quantity: 1 });
+    group.benefits.push({
+      key: benefitKeySeq++,
+      benefitType: 'FREE_PRODUCT',
+      catalog: true,
+      quantity: 1,
+    });
     group.chooseCount = Math.min(group.chooseCount, group.benefits.length || 1);
     this.tiers.update((list) => [...list]);
   }
 
   protected removeBenefit(b: BenefitDraft) {
+    // Los grupos vacíos se conservan (son el andamiaje de las dos columnas);
+    // buildTiersCommand() ya los descarta al enviar.
     for (const t of this.tiers()) {
       for (const g of t.benefitGroups) {
         g.benefits = g.benefits.filter((x) => x !== b);
       }
-      t.benefitGroups = t.benefitGroups.filter((g) => g.benefits.length > 0);
     }
     this.tiers.update((list) => [...list]);
   }
@@ -1260,7 +1454,9 @@ export class PromoWizardPage {
 
   protected tierBenefitSummary(t: TierDraft): string {
     const all = t.benefitGroups.filter((g) => g.selectionMode === 'ALL').flatMap((g) => g.benefits);
-    const choose = t.benefitGroups.filter((g) => g.selectionMode === 'CHOOSE').flatMap((g) => g.benefits);
+    const choose = t.benefitGroups
+      .filter((g) => g.selectionMode === 'CHOOSE')
+      .flatMap((g) => g.benefits);
     const parts: string[] = [];
     if (choose.length) parts.push(`Elige 1 de ${choose.length}`);
     if (all.length) parts.push(this.benefitLabel(all[0]));
@@ -1296,7 +1492,11 @@ export class PromoWizardPage {
     const t1 = this.tiers()[0];
     const scopeText =
       this.mode() === 'surtido'
-        ? `${this.tier1Quantity()} unidades entre ${this.conditions().map((c) => c.name).join(', ') || 'los productos elegidos'}`
+        ? `${this.tier1Quantity()} unidades entre ${
+            this.conditions()
+              .map((c) => c.name)
+              .join(', ') || 'los productos elegidos'
+          }`
         : `${this.tier1Quantity()} unidades de ${this.ambitoSelected()?.name ?? 'la marca o familia elegida'}`;
     const benefitText = t1 ? this.tierPhraseInline(t1) : 'sin premios definidos';
     return `Comprando ${scopeText}, el cliente ${benefitText}.`;
@@ -1306,8 +1506,10 @@ export class PromoWizardPage {
     const choose = t.benefitGroups.find((g) => g.selectionMode === 'CHOOSE');
     const all = t.benefitGroups.find((g) => g.selectionMode === 'ALL');
     const parts: string[] = [];
-    if (choose?.benefits.length) parts.push(`elige entre ${choose.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
-    if (all?.benefits.length) parts.push(`recibe ${all.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
+    if (choose?.benefits.length)
+      parts.push(`elige entre ${choose.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
+    if (all?.benefits.length)
+      parts.push(`recibe ${all.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
     return parts.join(', y ') || 'no recibe premios todavía';
   }
 
@@ -1346,7 +1548,8 @@ export class PromoWizardPage {
 
   private validateStep(n: number): boolean {
     if (n === 0) return !!this.name().trim();
-    if (n === 2) return this.tiers().some((t) => t.benefitGroups.some((g) => g.benefits.length > 0));
+    if (n === 2)
+      return this.tiers().some((t) => t.benefitGroups.some((g) => g.benefits.length > 0));
     return true;
   }
 
@@ -1377,20 +1580,27 @@ export class PromoWizardPage {
         fromQuantity: t.fromQuantity,
         benefitGroups: t.benefitGroups
           .filter((g) => g.benefits.length > 0)
-          .map((g) => ({
-            benefitGroup: g.benefitGroup,
-            selectionMode: g.selectionMode,
-            chooseCount: g.selectionMode === 'CHOOSE' ? g.chooseCount || 1 : undefined,
-            benefits: g.benefits.map((b, i) => ({
-              benefitLine: i + 1,
-              benefitType: b.benefitType,
-              productId: b.benefitType === 'FREE_PRODUCT' && b.catalog ? b.productId : undefined,
-              quantity: b.benefitType === 'FREE_PRODUCT' ? b.quantity : undefined,
-              discountAmount: b.benefitType === 'DISCOUNT_AMOUNT' ? b.discountAmount : undefined,
-              discountPercent: b.benefitType === 'DISCOUNT_PERCENT' ? b.discountPercent : undefined,
-              label: b.benefitType === 'FREE_PRODUCT' && !b.catalog ? b.label : undefined,
-            })),
-          })),
+          .map((g) => {
+            // Un grupo «elige» con una sola opción no es una elección: se
+            // manda como entrega fija (el backend valida choiceMeaningful).
+            const mode =
+              g.selectionMode === 'CHOOSE' && g.benefits.length < 2 ? 'ALL' : g.selectionMode;
+            return {
+              benefitGroup: g.benefitGroup,
+              selectionMode: mode,
+              chooseCount: mode === 'CHOOSE' ? g.chooseCount || 1 : undefined,
+              benefits: g.benefits.map((b, i) => ({
+                benefitLine: i + 1,
+                benefitType: b.benefitType,
+                productId: b.benefitType === 'FREE_PRODUCT' && b.catalog ? b.productId : undefined,
+                quantity: b.benefitType === 'FREE_PRODUCT' ? b.quantity : undefined,
+                discountAmount: b.benefitType === 'DISCOUNT_AMOUNT' ? b.discountAmount : undefined,
+                discountPercent:
+                  b.benefitType === 'DISCOUNT_PERCENT' ? b.discountPercent : undefined,
+                label: b.benefitType === 'FREE_PRODUCT' && !b.catalog ? b.label : undefined,
+              })),
+            };
+          }),
       }));
   }
 
@@ -1455,14 +1665,16 @@ export class PromoWizardPage {
 
   private loadInto(id: number, keepId: boolean) {
     this.promoSvc.detail(id).subscribe((p: PromoDetail) => {
-      this.name.set(keepId ? p.name ?? '' : `${p.name ?? ''} (copia)`);
+      this.name.set(keepId ? (p.name ?? '') : `${p.name ?? ''} (copia)`);
       this.description.set(p.description ?? '');
       this.salesChannelId.set(p.salesChannelId ? String(p.salesChannelId) : '');
       this.priority.set(p.priority ? String(p.priority) : '5');
       this.startDate.set(p.startDate ?? '');
       this.endDate.set(p.endDate ?? '');
       this.stackable.set(!!p.stackable);
-      const brandCond = (p.conditions ?? []).find((c) => c.scope === 'BRAND' || c.scope === 'FAMILY');
+      const brandCond = (p.conditions ?? []).find(
+        (c) => c.scope === 'BRAND' || c.scope === 'FAMILY',
+      );
       if (brandCond) {
         this.mode.set('ambito');
         this.ambitoSelected.set({
@@ -1488,22 +1700,24 @@ export class PromoWizardPage {
           key: tierKeySeq++,
           tier: t.tier ?? 1,
           fromQuantity: t.fromQuantity ?? 10,
-          benefitGroups: (t.benefitGroups ?? []).map((g) => ({
-            benefitGroup: g.benefitGroup ?? 1,
-            selectionMode: (g.selectionMode as 'ALL' | 'CHOOSE') ?? 'ALL',
-            chooseCount: g.chooseCount ?? 1,
-            benefits: (g.benefits ?? []).map((b) => ({
-              key: benefitKeySeq++,
-              benefitType: (b.benefitType as BenefitDraft['benefitType']) ?? 'FREE_PRODUCT',
-              catalog: !!b.productId,
-              productId: b.productId ?? undefined,
-              productName: b.productName ?? undefined,
-              quantity: b.quantity ?? undefined,
-              discountAmount: b.discountAmount ?? undefined,
-              discountPercent: b.discountPercent ?? undefined,
-              label: b.label ?? undefined,
+          benefitGroups: withBothGroups(
+            (t.benefitGroups ?? []).map((g) => ({
+              benefitGroup: g.benefitGroup ?? 1,
+              selectionMode: (g.selectionMode as 'ALL' | 'CHOOSE') ?? 'ALL',
+              chooseCount: g.chooseCount ?? 1,
+              benefits: (g.benefits ?? []).map((b) => ({
+                key: benefitKeySeq++,
+                benefitType: (b.benefitType as BenefitDraft['benefitType']) ?? 'FREE_PRODUCT',
+                catalog: !!b.productId,
+                productId: b.productId ?? undefined,
+                productName: b.productName ?? undefined,
+                quantity: b.quantity ?? undefined,
+                discountAmount: b.discountAmount ?? undefined,
+                discountPercent: b.discountPercent ?? undefined,
+                label: b.label ?? undefined,
+              })),
             })),
-          })),
+          ),
         })),
       );
       if (keepId) {
@@ -1531,7 +1745,9 @@ export class PromoWizardPage {
     this.savingDraft.set(true);
     this.saveError.set('');
     const obs = this.editingId()
-      ? this.promoSvc.update(this.editingId()!, this.buildUpdateCommand()).pipe(map((p) => p.promoId!))
+      ? this.promoSvc
+          .update(this.editingId()!, this.buildUpdateCommand())
+          .pipe(map((p) => p.promoId!))
       : this.promoSvc.create(this.buildCreateCommand()).pipe(map((p) => p.promoId!));
     return obs.pipe(
       map((id) => {

@@ -1,162 +1,152 @@
-﻿import { Component, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { UiButton } from '../../shared/ui/button/button';
+import { UiField } from '../../shared/ui/field/field';
 import { AuthService } from '../../core/auth/auth';
 
 const RUC_KEY = 'hds.ruc';
 
 @Component({
   selector: 'app-login',
-  imports: [
-    ReactiveFormsModule,
-    MatCardModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatButtonModule,
-    MatIconModule,
-    MatProgressBarModule,
-  ],
+  imports: [UiButton, UiField],
   template: `
     <div class="login-wrap">
-      <mat-card class="login-card">
+      <div class="login-card">
         <div class="login-head">
-          <mat-icon>local_shipping</mat-icon>
-          <h1>hdsapp</h1>
-          <p class="muted">Panel administrativo</p>
+          <div class="login-brand">HDSAPP</div>
+          <div class="login-sub">Panel de control</div>
         </div>
 
-        <form [formGroup]="form" (ngSubmit)="submit()">
-          <mat-form-field class="full" appearance="outline">
-            <mat-label>RUC de la empresa</mat-label>
-            <input
-              matInput
-              formControlName="ruc"
-              inputmode="numeric"
-              maxlength="11"
-              autocomplete="organization"
-            />
-            @if (form.controls.ruc.touched && form.controls.ruc.hasError('pattern')) {
-              <mat-error>El RUC debe tener 11 dígitos</mat-error>
-            }
-          </mat-form-field>
+        <form (submit)="submit($event)">
+          <ui-field
+            label="RUC de la empresa"
+            placeholder="11 dígitos"
+            [(value)]="ruc"
+            [error]="rucError()"
+          />
+          <ui-field label="Usuario" [(value)]="username" [error]="userError()" />
 
-          <mat-form-field class="full" appearance="outline">
-            <mat-label>Usuario</mat-label>
-            <input matInput formControlName="username" autocomplete="username" />
-          </mat-form-field>
-
-          <mat-form-field class="full" appearance="outline">
-            <mat-label>Contraseña</mat-label>
-            <input
-              matInput
+          <div class="login-pass">
+            <ui-field
+              label="Contraseña"
               [type]="hidePass() ? 'password' : 'text'"
-              formControlName="password"
-              autocomplete="current-password"
+              [(value)]="password"
+              [error]="passError()"
             />
-            <button
-              mat-icon-button
-              matSuffix
-              type="button"
-              (click)="hidePass.set(!hidePass())"
-              aria-label="Mostrar contraseña"
-            >
-              <mat-icon>{{ hidePass() ? 'visibility' : 'visibility_off' }}</mat-icon>
+            <button uiButton variant="ghost" size="sm" type="button" (click)="hidePass.set(!hidePass())">
+              {{ hidePass() ? 'Mostrar contraseña' : 'Ocultar contraseña' }}
             </button>
-          </mat-form-field>
+          </div>
 
           @if (error()) {
-            <p class="error">{{ error() }}</p>
-          }
-          @if (loading()) {
-            <mat-progress-bar mode="indeterminate" />
+            <p class="login-error">{{ error() }}</p>
           }
 
-          <button mat-flat-button color="primary" type="submit" [disabled]="loading()">
+          <button uiButton variant="primary" type="submit" class="login-submit" [loading]="loading()">
             Iniciar sesión
           </button>
         </form>
-      </mat-card>
+      </div>
     </div>
   `,
   styles: [
     `
+      :host {
+        font-family: var(--font-sans);
+      }
       .login-wrap {
         min-height: 100vh;
         display: grid;
         place-items: center;
-        padding: 16px;
-        background: var(--mat-sys-surface-container-low);
+        padding: var(--sp-4);
+        background: var(--bg);
+        color: var(--ink);
       }
       .login-card {
         width: 100%;
         max-width: 380px;
-        padding: 8px 16px 16px;
+        border: 2px solid var(--divider);
+        background: var(--bg);
+        padding: 28px 24px 24px;
       }
       .login-head {
-        text-align: center;
-        padding: 12px 0 4px;
+        border-bottom: var(--border-rule);
+        padding-bottom: 14px;
+        margin-bottom: 22px;
       }
-      .login-head mat-icon {
-        font-size: 40px;
-        width: 40px;
-        height: 40px;
-        color: var(--mat-sys-primary);
+      .login-brand {
+        font-weight: 800;
+        font-size: 20px;
+        letter-spacing: -0.01em;
       }
-      .login-head h1 {
-        margin: 8px 0 0;
-        font-size: 1.4rem;
-      }
-      .full {
-        width: 100%;
+      .login-sub {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin-top: 2px;
       }
       form {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
+        display: grid;
+        gap: 16px;
       }
-      .error {
-        color: var(--mat-sys-error);
-        font-size: 0.85rem;
-        margin: 2px 0;
+      .login-pass {
+        display: grid;
+        gap: 4px;
+        justify-items: start;
+      }
+      .login-error {
+        margin: 0;
+        padding: 10px 12px;
+        background: var(--accent-wash);
+        color: var(--accent-ink);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .login-submit {
+        width: 100%;
+        margin-top: 4px;
       }
     `,
   ],
 })
 export class LoginPage {
-  private fb = inject(FormBuilder);
   private auth = inject(AuthService);
   private router = inject(Router);
+
+  readonly ruc = signal(localStorage.getItem(RUC_KEY) ?? '');
+  readonly username = signal('');
+  readonly password = signal('');
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly hidePass = signal(true);
+  /** Los errores por campo solo aparecen después del primer intento. */
+  private submitted = signal(false);
 
-  readonly form = this.fb.nonNullable.group({
-    ruc: [
-      localStorage.getItem(RUC_KEY) ?? '',
-      [Validators.required, Validators.pattern(/^\d{11}$/)],
-    ],
-    username: ['', Validators.required],
-    password: ['', Validators.required],
+  readonly rucError = computed(() => {
+    if (!this.submitted()) return '';
+    if (!this.ruc().trim()) return 'Escribe el RUC de la empresa.';
+    return /^\d{11}$/.test(this.ruc().trim()) ? '' : 'El RUC debe tener 11 dígitos.';
   });
+  readonly userError = computed(() =>
+    this.submitted() && !this.username().trim() ? 'Escribe tu usuario.' : '',
+  );
+  readonly passError = computed(() =>
+    this.submitted() && !this.password() ? 'Escribe tu contraseña.' : '',
+  );
 
-  submit() {
-    if (this.form.invalid || this.loading()) {
-      this.form.markAllAsTouched();
-      return;
-    }
+  submit(ev: Event) {
+    ev.preventDefault();
+    this.submitted.set(true);
+    if (this.loading() || this.rucError() || this.userError() || this.passError()) return;
+
     this.loading.set(true);
     this.error.set(null);
-    const { ruc, username, password } = this.form.getRawValue();
-    localStorage.setItem(RUC_KEY, ruc); // recuerda el RUC (es fijo por empresa)
+    const ruc = this.ruc().trim();
+    localStorage.setItem(RUC_KEY, ruc); // el RUC es fijo por empresa: se recuerda
 
-    this.auth.login(ruc, username, password).subscribe({
+    this.auth.login(ruc, this.username().trim(), this.password()).subscribe({
       next: (res) => {
         this.auth.handleTokens(res);
         void this.router.navigateByUrl('/dashboard');

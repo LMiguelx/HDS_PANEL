@@ -79,9 +79,8 @@ export interface UiWizardStep {
         color: var(--accent-ink);
       }
       .ui-wizard-num {
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
+        width: 24px;
+        height: 24px;
         border: 1px solid currentColor;
         display: flex;
         align-items: center;

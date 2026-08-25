@@ -1,73 +1,116 @@
-﻿import { Component, inject } from '@angular/core';
-import { MatCardModule } from '@angular/material/card';
-import { MatIconModule } from '@angular/material/icon';
+import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth';
+import { NAV, NavItem } from '../../core/layout/nav.config';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [MatCardModule, MatIconModule],
+  imports: [RouterLink, HasPermissionDirective],
   template: `
-    <div class="page">
+    <section class="home-page">
       <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
-      <p class="muted">Panel administrativo de hdsapp. Aquí irán tus indicadores según permisos.</p>
+      <p class="home-sub">
+        Panel de control. Por ahora solo Promociones está rediseñado; el resto de módulos llega
+        después.
+      </p>
 
-      <div class="grid">
-        <mat-card class="tile"
-          ><mat-icon>groups</mat-icon>
-          <div>
-            <strong>Clientes</strong>
-            <p class="muted">Próximamente</p>
-          </div></mat-card
-        >
-        <mat-card class="tile"
-          ><mat-icon>receipt_long</mat-icon>
-          <div>
-            <strong>Pedidos</strong>
-            <p class="muted">Próximamente</p>
-          </div></mat-card
-        >
-        <mat-card class="tile"
-          ><mat-icon>local_shipping</mat-icon>
-          <div>
-            <strong>Reparto</strong>
-            <p class="muted">Próximamente</p>
-          </div></mat-card
-        >
-        <mat-card class="tile"
-          ><mat-icon>fact_check</mat-icon>
-          <div>
-            <strong>Conciliación</strong>
-            <p class="muted">Próximamente</p>
-          </div></mat-card
-        >
+      <div class="home-section-label">Disponible</div>
+      <div class="home-grid">
+        <a class="home-tile is-ready" routerLink="/promociones" *hasPermission="promoPermissions">
+          <span class="home-tile-name">Promociones</span>
+          <span class="home-tile-note"
+            >Campañas, premios pendientes y dotaciones a vendedores.</span
+          >
+        </a>
       </div>
-    </div>
+
+      <div class="home-section-label">Próximamente</div>
+      <div class="home-grid">
+        @for (item of pendingModules(); track item.route) {
+          <a class="home-tile" [routerLink]="item.route">
+            <span class="home-tile-name">{{ item.label }}</span>
+            <span class="home-tile-note">Se rediseñará próximamente.</span>
+          </a>
+        }
+      </div>
+    </section>
   `,
   styles: [
     `
+      :host {
+        font-family: var(--font-sans);
+        color: var(--ink);
+      }
+      .home-page {
+        width: 100%;
+        box-sizing: border-box;
+        padding: var(--sp-8);
+      }
       h1 {
+        font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
         margin: 0 0 4px;
       }
-      .grid {
-        margin-top: 20px;
+      .home-sub {
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: 14px;
+        max-width: 620px;
+      }
+      .home-section-label {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        border-bottom: var(--border-rule);
+        padding-bottom: 8px;
+        margin: 28px 0 14px;
+      }
+      .home-grid {
         display: grid;
-        gap: 16px;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+        gap: 12px;
       }
-      .tile {
+      .home-tile {
         display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 18px;
+        flex-direction: column;
+        gap: 4px;
+        border: 1px solid var(--hairline);
+        padding: 16px 18px;
+        min-height: var(--touch-min);
+        text-decoration: none;
+        color: var(--ink-muted);
+        opacity: 0.6;
+        transition: border-color var(--dur-fast) var(--ease-standard);
       }
-      .tile mat-icon {
-        font-size: 34px;
-        width: 34px;
-        height: 34px;
-        color: var(--mat-sys-primary);
+      .home-tile:hover {
+        border-color: var(--ink-muted);
       }
-      .tile p {
-        margin: 2px 0 0;
+      .home-tile:focus-visible {
+        outline: var(--border-focus);
+        outline-offset: 2px;
+      }
+      .home-tile.is-ready {
+        border: 2px solid var(--divider);
+        color: var(--ink);
+        opacity: 1;
+      }
+      .home-tile.is-ready:hover {
+        border-color: var(--accent);
+      }
+      .home-tile-name {
+        font-weight: 800;
+        font-size: 16px;
+      }
+      .home-tile-note {
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      @media (max-width: 767px) {
+        .home-page {
+          padding: var(--sp-4);
+        }
       }
     `,
   ],
@@ -75,4 +118,11 @@ import { AuthService } from '../../core/auth/auth';
 export class DashboardPage {
   private auth = inject(AuthService);
   readonly user = this.auth.currentUser;
+
+  readonly promoPermissions = ['promo.create', 'promo.approve', 'promo.allocate'];
+
+  /** Los módulos apagados que este usuario sí puede ver en el menú. */
+  pendingModules(): NavItem[] {
+    return NAV.filter((i) => i.comingSoon && this.auth.hasAny(...i.anyOf));
+  }
 }

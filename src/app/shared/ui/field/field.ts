@@ -1,6 +1,6 @@
 import { Component, model, input } from '@angular/core';
 
-export type UiFieldType = 'text' | 'number' | 'date' | 'textarea' | 'select';
+export type UiFieldType = 'text' | 'number' | 'date' | 'password' | 'textarea' | 'select';
 
 export interface UiFieldOption {
   value: string;
@@ -44,8 +44,11 @@ let nextId = 0;
             [value]="value()"
             (change)="onInput($event)"
           >
+            <!-- [selected] mantiene lo mostrado en sintonía con el modelo:
+                 sin esto el navegador pinta la primera opción aunque el
+                 valor esté vacío, y el formulario parece lleno sin estarlo. -->
             @for (opt of options(); track opt.value) {
-              <option [value]="opt.value">{{ opt.label }}</option>
+              <option [value]="opt.value" [selected]="opt.value === value()">{{ opt.label }}</option>
             }
           </select>
         }

@@ -1,32 +1,17 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { map } from 'rxjs';
-import { MatToolbarModule } from '@angular/material/toolbar';
-import { MatSidenavModule } from '@angular/material/sidenav';
-import { MatListModule } from '@angular/material/list';
-import { MatIconModule } from '@angular/material/icon';
-import { MatButtonModule } from '@angular/material/button';
-import { MatMenuModule } from '@angular/material/menu';
+import { UiButton } from '../../../shared/ui/button/button';
 import { AuthService } from '../../auth/auth';
 import { ThemeService } from '../../theme/theme.service';
-import { NAV, NavItem } from '../nav.config';
+import { NAV, NavItem, PROMO_ANY_PERMISSION } from '../nav.config';
 import { PendingCountStore } from '../../../features/promos/pending-count';
 
 @Component({
   selector: 'app-shell',
-  imports: [
-    RouterOutlet,
-    RouterLink,
-    RouterLinkActive,
-    MatToolbarModule,
-    MatSidenavModule,
-    MatListModule,
-    MatIconModule,
-    MatButtonModule,
-    MatMenuModule,
-  ],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, UiButton],
   templateUrl: './shell.html',
   styleUrls: ['./shell.scss'],
 })
@@ -37,17 +22,24 @@ export class ShellComponent {
   readonly pendingCount = inject(PendingCountStore);
 
   readonly user = this.auth.currentUser;
-
-  constructor() {
-    if (this.auth.hasAny('promo.create', 'promo.approve', 'promo.allocate')) {
-      this.pendingCount.refresh();
-    }
-  }
+  readonly drawerOpen = signal(false);
 
   readonly isHandset = toSignal(
     this.breakpoints.observe([Breakpoints.Handset]).pipe(map((r) => r.matches)),
     { initialValue: false },
   );
+
+  readonly themeLabel = computed(() => (this.theme.resolved() === 'dark' ? 'Claro' : 'Oscuro'));
+
+  constructor() {
+    if (this.auth.hasAny(...PROMO_ANY_PERMISSION)) {
+      this.pendingCount.refresh();
+    }
+    // Al pasar a escritorio el cajón deja de tener sentido.
+    effect(() => {
+      if (!this.isHandset()) this.drawerOpen.set(false);
+    });
+  }
 
   /** Ítems visibles según permisos, agrupados por 'group'. */
   readonly groups = computed(() => {
@@ -59,6 +51,10 @@ export class ShellComponent {
     }
     return Array.from(byGroup, ([name, items]) => ({ name, items }));
   });
+
+  closeDrawer() {
+    if (this.isHandset()) this.drawerOpen.set(false);
+  }
 
   logout() {
     this.auth.logout();

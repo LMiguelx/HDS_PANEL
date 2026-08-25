@@ -32,8 +32,16 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
         display: flex;
         gap: 0;
         border-bottom: var(--border-rule);
-        overflow: hidden;
         padding: 0 var(--sp-8);
+      }
+      @media (max-width: 767px) {
+        .promo-tabs {
+          padding: 0 var(--sp-4);
+        }
+        .promo-tabs a {
+          padding: 16px 12px;
+          font-size: 13px;
+        }
       }
       .promo-tabs a {
         font-family: var(--font-sans);

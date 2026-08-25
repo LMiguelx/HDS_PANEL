@@ -50,7 +50,13 @@ interface AllocationView {
               [selected]="createVendor()"
               (picked)="createVendor.set($event)"
             />
-            <ui-field label="Promoción" type="select" [(value)]="createPromoId" [options]="promoOptions()" />
+            <ui-field
+              label="Promoción (opcional)"
+              type="select"
+              [(value)]="createPromoId"
+              [options]="promoOptions()"
+              hint="Sin campaña queda como stock general del vendedor."
+            />
             <ui-typeahead
               label="Producto — busca por nombre"
               [clearOnPick]="false"
@@ -280,9 +286,10 @@ export class AllocationsAdminPage {
 
   constructor() {
     this.promoSvc.list({ size: 100 }).subscribe((page) => {
-      this.promoOptions.set(
-        (page.content ?? []).map((p) => ({ value: String(p.promoId), label: p.name ?? '' })),
-      );
+      this.promoOptions.set([
+        { value: '', label: 'Sin promoción' },
+        ...(page.content ?? []).map((p) => ({ value: String(p.promoId), label: p.name ?? '' })),
+      ]);
     });
   }
 
@@ -308,10 +315,12 @@ export class AllocationsAdminPage {
   protected submitCreate() {
     const vendor = this.createVendor();
     const product = this.createProduct();
-    const promoId = Number(this.createPromoId());
+    // La promoción es opcional en el contrato: sin ella la dotación queda
+    // como stock general del vendedor.
+    const promoId = this.createPromoId() ? Number(this.createPromoId()) : undefined;
     const qty = Number(this.createQuantity());
-    if (!vendor || !product || !promoId || !qty || !this.createFrom()) {
-      this.createError.set('Completa vendedor, promoción, producto, cantidad y fecha de inicio.');
+    if (!vendor || !product || !qty || !this.createFrom()) {
+      this.createError.set('Completa vendedor, producto, cantidad y fecha de inicio.');
       return;
     }
     this.creating.set(true);
@@ -334,9 +343,18 @@ export class AllocationsAdminPage {
           this.createQuantity.set('');
           if (this.selectedVendor()?.id === vendor.id) this.selectVendor(vendor);
         },
-        error: () => {
+        error: (err) => {
           this.creating.set(false);
-          this.createError.set('No pudimos guardar la dotación.');
+          // Se muestra el motivo que da el servidor: ayuda cuando el rechazo
+          // es por reglas de negocio (producto no promocional, vigencia, etc.).
+          const detalle = err?.error?.detail ?? err?.error?.message;
+          this.createError.set(
+            detalle
+              ? `No pudimos guardar la dotación: ${detalle}`
+              : err?.status === 404
+                ? 'No pudimos guardar la dotación: el servidor no reconoce esta operación.'
+                : 'No pudimos guardar la dotación. Revisa los datos e intenta de nuevo.',
+          );
         },
       });
   }

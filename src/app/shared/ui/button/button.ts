@@ -114,7 +114,6 @@ export type UiButtonSize = 'sm' | 'md';
         height: 14px;
         border: 2px solid currentColor;
         border-right-color: transparent;
-        border-radius: 50%;
         animation: ui-btn-spin 0.7s linear infinite;
         flex: none;
       }
