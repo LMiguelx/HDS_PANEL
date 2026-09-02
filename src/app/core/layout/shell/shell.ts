@@ -8,6 +8,7 @@ import { AuthService } from '../../auth/auth';
 import { ThemeService } from '../../theme/theme.service';
 import { NAV, NavItem, PROMO_ANY_PERMISSION } from '../nav.config';
 import { PendingCountStore } from '../../../features/promos/pending-count';
+import { AssignmentAlertStore } from '../../../features/assignments/assignment-alerts';
 
 @Component({
   selector: 'app-shell',
@@ -20,6 +21,7 @@ export class ShellComponent {
   private breakpoints = inject(BreakpointObserver);
   readonly theme = inject(ThemeService);
   readonly pendingCount = inject(PendingCountStore);
+  readonly assignmentAlerts = inject(AssignmentAlertStore);
 
   readonly user = this.auth.currentUser;
   readonly drawerOpen = signal(false);
@@ -34,6 +36,9 @@ export class ShellComponent {
   constructor() {
     if (this.auth.hasAny(...PROMO_ANY_PERMISSION)) {
       this.pendingCount.refresh();
+    }
+    if (this.auth.hasAny('customer.assign')) {
+      this.assignmentAlerts.refresh();
     }
     // Al pasar a escritorio el cajón deja de tener sentido.
     effect(() => {

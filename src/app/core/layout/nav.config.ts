@@ -40,7 +40,6 @@ export const NAV: NavItem[] = [
     route: '/asignaciones',
     anyOf: ['customer.assign'],
     group: 'Clientes',
-    comingSoon: true,
   },
   {
     label: 'Segmentos',

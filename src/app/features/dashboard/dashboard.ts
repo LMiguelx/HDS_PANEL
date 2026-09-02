@@ -23,6 +23,10 @@ import { HasPermissionDirective } from '../../shared/directives/has-permission';
             >Campañas, premios pendientes y dotaciones a vendedores.</span
           >
         </a>
+        <a class="home-tile is-ready" routerLink="/asignaciones" *hasPermission="'customer.assign'">
+          <span class="home-tile-name">Asignaciones</span>
+          <span class="home-tile-note">Cartera por vendedor, ausencias del día y cobertura.</span>
+        </a>
       </div>
 
       <div class="home-section-label">Próximamente</div>

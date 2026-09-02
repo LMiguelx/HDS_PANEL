@@ -46,6 +46,8 @@
               <span class="nav-tag">Próximamente</span>
             } @else if (item.route === '/promociones' && pendingCount.count()) {
               <span class="nav-badge">{{ pendingCount.count() }}</span>
+            } @else if (item.route === '/asignaciones' && assignmentAlerts.count()) {
+              <span class="nav-badge">{{ assignmentAlerts.count() }}</span>
             }
           </a>
         }
