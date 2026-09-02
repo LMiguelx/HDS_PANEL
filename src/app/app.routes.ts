@@ -34,11 +34,12 @@ export const routes: Routes = [
         loadComponent: comingSoon,
         data: { title: 'Aprobaciones', icon: 'how_to_reg' },
       },
+      // Asignaciones (módulo 2) — rediseñado
       {
         path: 'asignaciones',
         canActivate: [permissionGuard('customer.assign')],
-        loadComponent: comingSoon,
-        data: { title: 'Asignaciones', icon: 'assignment_ind' },
+        loadChildren: () =>
+          import('./features/assignments/assignments.routes').then((m) => m.ASSIGNMENT_ROUTES),
       },
       {
         path: 'segmentos',
