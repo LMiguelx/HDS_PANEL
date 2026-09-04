@@ -201,7 +201,7 @@ export class CoverageDialog {
   constructor() {
     if (!this.data.customers) {
       this.assignmentSvc.map({ userIds: [this.data.absentUserId] }).subscribe({
-        next: (rows) => {
+        next: ({ customers: rows }) => {
           this.customers.set(rows);
           this.selected.set(new Set(this.defaultSelection(rows)));
           this.loadingCustomers.set(false);

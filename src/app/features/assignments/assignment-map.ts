@@ -23,12 +23,13 @@ import { LookupService, toUiLookup } from '../promos/lookup';
 import { AssignmentModuleTabs } from './ui/module-tabs';
 import { CoverageDialog } from './ui/coverage-dialog';
 import { AssignmentAdminService } from './assignment-admin';
-import { MapCustomerView } from '../../shared/models/assignment-admin.models';
-import { isVisited, visitStatusLabel } from './assignment-format';
+import { MapCustomerView, VendorOnRouteView } from '../../shared/models/assignment-admin.models';
+import { visitStatusColorVar, visitStatusLabel } from './assignment-format';
 
-// Paleta categórica fija para colorear vendedores en el mapa (no depende del
-// tema claro/oscuro: son colores de datos, no de superficie). Se recicla por
-// módulo si hay más vendedores que colores.
+// Paleta categórica fija para identificar vendedores (borde de sus clientes y
+// punto de inicio de ruta) — no depende del tema claro/oscuro: son colores de
+// datos, no de superficie. Se recicla por módulo si hay más vendedores que
+// colores.
 const PALETTE = [
   '#ec3013',
   '#1d4ed8',
@@ -58,10 +59,37 @@ function escapeHtml(text: string): string {
   );
 }
 
+/** Leaflet pinta sus paths como atributos SVG, no CSS: `var()` no se resuelve ahí.
+ * Se lee el valor calculado del token en el tema actual (claro/oscuro). */
+function resolveCssVar(varName: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  return value || '#888888';
+}
+
+/** Pin de "inicio de ruta" (distinto de los círculos de seguimiento) — SVG inline, sin assets. */
+function vendorStartIcon(color: string): L.DivIcon {
+  return L.divIcon({
+    className: 'map-vendor-start-icon',
+    html: `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13 0C5.8 0 0 5.8 0 13c0 9 13 21 13 21s13-12 13-21C26 5.8 20.2 0 13 0z" fill="${color}" stroke="#1a1918" stroke-width="1.5"/>
+      <circle cx="13" cy="13" r="5" fill="#fff"/>
+    </svg>`,
+    iconSize: [26, 34],
+    iconAnchor: [13, 34],
+    popupAnchor: [0, -30],
+  });
+}
+
 /**
  * Mapa de cartera (GET /api/admin/assignments/map). El endpoint nunca se
  * llama sin filtro: hace falta elegir vendedores y/o huérfanos antes de
  * pintar nada. Sin bounding box ni clustering (fuera de alcance a propósito).
+ *
+ * Colores: el borde de cada punto identifica al vendedor (o huérfano, borde
+ * punteado); el relleno identifica el estado de la visita de hoy
+ * (gris = sin visita, o el color ya usado en el resto del sistema para
+ * Atendido/Cerrado/No compró). El punto de inicio de ruta de cada vendedor
+ * se pinta como un pin, distinto de los círculos de seguimiento.
  */
 @Component({
   selector: 'app-assignment-map',
@@ -137,6 +165,22 @@ function escapeHtml(text: string): string {
               Cubrir cartera de {{ vendorNameFor(soloVendorId()!) }}
             </button>
           }
+        </div>
+
+        <div class="map-status-legend">
+          <span class="map-legend-item"
+            ><span class="map-legend-dot map-legend-none"></span>Sin visita hoy</span
+          >
+          <span class="map-legend-item"
+            ><span class="map-legend-dot map-legend-attended"></span>Atendido</span
+          >
+          <span class="map-legend-item"
+            ><span class="map-legend-dot map-legend-closed"></span>Cerrado</span
+          >
+          <span class="map-legend-item"
+            ><span class="map-legend-dot map-legend-no-purchase"></span>No compró</span
+          >
+          <span class="map-legend-item map-legend-note">El borde identifica al vendedor</span>
         </div>
 
         @if (loadedUserIds().length > 1) {
@@ -266,6 +310,41 @@ function escapeHtml(text: string): string {
       .map-cover-btn {
         margin-left: auto;
       }
+      .map-status-legend {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 14px;
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .map-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .map-legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+      .map-legend-none {
+        background: var(--ink-muted);
+        opacity: 0.5;
+      }
+      .map-legend-attended {
+        background: var(--st-attended);
+      }
+      .map-legend-closed {
+        background: var(--st-closed);
+      }
+      .map-legend-no-purchase {
+        background: var(--st-no-purchase);
+      }
+      .map-legend-note {
+        font-style: italic;
+      }
       .map-route-hint {
         margin: 10px 0 0;
         font-size: 12px;
@@ -331,6 +410,7 @@ export class AssignmentMapPage {
   protected loading = signal(false);
   protected error = signal(false);
   protected customers = signal<MapCustomerView[]>([]);
+  protected vendorStarts = signal<VendorOnRouteView[]>([]);
   protected loadedUserIds = signal<number[]>([]);
   protected loadedOrphansOnly = signal(false);
   protected activeFilterKeys = signal<Set<string>>(new Set());
@@ -366,6 +446,11 @@ export class AssignmentMapPage {
     );
   });
 
+  protected visibleVendorStarts = computed(() => {
+    const active = this.activeFilterKeys();
+    return this.vendorStarts().filter((v) => active.has(`v:${v.userId}`));
+  });
+
   constructor() {
     effect(() => {
       const idsRaw = this.userIds();
@@ -387,7 +472,11 @@ export class AssignmentMapPage {
   }
 
   protected vendorNameFor(userId: number): string {
-    return this.customers().find((c) => c.userId === userId)?.userName ?? `Vendedor #${userId}`;
+    return (
+      this.vendorStarts().find((v) => v.userId === userId)?.userName ??
+      this.customers().find((c) => c.userId === userId)?.userName ??
+      `Vendedor #${userId}`
+    );
   }
 
   protected addVendor(item: UiLookupItem) {
@@ -438,14 +527,15 @@ export class AssignmentMapPage {
     this.loading.set(true);
     this.error.set(false);
     this.assignmentSvc.map({ userIds, orphansOnly }).subscribe({
-      next: (rows) => {
-        this.customers.set(rows);
+      next: ({ customers, vendorStarts }) => {
+        this.customers.set(customers);
+        this.vendorStarts.set(vendorStarts);
         this.loadedUserIds.set(userIds);
         this.loadedOrphansOnly.set(orphansOnly);
         this.pickedVendors.set(
           userIds.map((id) => ({
             id,
-            name: rows.find((r) => r.userId === id)?.userName ?? `Vendedor #${id}`,
+            name: vendorStarts.find((v) => v.userId === id)?.userName ?? `Vendedor #${id}`,
           })),
         );
         this.loading.set(false);
@@ -493,7 +583,18 @@ export class AssignmentMapPage {
       ${escapeHtml(c.code)}<br>
       Vendedor: ${vendor}<br>
       ${c.scheduledToday ? 'Le toca hoy' : 'No le toca hoy'} · ${escapeHtml(visitStatusLabel(c.visitStatusCode))}
+      <br><button type="button" class="map-popup-view-btn" data-customer-id="${c.customerId}">Ver ficha</button>
     `;
+  }
+
+  /** El botón "Ver ficha" del popup es HTML plano de Leaflet: se conecta el navigate al abrir. */
+  private bindPopupViewButton(marker: L.Layer, customerId: number) {
+    marker.on('popupopen', (ev) => {
+      const el = (ev as L.PopupEvent).popup.getElement();
+      el?.querySelector('.map-popup-view-btn')?.addEventListener('click', () => {
+        this.router.navigate(['/clientes', customerId]);
+      });
+    });
   }
 
   private redraw() {
@@ -505,52 +606,54 @@ export class AssignmentMapPage {
     }
 
     const rows = this.visibleCustomers();
-    const soloVendorId = this.soloVendorId();
-    const routePoints =
-      soloVendorId != null ? rows.filter((c) => c.userId === soloVendorId && c.scheduledToday) : [];
-    const routeCustomerIds = new Set(routePoints.map((c) => c.customerId));
-
     const bounds: L.LatLngExpression[] = [];
 
     for (const c of rows) {
-      if (routeCustomerIds.has(c.customerId)) continue;
-      const color = c.userId != null ? this.colorFor(c.userId) : ORPHAN_COLOR;
-      L.circleMarker([c.latitude, c.longitude], {
+      const strokeColor = c.userId != null ? this.colorFor(c.userId) : ORPHAN_COLOR;
+      const fillColor = resolveCssVar(visitStatusColorVar(c.visitStatusCode));
+      const marker = L.circleMarker([c.latitude, c.longitude], {
         radius: 7,
-        color,
-        weight: c.userId == null ? 2 : 1,
+        color: strokeColor,
+        weight: c.scheduledToday ? 2.5 : c.userId == null ? 2 : 1,
         dashArray: c.userId == null ? '4,3' : undefined,
-        fillColor: color,
-        fillOpacity: c.userId == null ? 0.15 : 0.85,
-      })
-        .bindPopup(this.popupHtml(c))
-        .addTo(this.markersLayer!);
+        fillColor,
+        fillOpacity: c.visitStatusCode == null ? 0.4 : 0.9,
+      }).bindPopup(this.popupHtml(c));
+      this.bindPopupViewButton(marker, c.customerId);
+      marker.addTo(this.markersLayer!);
       bounds.push([c.latitude, c.longitude]);
     }
 
-    if (soloVendorId != null && routePoints.length > 0) {
+    const soloVendorId = this.soloVendorId();
+    if (soloVendorId != null) {
+      const start = this.visibleVendorStarts().find((v) => v.userId === soloVendorId);
       const color = this.colorFor(soloVendorId);
-      if (routePoints.length > 1) {
-        // Orden asumido = orden de respuesta del backend (no hay campo de
-        // secuencia de ruta documentado en MapCustomerView).
-        this.routeLayer = L.polyline(
-          routePoints.map((c) => [c.latitude, c.longitude] as [number, number]),
-          { color, weight: 3, opacity: 0.55, dashArray: '6,6' },
-        ).addTo(this.leafletMap);
+      const routePoints = rows.filter((c) => c.userId === soloVendorId && c.scheduledToday);
+      const latlngs: [number, number][] = [];
+      if (start?.startLatitude != null && start?.startLongitude != null) {
+        latlngs.push([start.startLatitude, start.startLongitude]);
+        bounds.push([start.startLatitude, start.startLongitude]);
       }
-      for (const c of routePoints) {
-        const visited = isVisited(c.visitStatusCode);
-        L.circleMarker([c.latitude, c.longitude], {
-          radius: 8,
+      // Orden asumido = orden de respuesta del backend para los puntos de hoy
+      // (no hay campo de secuencia de ruta documentado en MapCustomerView).
+      for (const c of routePoints) latlngs.push([c.latitude, c.longitude]);
+      if (latlngs.length > 1) {
+        this.routeLayer = L.polyline(latlngs, {
           color,
-          weight: 2,
-          fillColor: visited ? color : '#ffffff',
-          fillOpacity: 1,
-        })
-          .bindPopup(this.popupHtml(c))
-          .addTo(this.markersLayer!);
-        bounds.push([c.latitude, c.longitude]);
+          weight: 3,
+          opacity: 0.55,
+          dashArray: '6,6',
+        }).addTo(this.leafletMap);
       }
+    }
+
+    for (const v of this.visibleVendorStarts()) {
+      if (v.startLatitude == null || v.startLongitude == null) continue;
+      const marker = L.marker([v.startLatitude, v.startLongitude], {
+        icon: vendorStartIcon(this.colorFor(v.userId)),
+      }).bindPopup(`<strong>${escapeHtml(v.userName)}</strong><br>Inicio de ruta hoy`);
+      marker.addTo(this.markersLayer!);
+      bounds.push([v.startLatitude, v.startLongitude]);
     }
 
     if (bounds.length > 0) {

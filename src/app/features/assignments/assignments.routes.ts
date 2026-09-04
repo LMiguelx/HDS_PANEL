@@ -23,6 +23,11 @@ export const ASSIGNMENT_ROUTES: Routes = [
     loadComponent: () => import('./assignment-map').then((m) => m.AssignmentMapPage),
   },
   {
+    path: 'coberturas',
+    loadComponent: () =>
+      import('./assignment-coverage-list').then((m) => m.AssignmentCoverageListPage),
+  },
+  {
     path: 'pendientes',
     loadComponent: () =>
       import('./assignment-pending-schedule').then((m) => m.AssignmentPendingSchedulePage),

@@ -27,6 +27,22 @@ import { HasPermissionDirective } from '../../shared/directives/has-permission';
           <span class="home-tile-name">Asignaciones</span>
           <span class="home-tile-note">Cartera por vendedor, ausencias del día y cobertura.</span>
         </a>
+        <a class="home-tile is-ready" routerLink="/clientes" *hasPermission="'customer.view'">
+          <span class="home-tile-name">Clientes</span>
+          <span class="home-tile-note">Buscador y ficha con métricas de compra.</span>
+        </a>
+        <a
+          class="home-tile is-ready"
+          routerLink="/aprobaciones"
+          *hasPermission="'customer.approve'"
+        >
+          <span class="home-tile-name">Aprobaciones</span>
+          <span class="home-tile-note">Solicitudes de creación, cambio de campo y cierre.</span>
+        </a>
+        <a class="home-tile is-ready" routerLink="/mantenimiento" *hasPermission="'config.edit'">
+          <span class="home-tile-name">Mantenimiento</span>
+          <span class="home-tile-note">Activa o desactiva el modo mantenimiento del sistema.</span>
+        </a>
       </div>
 
       <div class="home-section-label">Próximamente</div>

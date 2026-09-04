@@ -24,7 +24,6 @@ export const NAV: NavItem[] = [
     route: '/clientes',
     anyOf: ['customer.view'],
     group: 'Clientes',
-    comingSoon: true,
   },
   {
     label: 'Aprobaciones',
@@ -32,7 +31,6 @@ export const NAV: NavItem[] = [
     route: '/aprobaciones',
     anyOf: ['customer.approve'],
     group: 'Clientes',
-    comingSoon: true,
   },
   {
     label: 'Asignaciones',
@@ -129,5 +127,12 @@ export const NAV: NavItem[] = [
     anyOf: ['config.edit'],
     group: 'Administración',
     comingSoon: true,
+  },
+  {
+    label: 'Mantenimiento',
+    icon: 'build',
+    route: '/mantenimiento',
+    anyOf: ['config.edit'],
+    group: 'Administración',
   },
 ];

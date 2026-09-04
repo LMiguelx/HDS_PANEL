@@ -64,6 +64,15 @@ export interface MapQuery {
   orphansOnly?: boolean;
 }
 
+/**
+ * `vendorStarts` sale vacío si solo se filtró por `orphansOnly`, sin
+ * `userIds` — no hay vendedor cuya ruta mostrar.
+ */
+export interface MapResponse {
+  customers: MapCustomerView[];
+  vendorStarts: VendorOnRouteView[];
+}
+
 export interface CreateAssignmentCommand {
   customerId: number;
   userId: number;
@@ -96,6 +105,27 @@ export interface CoverageView {
   reason: string | null;
 }
 
+/** Fila del listado de coberturas ya realizadas (GET /coverage). */
+export interface CoverageAdminView {
+  coverageId: number;
+  customerId: number;
+  customerName: string;
+  absentUserId: number;
+  absentUserName: string;
+  coveringUserId: number;
+  coveringUserName: string;
+  coverageDate: string; // yyyy-MM-dd
+  reason: string | null;
+  createdAt: string; // ISO datetime
+}
+
+export interface CoverageListFilters {
+  absentUserId?: number;
+  coveringUserId?: number;
+  page?: number;
+  size?: number;
+}
+
 /**
  * Shape no detallado por el backend a la fecha de este documento (ver
  * 12-endpoints-admin-panel-asignaciones.md, sección `/auto-assign`). Se
@@ -115,4 +145,9 @@ export interface IncompleteScheduleView {
   userId: number;
   hasWeekdays: boolean;
   hasWeeksOfCycle: boolean;
+}
+
+export interface PendingScheduleFilters {
+  page?: number;
+  size?: number;
 }

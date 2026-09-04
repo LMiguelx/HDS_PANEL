@@ -21,18 +21,20 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardPage),
       },
 
-      // Clientes (módulo 2) — sin rediseñar todavía, ver _archive/customers/
+      // Clientes (módulo 2) — rediseñado
       {
         path: 'clientes',
         canActivate: [permissionGuard('customer.view')],
-        loadComponent: comingSoon,
-        data: { title: 'Clientes', icon: 'store' },
+        loadChildren: () =>
+          import('./features/customers/customers.routes').then((m) => m.CUSTOMER_ROUTES),
       },
       {
         path: 'aprobaciones',
         canActivate: [permissionGuard('customer.approve')],
-        loadComponent: comingSoon,
-        data: { title: 'Aprobaciones', icon: 'how_to_reg' },
+        loadChildren: () =>
+          import('./features/customer-requests/customer-requests.routes').then(
+            (m) => m.CUSTOMER_REQUEST_ROUTES,
+          ),
       },
       // Asignaciones (módulo 2) — rediseñado
       {
@@ -109,6 +111,13 @@ export const routes: Routes = [
         canActivate: [permissionGuard('report.view')],
         loadComponent: comingSoon,
         data: { title: 'Inventario', icon: 'inventory' },
+      },
+      // Mantenimiento — rediseñado
+      {
+        path: 'mantenimiento',
+        canActivate: [permissionGuard('config.edit')],
+        loadComponent: () =>
+          import('./features/maintenance/maintenance-page').then((m) => m.MaintenancePage),
       },
     ],
   },
