@@ -25,7 +25,7 @@ import { AssignmentAdminService } from './assignment-admin';
           <div class="asg-alert-num" [class.asg-alert-zero]="alerts.orphansCount() === 0">
             {{ alerts.orphansCount() ?? '—' }}
           </div>
-          <div class="asg-alert-label">Clientes sin vendedor</div>
+          <div class="asg-alert-label">Clientes sin vendedor </div>
           <div class="asg-alert-hint">Ver huérfanos y asignar</div>
         </ui-card>
 
@@ -33,7 +33,7 @@ import { AssignmentAdminService } from './assignment-admin';
           <div class="asg-alert-num" [class.asg-alert-zero]="alerts.absentVendorsCount() === 0">
             {{ alerts.absentVendorsCount() ?? '—' }}
           </div>
-          <div class="asg-alert-label">Vendedores sin ruta hoy</div>
+          <div class="asg-alert-label">Vendedores sin Asistencia </div>
           <div class="asg-alert-hint">Ver ausencias y cubrir cartera</div>
         </ui-card>
       </div>
