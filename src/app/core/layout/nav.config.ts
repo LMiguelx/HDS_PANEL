@@ -82,7 +82,6 @@ export const NAV: NavItem[] = [
     route: '/reparto',
     anyOf: ['delivery.deliver', 'delivery.settle'],
     group: 'Reparto',
-    comingSoon: true,
   },
   {
     label: 'Flota',
@@ -90,7 +89,6 @@ export const NAV: NavItem[] = [
     route: '/flota',
     anyOf: ['delivery.settle'],
     group: 'Reparto',
-    comingSoon: true,
   },
 
   // Facturación
@@ -100,7 +98,6 @@ export const NAV: NavItem[] = [
     route: '/facturas',
     anyOf: ['invoice.reconcile'],
     group: 'Facturación',
-    comingSoon: true,
   },
 
   // Administración

@@ -8,6 +8,20 @@ const NORMALIZED_MAP: Record<string, string> = {
   pendiente: 'pendiente',
   'sin stock': 'sin-stock',
   agotado: 'sin-stock',
+  // Planilla de reparto (delivery_batch_status)
+  abierta: 'open',
+  'en ruta': 'in-route',
+  liquidada: 'settled',
+  // Ítem de planilla (delivery_item_status) — "Pendiente" reutiliza el slug
+  // de arriba a propósito, mismo matiz visual.
+  entregado: 'delivered',
+  'entrega parcial': 'partial',
+  rechazado: 'rejected',
+  // Conciliación de factura (invoice_match_status)
+  'sin conciliar': 'unmatched',
+  'conciliado automáticamente': 'matched-auto',
+  'conciliado manualmente': 'matched-manual',
+  'con diferencias': 'mismatch',
 };
 
 function normalize(text: string): string {

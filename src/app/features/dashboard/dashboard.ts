@@ -43,6 +43,22 @@ import { HasPermissionDirective } from '../../shared/directives/has-permission';
           <span class="home-tile-name">Mantenimiento</span>
           <span class="home-tile-note">Activa o desactiva el modo mantenimiento del sistema.</span>
         </a>
+        <a
+          class="home-tile is-ready"
+          routerLink="/reparto"
+          *hasPermission="['delivery.deliver', 'delivery.settle']"
+        >
+          <span class="home-tile-name">Reparto</span>
+          <span class="home-tile-note">Planillas, mapa de entregas y devoluciones.</span>
+        </a>
+        <a class="home-tile is-ready" routerLink="/flota" *hasPermission="'delivery.settle'">
+          <span class="home-tile-name">Flota</span>
+          <span class="home-tile-note">Vehículos y equipos de reparto.</span>
+        </a>
+        <a class="home-tile is-ready" routerLink="/facturas" *hasPermission="'invoice.reconcile'">
+          <span class="home-tile-name">Facturas</span>
+          <span class="home-tile-note">Conciliación con pedidos y bandeja sin conciliar.</span>
+        </a>
       </div>
 
       <div class="home-section-label">Próximamente</div>

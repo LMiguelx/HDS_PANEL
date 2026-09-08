@@ -71,26 +71,25 @@ export const routes: Routes = [
         loadChildren: () => import('./features/promos/promos.routes').then((m) => m.PROMO_ROUTES),
       },
 
-      // Reparto (módulo 5) — sin rediseñar todavía, ver _archive/delivery/
+      // Reparto (módulo 5) — rediseñado
       {
         path: 'reparto',
         canActivate: [permissionGuard('delivery.deliver', 'delivery.settle')],
-        loadComponent: comingSoon,
-        data: { title: 'Reparto', icon: 'local_shipping' },
+        loadChildren: () =>
+          import('./features/delivery/delivery.routes').then((m) => m.DELIVERY_ROUTES),
       },
       {
         path: 'flota',
         canActivate: [permissionGuard('delivery.settle')],
-        loadComponent: comingSoon,
-        data: { title: 'Flota', icon: 'directions_car' },
+        loadChildren: () => import('./features/fleet/fleet.routes').then((m) => m.FLEET_ROUTES),
       },
 
-      // Facturación (módulo 6) — sin rediseñar todavía, ver _archive/billing/
+      // Facturación (módulo 6) — rediseñado
       {
         path: 'facturas',
         canActivate: [permissionGuard('invoice.reconcile')],
-        loadComponent: comingSoon,
-        data: { title: 'Facturas', icon: 'description' },
+        loadChildren: () =>
+          import('./features/billing/billing.routes').then((m) => m.BILLING_ROUTES),
       },
 
       // Administración (módulo 7) — sin rediseñar todavía, ver _archive/admin/
