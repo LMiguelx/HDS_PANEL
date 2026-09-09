@@ -10,6 +10,15 @@ export const BATCH_STATUS_OPTIONS: StatusOption[] = [
   { code: 'SETTLED', name: 'Liquidada' },
 ];
 
+/** Mismos tokens que ya pinta ui-status para estos códigos — se reutilizan
+ * tal cual donde hace falta el valor de color (gráficos, mapa), para que
+ * todo el panel asocie el mismo color a cada estado. */
+export const BATCH_STATUS_COLOR_VAR: Record<string, string> = {
+  OPEN: '--st-open',
+  IN_ROUTE: '--st-in-route',
+  SETTLED: '--st-settled',
+};
+
 /** delivery_item_status. El ítem nunca vuelve a PENDING una vez que sale de
  * ese estado; cualquier otra transición (incluso DELIVERED → REJECTED) es
  * válida las veces que sea — regla del backend, no editable desde este panel. */

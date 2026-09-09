@@ -84,7 +84,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                     uiButton
                     variant="ghost"
                     size="sm"
-                    [routerLink]="['/facturas/detalle', i.invoiceId]"
+                    [routerLink]="['/factura', i.invoiceId]"
                   >
                     Ver
                   </button>
@@ -96,7 +96,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
 
         <div class="ibc-cards-mobile">
           @for (i of filteredRows(); track i.invoiceId) {
-            <a [routerLink]="['/facturas/detalle', i.invoiceId]" class="ibc-card-mobile">
+            <a [routerLink]="['/factura', i.invoiceId]" class="ibc-card-mobile">
               <div class="ibc-card-mobile-head">
                 <span class="ibc-card-mobile-name"
                   >{{ i.documentTypeAbbr }} {{ i.series }}-{{ i.number }}</span

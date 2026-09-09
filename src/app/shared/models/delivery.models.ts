@@ -12,6 +12,10 @@ export interface BatchSummary {
   statusCode: string; // OPEN | IN_ROUTE | SETTLED
   totalAmount: number;
   totalWeight: number;
+  returnedAmount: number; // monto total devuelto de la planilla
+  netAmount: number; // totalAmount - returnedAmount
+  returnedQuantity: number; // unidades devueltas
+  returnedProductCount: number; // productos distintos devueltos
   totalItems: number;
   pendingItems: number;
 }
@@ -40,6 +44,10 @@ export interface BatchDetail {
   statusCode: string;
   totalAmount: number;
   totalWeight: number;
+  returnedAmount: number;
+  netAmount: number;
+  returnedQuantity: number;
+  returnedProductCount: number;
   settledAt: string | null; // ISO datetime
   items: BatchItemView[];
 }
@@ -51,8 +59,10 @@ export interface BatchCustomerView {
   documentNumber: string;
   address: string | null;
   phone: string | null;
-  latitude: number;
-  longitude: number;
+  // El ERP no siempre manda coordenadas — el mapa debe tratar esto como caso
+  // normal, no como error (lista aparte de "sin ubicación").
+  latitude: number | null;
+  longitude: number | null;
   invoiceId: string;
   amount: number;
   itemStatusCode: string; // PENDING | DELIVERED | PARTIAL | REJECTED

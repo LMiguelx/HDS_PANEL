@@ -91,6 +91,15 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/billing/billing.routes').then((m) => m.BILLING_ROUTES),
       },
+      // Detalle de factura — ruta propia (no cuelga de /facturas) porque su
+      // permiso es más amplio que el de la bandeja de conciliación: customer.view
+      // basta para verla (ej. desde el mapa de una planilla), no solo invoice.reconcile.
+      {
+        path: 'factura/:invoiceId',
+        canActivate: [permissionGuard('customer.view', 'invoice.reconcile')],
+        loadComponent: () =>
+          import('./features/billing/invoice-detail').then((m) => m.InvoiceDetailPage),
+      },
 
       // Administración (módulo 7) — sin rediseñar todavía, ver _archive/admin/
       {

@@ -4,8 +4,10 @@ import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { ToastService } from '../../core/ui/toast';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { MatchDialog } from './ui/match-dialog';
 import { MismatchDialog } from './ui/mismatch-dialog';
+import { ReturnsSection } from '../delivery/ui/returns-section';
 import { InvoiceAdminService } from './invoice-admin';
 import { InvoiceDetail } from '../../shared/models/invoice.models';
 import { matchStatusName } from './invoice-format';
@@ -15,7 +17,7 @@ import { formatSoles } from '../../shared/pipes/money';
 /** Detalle de la factura con sus líneas (GET /invoices/{id}). */
 @Component({
   selector: 'app-invoice-detail',
-  imports: [UiButton, UiStatus, UiEmpty],
+  imports: [UiButton, UiStatus, UiEmpty, HasPermissionDirective, ReturnsSection],
   template: `
     <section class="id-page">
       @if (loading()) {
@@ -127,6 +129,11 @@ import { formatSoles } from '../../shared/pipes/money';
               </div>
             </div>
           }
+        </div>
+
+        <div *hasPermission="['delivery.return', 'delivery.settle', 'customer.view']">
+          <h2 class="id-section-title">Devoluciones</h2>
+          <app-returns-section [invoiceId]="inv.invoiceId" />
         </div>
       }
     </section>

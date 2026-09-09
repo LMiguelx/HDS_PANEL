@@ -64,7 +64,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               <th>Serie-Número</th>
               <th>Equipo</th>
               <th>Estado</th>
-              <th>Total</th>
+              <th>Neto a liquidar</th>
               <th>Ítems</th>
               <th></th>
             </tr>
@@ -76,7 +76,14 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 <td class="db-cell-strong">{{ b.series }}-{{ b.number }}</td>
                 <td class="db-muted">{{ b.vehiclePlate || 'Sin asignar' }}</td>
                 <td><ui-status [label]="statusName(b.statusCode)" /></td>
-                <td class="db-muted">{{ formatSoles(b.totalAmount) }}</td>
+                <td>
+                  <span class="db-net">{{ formatSoles(b.netAmount) }}</span>
+                  @if (b.returnedAmount > 0) {
+                    <span class="db-returned"
+                      >{{ formatSoles(b.totalAmount) }} · −{{ formatSoles(b.returnedAmount) }}</span
+                    >
+                  }
+                </td>
                 <td class="db-muted">{{ b.totalItems - b.pendingItems }}/{{ b.totalItems }}</td>
                 <td class="db-row-action">
                   <button uiButton variant="ghost" size="sm" [routerLink]="['/reparto', b.batchId]">
@@ -99,11 +106,16 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 {{ dateText(b.batchDate) }} · {{ b.vehiclePlate || 'Sin asignar' }}
               </div>
               <div class="db-muted">
-                {{ formatSoles(b.totalAmount) }} · {{ b.totalItems - b.pendingItems }}/{{
+                Neto {{ formatSoles(b.netAmount) }} · {{ b.totalItems - b.pendingItems }}/{{
                   b.totalItems
                 }}
                 ítems
               </div>
+              @if (b.returnedAmount > 0) {
+                <div class="db-returned">
+                  {{ formatSoles(b.totalAmount) }} · −{{ formatSoles(b.returnedAmount) }} devuelto
+                </div>
+              }
             </a>
           }
         </div>
@@ -172,6 +184,19 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
       .db-muted {
         color: var(--ink-muted);
         font-size: 13px;
+      }
+      .db-net {
+        font-weight: 800;
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .db-returned {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--accent-ink);
+        text-decoration: line-through;
+        text-decoration-color: var(--accent-ink);
       }
       .db-row-action {
         text-align: right;

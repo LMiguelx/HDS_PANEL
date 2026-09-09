@@ -65,7 +65,7 @@ import { formatSoles } from '../../shared/pipes/money';
                     uiButton
                     variant="ghost"
                     size="sm"
-                    [routerLink]="['/facturas/detalle', i.invoiceId]"
+                    [routerLink]="['/factura', i.invoiceId]"
                   >
                     Ver
                   </button>
@@ -90,12 +90,7 @@ import { formatSoles } from '../../shared/pipes/money';
               <div class="iu-muted">{{ i.customerName }} · {{ formatSoles(i.grandTotal) }}</div>
               <div class="iu-muted">{{ dateText(i.issueDate) }}</div>
               <div class="iu-card-mobile-actions">
-                <button
-                  uiButton
-                  variant="ghost"
-                  size="sm"
-                  [routerLink]="['/facturas/detalle', i.invoiceId]"
-                >
+                <button uiButton variant="ghost" size="sm" [routerLink]="['/factura', i.invoiceId]">
                   Ver
                 </button>
                 <button uiButton variant="secondary" size="sm" (click)="openMatch(i)">

@@ -1,4 +1,5 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
@@ -7,6 +8,7 @@ import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { ToastService } from '../../core/ui/toast';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
+import { AuthService } from '../../core/auth/auth';
 import { DeliveryAdminService } from './delivery-admin';
 import { AssignTeamDialog } from './ui/assign-team-dialog';
 import { ReturnsDialog } from './ui/returns-dialog';
@@ -24,7 +26,7 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
 /** Detalle de una planilla: comprobantes + mapa de entregas. */
 @Component({
   selector: 'app-delivery-batch-detail',
-  imports: [UiButton, UiField, UiStatus, UiEmpty, BatchMap, HasPermissionDirective],
+  imports: [RouterLink, UiButton, UiField, UiStatus, UiEmpty, BatchMap, HasPermissionDirective],
   template: `
     <section class="dbd-page">
       @if (loading()) {
@@ -82,6 +84,14 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
             <span class="dbd-metric-value">{{ formatSoles(b.totalAmount) }}</span>
             <span class="dbd-metric-label">Total</span>
           </div>
+          <div class="dbd-metric" [class.dbd-metric-alert]="b.returnedAmount > 0">
+            <span class="dbd-metric-value">{{ formatSoles(b.returnedAmount) }}</span>
+            <span class="dbd-metric-label">Devuelto</span>
+          </div>
+          <div class="dbd-metric">
+            <span class="dbd-metric-value">{{ formatSoles(b.netAmount) }}</span>
+            <span class="dbd-metric-label">Neto a liquidar</span>
+          </div>
           <div class="dbd-metric">
             <span class="dbd-metric-value">{{ b.totalWeight }} kg</span>
             <span class="dbd-metric-label">Peso</span>
@@ -99,6 +109,17 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
             </div>
           }
         </div>
+
+        @if (b.returnedAmount > 0) {
+          <p class="dbd-hint dbd-hint-alert">
+            {{ b.returnedProductCount }} producto{{
+              b.returnedProductCount === 1 ? '' : 's'
+            }}
+            devuelto{{ b.returnedProductCount === 1 ? '' : 's' }}, {{ b.returnedQuantity }} unidad{{
+              b.returnedQuantity === 1 ? '' : 'es'
+            }}.
+          </p>
+        }
 
         <div class="dbd-tabs">
           <button
@@ -144,12 +165,26 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               @for (item of filteredItems(); track item.lineNumber) {
                 <tr>
                   <td class="dbd-muted">{{ item.lineNumber }}</td>
-                  <td class="dbd-cell-strong">{{ item.invoiceId }}</td>
+                  <td class="dbd-cell-strong">
+                    @if (canViewInvoice()) {
+                      <a [routerLink]="['/factura', item.invoiceId]" class="dbd-invoice-link">{{
+                        item.invoiceId
+                      }}</a>
+                    } @else {
+                      {{ item.invoiceId }}
+                    }
+                  </td>
                   <td>{{ item.customerName }}</td>
                   <td class="dbd-muted">{{ formatSoles(item.amount) }}</td>
                   <td><ui-status [label]="itemStatusText(item.statusCode)" /></td>
                   <td class="dbd-row-action">
-                    <button uiButton variant="ghost" size="sm" (click)="viewReturns(item)">
+                    <button
+                      uiButton
+                      variant="ghost"
+                      size="sm"
+                      *hasPermission="['delivery.return', 'delivery.settle', 'customer.view']"
+                      (click)="viewReturns(item)"
+                    >
                       Devoluciones
                     </button>
                   </td>
@@ -162,7 +197,13 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
             @for (item of filteredItems(); track item.lineNumber) {
               <div class="dbd-card-mobile">
                 <div class="dbd-card-mobile-head">
-                  <span class="dbd-card-mobile-name">{{ item.invoiceId }}</span>
+                  @if (canViewInvoice()) {
+                    <a [routerLink]="['/factura', item.invoiceId]" class="dbd-invoice-link">{{
+                      item.invoiceId
+                    }}</a>
+                  } @else {
+                    <span class="dbd-card-mobile-name">{{ item.invoiceId }}</span>
+                  }
                   <ui-status [label]="itemStatusText(item.statusCode)" />
                 </div>
                 <div class="dbd-muted">
@@ -173,6 +214,7 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                   variant="ghost"
                   size="sm"
                   class="dbd-card-mobile-action"
+                  *hasPermission="['delivery.return', 'delivery.settle', 'customer.view']"
                   (click)="viewReturns(item)"
                 >
                   Devoluciones
@@ -227,6 +269,10 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
         font-size: 12px;
         color: var(--ink-muted);
       }
+      .dbd-hint-alert {
+        color: var(--accent-ink);
+        font-weight: 600;
+      }
       .dbd-metrics {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
@@ -249,6 +295,9 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
         margin-top: 4px;
         font-size: 12px;
         color: var(--ink-muted);
+      }
+      .dbd-metric-alert .dbd-metric-value {
+        color: var(--accent-ink);
       }
       .dbd-tabs {
         display: flex;
@@ -280,6 +329,14 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
       }
       .dbd-cell-strong {
         font-weight: 800;
+      }
+      .dbd-invoice-link {
+        font-weight: 800;
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .dbd-invoice-link:hover {
+        text-decoration: underline;
       }
       .dbd-muted {
         color: var(--ink-muted);
@@ -332,8 +389,11 @@ export class DeliveryBatchDetailPage {
   private deliverySvc = inject(DeliveryAdminService);
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
+  private auth = inject(AuthService);
 
   id = input('');
+
+  protected canViewInvoice = computed(() => this.auth.hasAny('customer.view', 'invoice.reconcile'));
 
   protected dateText = dateText;
   protected dateTimeText = dateTimeText;
@@ -361,9 +421,14 @@ export class DeliveryBatchDetailPage {
     return filter ? items.filter((i) => i.statusCode === filter) : items;
   });
 
-  constructor() {
-    this.load();
-  }
+  // Bug real detrás de "el mapa no renderiza": los inputs ligados a la ruta
+  // (withComponentInputBinding) todavía no tienen valor en el constructor —
+  // Angular los setea después de instanciar el componente. Cargar ahí
+  // siempre pedía id=0 y `load()` abortaba en silencio. Con `effect` se
+  // dispara apenas el router setea el id real (y de nuevo si cambia).
+  private loadEffect = effect(() => {
+    if (this.id()) this.load();
+  });
 
   protected canSettle(b: BatchDetail): boolean {
     return b.statusCode !== 'SETTLED' && this.pendingCount() === 0;
