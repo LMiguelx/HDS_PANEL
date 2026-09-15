@@ -50,18 +50,11 @@ export const routes: Routes = [
         data: { title: 'Segmentos', icon: 'group_work' },
       },
 
-      // Pedidos (módulo 3) — sin rediseñar todavía, ver _archive/sales/
+      // Pedidos (módulo 3) — rediseñado
       {
         path: 'pedidos',
         canActivate: [permissionGuard('order.view_all', 'order.create')],
-        loadComponent: comingSoon,
-        data: { title: 'Pedidos', icon: 'receipt' },
-      },
-      {
-        path: 'pedidos/bonificaciones-pendientes',
-        canActivate: [permissionGuard('order.view_all')],
-        loadComponent: comingSoon,
-        data: { title: 'Bonificaciones pendientes', icon: 'production_quantity_limits' },
+        loadChildren: () => import('./features/orders/order.routes').then((m) => m.ORDER_ROUTES),
       },
 
       // Promociones (módulo 4) — rediseñado

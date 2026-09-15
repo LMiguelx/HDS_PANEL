@@ -1,78 +1,69 @@
-﻿
+// Contratos de Pedidos (/orders). Ver documentacion-endpoints-pedidos.md.
+// Solo los 4 endpoints GET documentados (consulta/supervisión) — creación,
+// envío a facturación y anulación no están en este documento, quedan fuera
+// de alcance de este panel hasta que se confirmen.
+
 export interface OrderSummary {
   orderId: number;
   customerId: number;
   customerName: string;
-  orderDate: string; // ISO
+  orderDate: string; // ISO datetime
   statusCode: string; // OPEN | SENT_TO_BILLING | CANCELLED
   totalAmount: number;
+  discountAmount: number;
+  netAmount: number; // totalAmount - discountAmount
+  paymentConditionId: number;
+  bonusLines: number;
+  deliveryStatusCode: string | null; // IN_ROUTE | DELIVERED | PARTIAL | REJECTED
+}
+
+export interface OrderListFilters {
+  customerId?: number;
+  salespersonId?: number;
+  page?: number;
+  size?: number;
 }
 
 export interface OrderItemView {
+  lineNumber: number;
   productId: number;
   productName: string;
   quantity: number;
   unitPrice: number;
-  lineTotal: number;
+  subtotal: number;
   bonus: boolean;
+}
+
+export interface ReturnedLineView {
+  productId: number;
+  quantity: number;
+  bonus: boolean;
+}
+
+export interface DeliveryStatusView {
+  // Independiente del statusCode del pedido — mismo catálogo delivery_item_status.
+  statusCode: string; // IN_ROUTE | DELIVERED | PARTIAL | REJECTED
+  returnedLines: ReturnedLineView[];
 }
 
 export interface OrderDetail {
   orderId: number;
   customerId: number;
   customerName: string;
-  orderDate: string;
-  statusCode: string;
-  paymentConditionName?: string | null;
-  note?: string | null;
-  totalAmount: number;
-  promoDiscountTotal?: number | null;
-  items: OrderItemView[];
-}
-
-// ── Creación ────────────────────────────────────────────────────────────
-export interface SuggestedItem {
-  productId: number;
-  productName: string;
-  purchaseCount: number;
-  lastPurchasedAt: string;
-  avgQuantity: number;
-}
-
-export interface CreateOrderItem {
-  productId: number;
-  quantity: number;
-}
-export interface CreateAllocationItem {
-  allocationId: number;
-  quantity: number;
-}
-
-export interface CreateOrderCommand {
-  customerId: number;
+  salespersonId: number;
   paymentConditionId: number;
-  captureModeId: number;
-  branchId?: number;
-  visitId?: number;
-  latitude?: number;
-  longitude?: number;
-  note?: string;
-  idempotencyKey?: string;
-  items: CreateOrderItem[];
-  allocationItems?: CreateAllocationItem[];
-}
-
-export interface OrderCreatedResult {
-  orderId: number;
-  totalAmount: number;
   statusCode: string;
-  duplicate: boolean;
-  bonusLines: number;
-  promoDiscountTotal: number;
+  orderDate: string;
+  note: string | null;
+  totalAmount: number;
+  discountAmount: number;
+  netAmount: number;
+  sentToBillingAt: string | null;
+  items: OrderItemView[];
+  deliveryStatus: DeliveryStatusView | null;
 }
 
-// ── Bonificaciones pendientes de stock (reporte, sin resolución automática) ──
-export interface PendingBonusLine {
+export interface PendingBonusLineView {
   lineNumber: number;
   productId: number;
   productName: string;
@@ -84,5 +75,5 @@ export interface PendingBonusOrderView {
   customerId: number;
   customerName: string;
   orderDate: string;
-  pendingLines: PendingBonusLine[];
+  pendingLines: PendingBonusLineView[];
 }

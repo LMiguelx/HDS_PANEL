@@ -22,6 +22,11 @@ const NORMALIZED_MAP: Record<string, string> = {
   'conciliado automáticamente': 'matched-auto',
   'conciliado manualmente': 'matched-manual',
   'con diferencias': 'mismatch',
+  // Pedido (order_status) — reutiliza los slugs open/in-route/delivered/
+  // partial/rejected ya definidos arriba (mismos tokens de color).
+  abierto: 'open',
+  'enviado a facturación': 'sent-to-billing',
+  anulado: 'cancelled',
 };
 
 function normalize(text: string): string {

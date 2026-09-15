@@ -55,7 +55,6 @@ export const NAV: NavItem[] = [
     route: '/pedidos',
     anyOf: ['order.view_all', 'order.create'],
     group: 'Ventas',
-    comingSoon: true,
   },
   {
     label: 'Bonificaciones pendientes',
@@ -63,7 +62,6 @@ export const NAV: NavItem[] = [
     route: '/pedidos/bonificaciones-pendientes',
     anyOf: ['order.view_all'],
     group: 'Ventas',
-    comingSoon: true,
   },
 
   // Promos — módulo rediseñado, una sola entrada para las 5 pantallas
