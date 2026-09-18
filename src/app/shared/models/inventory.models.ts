@@ -24,7 +24,8 @@ export interface KardexResponse {
 
 export interface WarehouseView {
   warehouseId: number;
-  code?: string | null;
+  branchId: number;
+  code: string;
   name: string;
 }
 

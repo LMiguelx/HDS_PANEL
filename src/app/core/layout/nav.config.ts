@@ -100,12 +100,18 @@ export const NAV: NavItem[] = [
 
   // Administración
   {
-    label: 'Precios',
+    label: 'Catálogo y precios',
     icon: 'sell',
     route: '/precios',
-    anyOf: ['price.view'],
+    anyOf: ['price.view', 'product.edit'],
     group: 'Administración',
-    comingSoon: true,
+  },
+  {
+    label: 'Productos sin precio',
+    icon: 'production_quantity_limits',
+    route: '/precios/sin-precio',
+    anyOf: ['product.edit'],
+    group: 'Administración',
   },
   {
     label: 'Inventario',

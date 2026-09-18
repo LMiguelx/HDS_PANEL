@@ -101,11 +101,12 @@ export const routes: Routes = [
         loadComponent: comingSoon,
         data: { title: 'Empresa', icon: 'business' },
       },
+      // Catálogo y precios — rediseñado
       {
         path: 'precios',
-        canActivate: [permissionGuard('price.view')],
-        loadComponent: comingSoon,
-        data: { title: 'Precios', icon: 'sell' },
+        canActivate: [permissionGuard('price.view', 'product.edit')],
+        loadChildren: () =>
+          import('./features/catalog/catalog.routes').then((m) => m.CATALOG_ROUTES),
       },
       {
         path: 'inventario',

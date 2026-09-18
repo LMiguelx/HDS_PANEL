@@ -290,6 +290,14 @@ function isToday(isoDateTime: string): boolean {
           <span class="home-tile-name">Facturas</span>
           <span class="home-tile-note">Conciliación con pedidos y bandeja sin conciliar.</span>
         </a>
+        <a
+          class="home-tile is-ready"
+          routerLink="/precios"
+          *hasPermission="['price.view', 'product.edit']"
+        >
+          <span class="home-tile-name">Catálogo y precios</span>
+          <span class="home-tile-note">Productos, escala de precios y seguimiento sin precio.</span>
+        </a>
       </div>
 
       <div class="home-section-label">Próximamente</div>
