@@ -3,182 +3,238 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth';
 import { NAV, NavItem } from '../../core/layout/nav.config';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
+import { UiButton } from '../../shared/ui/button/button';
 import { DeliveryAdminService } from '../delivery/delivery-admin';
-import { BATCH_STATUS_COLOR_VAR, BATCH_STATUS_OPTIONS } from '../delivery/delivery-format';
 import { InvoiceAdminService } from '../billing/invoice-admin';
 import { InvoiceSummary } from '../../shared/models/invoice.models';
 import { BatchSummary } from '../../shared/models/delivery.models';
 import { OrderAdminService } from '../orders/order-admin';
-import { OrderSummary } from '../../shared/models/order.models';
+import { OrderSummary, PendingBonusOrderView } from '../../shared/models/order.models';
 import { DELIVERY_STATUS_COLOR_VAR, DELIVERY_STATUS_OPTIONS } from '../orders/order-format';
 import { formatSoles } from '../../shared/pipes/money';
 
 const BATCH_SAMPLE_SIZE = 100; // tope documentado del endpoint (máx. 100)
 const ORDER_SAMPLE_SIZE = 100; // GET /orders no filtra por fecha en backend
+const INVOICE_SAMPLE_SIZE = 100; // GET /invoices/unmatched — mismo tope que los demás listados
+
+interface ActionItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  amount?: number;
+  actionLabel: string;
+  link: (string | number)[];
+}
+
+interface FunnelRow {
+  code: string;
+  name: string;
+  count: number;
+  pct: number;
+  colorVar: string;
+}
+
+function todayIsoDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function isToday(isoDateTime: string): boolean {
+  return new Date(isoDateTime).toDateString() === new Date().toDateString();
+}
 
 /**
- * KPIs y estado sin agregación en backend: se calculan en frontend sobre la
- * muestra ya traída de GET /batches/all (hasta 100, el máximo permitido).
- * `totalBatches` sí es exacto (viene de totalElements); la distribución por
- * estado y los montos son sobre la muestra — se lo señala en la UI.
+ * Home en 4 niveles — estado del día → ritmo/avance → contexto → acciones
+ * pendientes. Todos los KPIs se calculan en frontend sobre las muestras ya
+ * cargadas (pedidos/planillas: hasta 100, el máximo documentado; facturas
+ * sin conciliar: ídem) — se lo señala en cada bloque. El color se reserva
+ * para estado: el semáforo del nivel 1 colapsa a 3 estados genéricos
+ * (--status-ok/warn/danger); los gráficos de nivel 2/3 reutilizan los mismos
+ * tokens --st-* que ya usan Pedidos/Reparto, para que el color signifique lo
+ * mismo en el home que dentro de cada módulo.
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, HasPermissionDirective],
+  imports: [RouterLink, HasPermissionDirective, UiButton],
   template: `
     <section class="home-page">
       <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
-      <p class="home-sub">
-        Panel de control. Resumen de pedidos, reparto y facturación de un vistazo.
-      </p>
+      <p class="home-sub">¿Cómo va el día, vamos a llegar, qué se rompe y qué decido ahora?</p>
 
-      @if (showOrderKpis()) {
-        <div class="home-kpi-grid">
-          <div class="home-kpi">
-            <span class="home-kpi-value">{{ orderKpis().todayCount }}</span>
-            <span class="home-kpi-label">Pedidos hoy</span>
-          </div>
-          <div class="home-kpi">
-            <span class="home-kpi-value">{{ formatSoles(orderKpis().todayAmount) }}</span>
-            <span class="home-kpi-label">Monto hoy</span>
-          </div>
-          <div class="home-kpi">
-            <span class="home-kpi-value">
-              <span class="home-kpi-dot" [style.background]="orderOpenColorVar"></span
-              >{{ orderKpis().openCount }}</span
-            >
-            <span class="home-kpi-label">Abiertos</span>
-          </div>
-          <div class="home-kpi">
-            <span class="home-kpi-value">
-              <span class="home-kpi-dot" [style.background]="orderBilledColorVar"></span
-              >{{ orderKpis().billedCount }}</span
-            >
-            <span class="home-kpi-label">Enviados a facturación</span>
-          </div>
-          @if (showPendingBonuses()) {
-            <a class="home-kpi home-kpi-link" routerLink="/pedidos/bonificaciones-pendientes">
-              <span class="home-kpi-value">{{ pendingBonusesCount() }}</span>
-              <span class="home-kpi-label">Bonificaciones pendientes</span>
-            </a>
-          }
-        </div>
+      <div class="home-grid-12">
+        <!-- Nivel 1 — Estado del día -->
+        @if (showDayStatus()) {
+          <div class="home-block home-span-12">
+            <div class="home-day-status" [class]="'is-' + dayStatus().level">
+              <span class="home-day-dot"></span>
+              <span class="home-day-label">{{ dayStatus().label }}</span>
+            </div>
 
-        <div class="home-chart-card">
-          <h2 class="home-card-title">Estado de reparto — pedidos</h2>
-          <p class="home-card-note">
-            Calculado sobre la muestra cargada ({{ orders().length }} de {{ totalOrders() }}
-            pedidos).
-          </p>
-          @if (ordersLoading()) {
-            <div class="home-chart-skeleton" role="status" aria-label="Cargando"></div>
-          } @else if (deliveryStatusBars().length === 0) {
-            <p class="home-chart-empty">
-              Ningún pedido de la muestra tiene reparto asociado todavía.
+            <div class="home-kpi-row">
+              @if (showOrderKpis()) {
+                <a class="home-kpi" routerLink="/pedidos">
+                  <span class="home-kpi-value">{{ orderKpis().todayCount }}</span>
+                  <span class="home-kpi-label">Pedidos hoy</span>
+                  <span class="home-kpi-compare">vs. {{ avgOrdersPerDay() }}/día prom.</span>
+                </a>
+                <a class="home-kpi" routerLink="/pedidos">
+                  <span class="home-kpi-value">{{ formatSoles(orderKpis().todayAmount) }}</span>
+                  <span class="home-kpi-label">Monto hoy</span>
+                  <span class="home-kpi-compare"
+                    >vs. {{ formatSoles(avgAmountPerDay()) }}/día prom.</span
+                  >
+                </a>
+                <a class="home-kpi" routerLink="/pedidos" [queryParams]="{ estado: 'OPEN' }">
+                  <span class="home-kpi-value">{{ orderKpis().openCount }}</span>
+                  <span class="home-kpi-label">Abiertos hoy</span>
+                  <span class="home-kpi-compare">de {{ orderKpis().todayCount }} pedidos hoy</span>
+                </a>
+                <a
+                  class="home-kpi"
+                  routerLink="/pedidos"
+                  [queryParams]="{ estado: 'SENT_TO_BILLING' }"
+                >
+                  <span class="home-kpi-value">{{ orderKpis().billedCount }}</span>
+                  <span class="home-kpi-label">Enviados a facturación hoy</span>
+                  <span class="home-kpi-compare">de {{ orderKpis().todayCount }} pedidos hoy</span>
+                </a>
+              }
+              @if (showPendingBonuses()) {
+                <a class="home-kpi" routerLink="/pedidos/bonificaciones-pendientes">
+                  <span class="home-kpi-value">{{ pendingBonusOrders().length }}</span>
+                  <span class="home-kpi-label">Bonificaciones pendientes</span>
+                  <span class="home-kpi-compare">de {{ orderKpis().openCount }} abiertos hoy</span>
+                </a>
+              }
+              @if (showInvoiceKpis()) {
+                <a class="home-kpi" routerLink="/facturas">
+                  <span class="home-kpi-value">{{ unmatchedTotal() }}</span>
+                  <span class="home-kpi-label">Facturas sin conciliar</span>
+                  <span class="home-kpi-compare">{{ unmatchedTodayCount() }} nuevas hoy</span>
+                </a>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Nivel 2 — Ritmo / avance -->
+        @if (showDeliveryKpis() || showOrderKpis()) {
+          <div class="home-block home-span-6">
+            <h2 class="home-card-title">Ritmo del día</h2>
+            <p class="home-card-note">
+              ¿Vamos a llegar? Avance de hoy sobre lo cargado hasta ahora.
             </p>
-          } @else {
-            <div class="home-bar-chart">
-              @for (row of deliveryStatusBars(); track row.code) {
-                <div class="home-bar-row">
-                  <span class="home-bar-label">{{ row.name }}</span>
-                  <div class="home-bar-track">
-                    <div
-                      class="home-bar-fill"
-                      [style.width.%]="row.pct"
-                      [style.background]="row.colorVar"
-                    ></div>
-                  </div>
-                  <span class="home-bar-count">{{ row.count }}</span>
+
+            @if (showOrderKpis()) {
+              <div class="home-progress">
+                <div class="home-progress-head">
+                  <span>Pedidos → facturación</span>
+                  <span class="home-progress-pct">{{ orderProgressPct() }}%</span>
                 </div>
-              }
-            </div>
-          }
-        </div>
-      }
-
-      @if (showDeliveryKpis()) {
-        <div class="home-kpi-grid">
-          <div class="home-kpi">
-            <span class="home-kpi-value">{{ totalBatches() }}</span>
-            <span class="home-kpi-label">Planillas totales</span>
-          </div>
-          @for (row of statusBars(); track row.code) {
-            <div class="home-kpi">
-              <span class="home-kpi-value">
-                <span class="home-kpi-dot" [style.background]="row.colorVar"></span>{{ row.count }}
-              </span>
-              <span class="home-kpi-label">{{ row.name }}</span>
-            </div>
-          }
-          <div class="home-kpi">
-            <span class="home-kpi-value">{{ formatSoles(kpis().totalAmount) }}</span>
-            <span class="home-kpi-label">Monto en reparto</span>
-          </div>
-          <div class="home-kpi">
-            <span class="home-kpi-value">{{ formatSoles(kpis().netAmount) }}</span>
-            <span class="home-kpi-label">Monto neto (post-devoluciones)</span>
-          </div>
-        </div>
-
-        <div class="home-chart-card">
-          <h2 class="home-card-title">Planillas por estado</h2>
-          <p class="home-card-note">
-            Calculado sobre la muestra cargada ({{ batches().length }} de {{ totalBatches() }}
-            planillas).
-          </p>
-          @if (batchesLoading()) {
-            <div class="home-chart-skeleton" role="status" aria-label="Cargando"></div>
-          } @else if (batches().length === 0) {
-            <p class="home-chart-empty">Todavía no hay planillas registradas.</p>
-          } @else {
-            <div class="home-bar-chart">
-              @for (row of statusBars(); track row.code) {
-                <div class="home-bar-row">
-                  <span class="home-bar-label">{{ row.name }}</span>
-                  <div class="home-bar-track">
-                    <div
-                      class="home-bar-fill"
-                      [style.width.%]="row.pct"
-                      [style.background]="row.colorVar"
-                    ></div>
-                  </div>
-                  <span class="home-bar-count">{{ row.count }}</span>
+                <div class="home-progress-track">
+                  <div class="home-progress-fill is-ok" [style.width.%]="orderProgressPct()"></div>
                 </div>
-              }
-            </div>
-          }
-        </div>
-      }
-
-      @if (showInvoiceKpis()) {
-        <div class="home-unmatched-card">
-          <div class="home-unmatched-head">
-            <div>
-              <h2 class="home-card-title">Facturas sin conciliar</h2>
-              <p class="home-card-note">Bandeja de trabajo de conciliación.</p>
-            </div>
-            <a routerLink="/facturas" class="home-unmatched-link">Ver todas →</a>
-          </div>
-
-          @if (invoicesLoading()) {
-            <div class="home-chart-skeleton" role="status" aria-label="Cargando"></div>
-          } @else {
-            <div class="home-unmatched-count">{{ unmatchedTotal() }}</div>
-            @if (unmatchedInvoices().length === 0) {
-              <p class="home-chart-empty">Todas las facturas están conciliadas.</p>
-            } @else {
-              <div class="home-unmatched-list">
-                @for (inv of unmatchedInvoices(); track inv.invoiceId) {
-                  <div class="home-unmatched-row">
-                    <span class="home-unmatched-customer">{{ inv.customerName }}</span>
-                    <span class="home-unmatched-amount">{{ formatSoles(inv.grandTotal) }}</span>
-                  </div>
+                <span class="home-progress-note"
+                  >{{ orderKpis().billedCount }} de {{ orderKpis().todayCount }} pedidos de hoy ya
+                  avanzaron de estado.</span
+                >
+              </div>
+            }
+            @if (showDeliveryKpis()) {
+              <div class="home-progress">
+                <div class="home-progress-head">
+                  <span>Planillas → liquidadas</span>
+                  <span class="home-progress-pct">{{ batchProgressPct() }}%</span>
+                </div>
+                <div class="home-progress-track">
+                  <div class="home-progress-fill is-ok" [style.width.%]="batchProgressPct()"></div>
+                </div>
+                @if (todayBatches().length === 0) {
+                  <span class="home-progress-note">Todavía no hay planillas con fecha de hoy.</span>
+                } @else {
+                  <span class="home-progress-note">
+                    @for (row of batchFunnel(); track row.code) {
+                      <a
+                        class="home-funnel-chip"
+                        routerLink="/reparto"
+                        [queryParams]="{ estado: row.code }"
+                      >
+                        <span class="home-kpi-dot" [style.background]="row.colorVar"></span>
+                        {{ row.name }} {{ row.count }}
+                      </a>
+                    }
+                  </span>
                 }
               </div>
             }
-          }
-        </div>
-      }
+          </div>
+        }
+
+        <!-- Nivel 3 — Contexto -->
+        @if (showOrderKpis()) {
+          <div class="home-block home-span-6">
+            <h2 class="home-card-title">Qué se rompe — reparto por pedido</h2>
+            <p class="home-card-note">
+              Sobre la muestra cargada ({{ orders().length }} de {{ totalOrders() }} pedidos).
+            </p>
+            @if (ordersLoading()) {
+              <div class="home-chart-skeleton" role="status" aria-label="Cargando"></div>
+            } @else if (deliveryStatusBars().length === 0) {
+              <p class="home-chart-empty">
+                Ningún pedido de la muestra tiene reparto asociado todavía.
+              </p>
+            } @else {
+              <div class="home-bar-chart">
+                @for (row of deliveryStatusBars(); track row.code) {
+                  <a
+                    class="home-bar-row"
+                    routerLink="/pedidos"
+                    [queryParams]="{ reparto: row.code }"
+                  >
+                    <span class="home-bar-label">{{ row.name }}</span>
+                    <div class="home-bar-track">
+                      <div
+                        class="home-bar-fill"
+                        [style.width.%]="row.pct"
+                        [style.background]="row.colorVar"
+                      ></div>
+                    </div>
+                    <span class="home-bar-count">{{ row.count }}</span>
+                  </a>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Nivel 4 — Acciones pendientes -->
+        @if (actionItems().length > 0) {
+          <div class="home-block home-span-12">
+            <h2 class="home-card-title">Qué decido ahora</h2>
+            <p class="home-card-note">
+              Hasta 5 pendientes concretos, cada uno con su acción directa.
+            </p>
+            <div class="home-actions-list">
+              @for (item of actionItems(); track item.id) {
+                <div class="home-action-row">
+                  <div>
+                    <span class="home-action-title">{{ item.title }}</span>
+                    <span class="home-action-subtitle">{{ item.subtitle }}</span>
+                  </div>
+                  <div class="home-action-tail">
+                    @if (item.amount != null) {
+                      <span class="home-action-amount">{{ formatSoles(item.amount) }}</span>
+                    }
+                    <button uiButton variant="secondary" size="sm" [routerLink]="item.link">
+                      {{ item.actionLabel }}
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
 
       <div class="home-section-label">Disponible</div>
       <div class="home-grid">
@@ -269,23 +325,86 @@ const ORDER_SAMPLE_SIZE = 100; // GET /orders no filtra por fecha en backend
         max-width: 620px;
       }
 
-      /* — KPIs — */
-      .home-kpi-grid {
+      /* — Rejilla de 12 columnas — */
+      .home-grid-12 {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
-        gap: 14px;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 16px;
         margin-top: 24px;
+      }
+      .home-span-12 {
+        grid-column: span 12;
+      }
+      .home-span-6 {
+        grid-column: span 6;
+      }
+      .home-block {
+        border: 1px solid var(--hairline);
+        padding: 18px 20px;
+      }
+      .home-card-title {
+        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
+        margin: 0;
+        color: var(--ink);
+      }
+      .home-card-note {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .home-chart-skeleton {
+        height: 100px;
+        background: var(--faint);
+        margin-top: 14px;
+      }
+      .home-chart-empty {
+        margin: 14px 0 0;
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+
+      /* — Nivel 1: semáforo — */
+      .home-day-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .home-day-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .home-day-status.is-ok .home-day-dot {
+        background: var(--status-ok);
+      }
+      .home-day-status.is-warn .home-day-dot {
+        background: var(--status-warn);
+      }
+      .home-day-status.is-danger .home-day-dot {
+        background: var(--status-danger);
+      }
+      .home-day-label {
+        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
+        color: var(--ink);
+      }
+
+      /* — Nivel 1: tiras de KPI — */
+      .home-kpi-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
+        gap: 14px;
+        margin-top: 18px;
       }
       .home-kpi {
         border: 1px solid var(--hairline);
         padding: 14px 16px;
-      }
-      .home-kpi-link {
         text-decoration: none;
         color: inherit;
+        display: block;
         transition: border-color var(--dur-fast) var(--ease-standard);
       }
-      .home-kpi-link:hover {
+      .home-kpi:hover {
         border-color: var(--accent);
       }
       .home-kpi-value {
@@ -309,36 +428,65 @@ const ORDER_SAMPLE_SIZE = 100; // GET /orders no filtra por fecha en backend
         font-size: 12px;
         color: var(--ink-muted);
       }
+      .home-kpi-compare {
+        display: block;
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
 
-      /* — Tarjetas (gráfico / sin conciliar) — */
-      .home-chart-card,
-      .home-unmatched-card {
-        border: 1px solid var(--hairline);
-        padding: 18px 20px;
+      /* — Nivel 2: barras de progreso — */
+      .home-progress {
         margin-top: 18px;
       }
-      .home-card-title {
-        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
-        margin: 0;
-        color: var(--ink);
+      .home-progress:first-of-type {
+        margin-top: 16px;
       }
-      .home-card-note {
-        margin: 4px 0 0;
+      .home-progress-head {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--ink);
+        margin-bottom: 6px;
+      }
+      .home-progress-pct {
+        font-weight: 800;
+        font-variant-numeric: var(--tnum);
+      }
+      .home-progress-track {
+        height: 14px;
+        background: var(--faint);
+      }
+      .home-progress-fill {
+        height: 100%;
+        transition: width var(--dur-base) var(--ease-standard);
+      }
+      .home-progress-fill.is-ok {
+        background: var(--status-ok);
+      }
+      .home-progress-note {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
         font-size: 12px;
         color: var(--ink-muted);
       }
-      .home-chart-skeleton {
-        height: 100px;
-        background: var(--faint);
-        margin-top: 14px;
-      }
-      .home-chart-empty {
-        margin: 14px 0 0;
-        font-size: 13px;
+      .home-funnel-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        text-decoration: none;
         color: var(--ink-muted);
+        border: 1px solid var(--hairline);
+        padding: 2px 8px;
+      }
+      .home-funnel-chip:hover {
+        border-color: var(--accent);
+        color: var(--ink);
       }
 
-      /* — Gráfico de barras (sin librería externa) — */
+      /* — Nivel 3: gráfico de barras — */
       .home-bar-chart {
         display: grid;
         gap: 10px;
@@ -349,6 +497,8 @@ const ORDER_SAMPLE_SIZE = 100; // GET /orders no filtra por fecha en backend
         grid-template-columns: 90px 1fr 36px;
         align-items: center;
         gap: 10px;
+        text-decoration: none;
+        color: inherit;
       }
       .home-bar-label {
         font-size: 13px;
@@ -370,51 +520,43 @@ const ORDER_SAMPLE_SIZE = 100; // GET /orders no filtra por fecha en backend
         font-variant-numeric: var(--tnum);
       }
 
-      /* — Sin conciliar — */
-      .home-unmatched-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-      .home-unmatched-link {
-        font-size: 13px;
-        font-weight: 800;
-        color: var(--accent);
-        text-decoration: none;
-        white-space: nowrap;
-      }
-      .home-unmatched-link:hover {
-        text-decoration: underline;
-      }
-      .home-unmatched-count {
-        font-size: var(--fs-metric);
-        font-weight: var(--fw-metric);
-        color: var(--accent-ink);
-        margin-top: 12px;
-        font-variant-numeric: var(--tnum);
-      }
-      .home-unmatched-list {
+      /* — Nivel 4: lista de acciones — */
+      .home-actions-list {
         display: grid;
         gap: 1px;
         background: var(--hairline);
         border: 1px solid var(--hairline);
-        margin-top: 12px;
+        margin-top: 16px;
       }
-      .home-unmatched-row {
+      .home-action-row {
         display: flex;
+        align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: 16px;
         background: var(--bg);
-        padding: 8px 10px;
-        font-size: 13px;
+        padding: 12px 16px;
+        flex-wrap: wrap;
       }
-      .home-unmatched-customer {
+      .home-action-title {
+        display: block;
+        font-weight: 800;
+        font-size: 14px;
         color: var(--ink);
       }
-      .home-unmatched-amount {
+      .home-action-subtitle {
+        display: block;
+        font-size: 12px;
         color: var(--ink-muted);
+      }
+      .home-action-tail {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .home-action-amount {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
         font-variant-numeric: var(--tnum);
       }
 
@@ -469,12 +611,25 @@ const ORDER_SAMPLE_SIZE = 100; // GET /orders no filtra por fecha en backend
         line-height: 1.45;
       }
 
+      @media (max-width: 900px) {
+        .home-span-6 {
+          grid-column: span 12;
+        }
+      }
       @media (max-width: 767px) {
         .home-page {
           padding: var(--sp-4);
         }
-        .home-bar-row {
-          grid-template-columns: 76px 1fr 30px;
+        .home-grid-12 {
+          grid-template-columns: 1fr;
+        }
+        .home-span-12,
+        .home-span-6 {
+          grid-column: 1;
+        }
+        .home-action-row {
+          flex-direction: column;
+          align-items: flex-start;
         }
       }
     `,
@@ -488,8 +643,6 @@ export class DashboardPage {
 
   readonly user = this.auth.currentUser;
   readonly promoPermissions = ['promo.create', 'promo.approve', 'promo.allocate'];
-  protected readonly orderOpenColorVar = 'var(--st-open)';
-  protected readonly orderBilledColorVar = 'var(--st-sent-to-billing)';
 
   protected formatSoles = formatSoles;
 
@@ -499,6 +652,9 @@ export class DashboardPage {
   protected showInvoiceKpis = computed(() => this.auth.hasAny('invoice.reconcile'));
   protected showOrderKpis = computed(() => this.auth.hasAny('order.view_all', 'order.create'));
   protected showPendingBonuses = computed(() => this.auth.hasAny('order.view_all'));
+  protected showDayStatus = computed(
+    () => this.showOrderKpis() || this.showPendingBonuses() || this.showInvoiceKpis(),
+  );
 
   protected batches = signal<BatchSummary[]>([]);
   protected totalBatches = signal(0);
@@ -511,41 +667,40 @@ export class DashboardPage {
   protected orders = signal<OrderSummary[]>([]);
   protected totalOrders = signal(0);
   protected ordersLoading = signal(false);
-  protected pendingBonusesCount = signal(0);
 
-  protected kpis = computed(() => {
-    const rows = this.batches();
-    return {
-      totalAmount: rows.reduce((sum, b) => sum + b.totalAmount, 0),
-      netAmount: rows.reduce((sum, b) => sum + b.netAmount, 0),
-    };
+  protected pendingBonusOrders = signal<PendingBonusOrderView[]>([]);
+
+  protected todayOrders = computed(() => this.orders().filter((o) => isToday(o.orderDate)));
+
+  protected avgOrdersPerDay = computed(() => {
+    const rows = this.orders().filter((o) => !isToday(o.orderDate));
+    if (rows.length === 0) return 0;
+    const days = new Set(rows.map((o) => new Date(o.orderDate).toDateString()));
+    return Math.round(rows.length / days.size);
   });
 
-  protected statusBars = computed(() => {
-    const rows = this.batches();
-    const total = rows.length || 1;
-    return BATCH_STATUS_OPTIONS.map((opt) => {
-      const count = rows.filter((b) => b.statusCode === opt.code).length;
-      return {
-        code: opt.code,
-        name: opt.name,
-        count,
-        pct: Math.round((count / total) * 100),
-        colorVar: `var(${BATCH_STATUS_COLOR_VAR[opt.code]})`,
-      };
-    });
+  protected avgAmountPerDay = computed(() => {
+    const rows = this.orders().filter((o) => !isToday(o.orderDate));
+    if (rows.length === 0) return 0;
+    const days = new Set(rows.map((o) => new Date(o.orderDate).toDateString()));
+    const total = rows.reduce((sum, o) => sum + o.netAmount, 0);
+    return total / days.size;
   });
 
   protected orderKpis = computed(() => {
-    const rows = this.orders();
-    const today = new Date().toDateString();
-    const todayRows = rows.filter((o) => new Date(o.orderDate).toDateString() === today);
+    const rows = this.todayOrders();
     return {
-      todayCount: todayRows.length,
-      todayAmount: todayRows.reduce((sum, o) => sum + o.netAmount, 0),
+      todayCount: rows.length,
+      todayAmount: rows.reduce((sum, o) => sum + o.netAmount, 0),
       openCount: rows.filter((o) => o.statusCode === 'OPEN').length,
       billedCount: rows.filter((o) => o.statusCode === 'SENT_TO_BILLING').length,
     };
+  });
+
+  protected orderProgressPct = computed(() => {
+    const rows = this.todayOrders();
+    if (rows.length === 0) return 0;
+    return Math.round((rows.filter((o) => o.statusCode !== 'OPEN').length / rows.length) * 100);
   });
 
   protected deliveryStatusBars = computed(() => {
@@ -563,6 +718,124 @@ export class DashboardPage {
         colorVar: `var(${DELIVERY_STATUS_COLOR_VAR[opt.code]})`,
       };
     });
+  });
+
+  protected todayBatches = computed(() => {
+    const today = todayIsoDate();
+    return this.batches().filter((b) => b.batchDate === today);
+  });
+
+  protected batchFunnel = computed<FunnelRow[]>(() => {
+    const rows = this.todayBatches();
+    const total = rows.length || 1;
+    const of = (code: string, name: string, colorVar: string) => {
+      const count = rows.filter((b) => b.statusCode === code).length;
+      return { code, name, count, pct: Math.round((count / total) * 100), colorVar };
+    };
+    return [
+      of('OPEN', 'Abiertas', 'var(--st-open)'),
+      of('IN_ROUTE', 'En ruta', 'var(--st-in-route)'),
+      of('SETTLED', 'Liquidadas', 'var(--st-settled)'),
+    ];
+  });
+
+  protected batchProgressPct = computed(() => {
+    const rows = this.todayBatches();
+    if (rows.length === 0) return 0;
+    return Math.round((rows.filter((b) => b.statusCode !== 'OPEN').length / rows.length) * 100);
+  });
+
+  protected unmatchedTodayCount = computed(
+    () => this.unmatchedInvoices().filter((i) => isToday(i.issueDate)).length,
+  );
+
+  protected dayStatus = computed(() => {
+    const rejectedCount = this.orders().filter((o) => o.deliveryStatusCode === 'REJECTED').length;
+    const mismatchCount = this.unmatchedInvoices().filter(
+      (i) => i.matchStatusCode === 'MISMATCH',
+    ).length;
+    const openNoTeamToday = this.todayBatches().filter(
+      (b) => b.statusCode === 'OPEN' && b.deliveryTeamId == null,
+    ).length;
+
+    if (rejectedCount > 0 || mismatchCount > 0) {
+      return { level: 'danger', label: 'Atención — hay pendientes críticos hoy' };
+    }
+    if (this.pendingBonusOrders().length > 0 || this.unmatchedTotal() > 0 || openNoTeamToday > 0) {
+      return { level: 'warn', label: 'Bajo control — con pendientes' };
+    }
+    return { level: 'ok', label: 'Día tranquilo' };
+  });
+
+  protected actionItems = computed<ActionItem[]>(() => {
+    const items: ActionItem[] = [];
+
+    for (const o of this.orders()
+      .filter((o) => o.deliveryStatusCode === 'REJECTED')
+      .slice(0, 2)) {
+      items.push({
+        id: `rejected-${o.orderId}`,
+        title: o.customerName,
+        subtitle: `Pedido #${o.orderId} — rechazado en reparto`,
+        actionLabel: 'Ver pedido',
+        link: ['/pedidos/detalle', o.orderId],
+      });
+    }
+
+    for (const inv of this.unmatchedInvoices()
+      .filter((i) => i.matchStatusCode === 'MISMATCH')
+      .slice(0, 2)) {
+      items.push({
+        id: `mismatch-${inv.invoiceId}`,
+        title: inv.customerName,
+        subtitle: `Factura ${inv.series}-${inv.number} — con diferencia`,
+        amount: inv.grandTotal,
+        actionLabel: 'Revisar',
+        link: ['/factura', inv.invoiceId],
+      });
+    }
+
+    const today = todayIsoDate();
+    for (const b of this.batches()
+      .filter((b) => b.batchDate === today && b.statusCode === 'OPEN' && b.deliveryTeamId == null)
+      .slice(0, 2)) {
+      items.push({
+        id: `no-team-${b.batchId}`,
+        title: `Planilla ${b.series}-${b.number}`,
+        subtitle: 'Abierta hoy — sin equipo asignado',
+        actionLabel: 'Asignar equipo',
+        link: ['/reparto', b.batchId],
+      });
+    }
+
+    if (items.length < 5) {
+      for (const inv of this.unmatchedInvoices()
+        .filter((i) => i.matchStatusCode !== 'MISMATCH')
+        .slice(0, 5 - items.length)) {
+        items.push({
+          id: `unmatched-${inv.invoiceId}`,
+          title: inv.customerName,
+          subtitle: `Factura ${inv.series}-${inv.number} — sin conciliar`,
+          amount: inv.grandTotal,
+          actionLabel: 'Conciliar',
+          link: ['/factura', inv.invoiceId],
+        });
+      }
+    }
+
+    if (items.length < 5) {
+      for (const o of this.pendingBonusOrders().slice(0, 5 - items.length)) {
+        items.push({
+          id: `bonus-${o.orderId}`,
+          title: o.customerName,
+          subtitle: `Pedido #${o.orderId} — bonificación pendiente`,
+          actionLabel: 'Ver pedido',
+          link: ['/pedidos/detalle', o.orderId],
+        });
+      }
+    }
+
+    return items.slice(0, 5);
   });
 
   /** Los módulos apagados que este usuario sí puede ver en el menú. */
@@ -591,7 +864,7 @@ export class DashboardPage {
 
   private loadUnmatched() {
     this.invoicesLoading.set(true);
-    this.invoiceSvc.unmatched({ page: 0, size: 5 }).subscribe({
+    this.invoiceSvc.unmatched({ page: 0, size: INVOICE_SAMPLE_SIZE }).subscribe({
       next: (result) => {
         this.unmatchedInvoices.set(result.content ?? []);
         this.unmatchedTotal.set(result.totalElements ?? 0);
@@ -615,7 +888,7 @@ export class DashboardPage {
 
   private loadPendingBonuses() {
     this.orderSvc.pendingBonuses().subscribe({
-      next: (list) => this.pendingBonusesCount.set(list.length),
+      next: (list) => this.pendingBonusOrders.set(list),
       error: () => {},
     });
   }

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
@@ -255,6 +255,9 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
 export class DeliveryBatchesPage {
   private deliverySvc = inject(DeliveryAdminService);
 
+  /** Query param opcional para llegar con el filtro de estado ya aplicado (p.ej. desde el home). */
+  estado = input('', { alias: 'estado' });
+
   protected dateText = dateText;
   protected formatSoles = formatSoles;
   protected statusName = batchStatusName;
@@ -272,6 +275,13 @@ export class DeliveryBatchesPage {
   protected filteredRows = computed(() => {
     const filter = this.statusFilter();
     return filter ? this.rows().filter((b) => b.statusCode === filter) : this.rows();
+  });
+
+  private seedQueryFilterEffect = effect(() => {
+    const estado = this.estado();
+    untracked(() => {
+      if (estado) this.statusFilter.set(estado);
+    });
   });
 
   constructor() {

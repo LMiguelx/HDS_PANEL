@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
@@ -292,6 +292,10 @@ export class OrderListPage {
   private orderSvc = inject(OrderAdminService);
   private lookupSvc = inject(LookupService);
 
+  /** Query params opcionales para llegar con un filtro ya aplicado (p.ej. desde el home). */
+  estado = input('', { alias: 'estado' });
+  reparto = input('', { alias: 'reparto' });
+
   protected dateTimeText = dateTimeText;
   protected formatSoles = formatSoles;
   protected statusName = orderStatusName;
@@ -341,6 +345,15 @@ export class OrderListPage {
     untracked(() => {
       this.page.set(0);
       this.load();
+    });
+  });
+
+  private seedQueryFiltersEffect = effect(() => {
+    const estado = this.estado();
+    const reparto = this.reparto();
+    untracked(() => {
+      if (estado) this.statusFilter.set(estado);
+      if (reparto) this.deliveryFilter.set(reparto);
     });
   });
 

@@ -1,43 +1,61 @@
 ﻿:root {
   // ---- Estados de negocio (mapea STATUS_COLORS del archivo 10) ----
   // Pedido
-  --st-open:            light-dark(#1e6fd6, #7fb4ff); // Abierto
+  --st-open: light-dark(#1e6fd6, #7fb4ff); // Abierto
   --st-sent-to-billing: light-dark(#1a8f4c, #5ed98a); // Enviado a facturación
-  --st-cancelled:       light-dark(#d13b3b, #ff8a80); // Cancelado
+  --st-cancelled: light-dark(#d13b3b, #ff8a80); // Cancelado
   // Planilla
-  --st-in-route:        light-dark(#e07d1a, #ffb865); // En ruta
-  --st-settled:         light-dark(#1a8f4c, #5ed98a); // Liquidada
+  --st-in-route: light-dark(#e07d1a, #ffb865); // En ruta
+  --st-settled: light-dark(#1a8f4c, #5ed98a); // Liquidada
   // Comprobante de planilla
-  --st-pending:         light-dark(#6b7280, #b6bcc6); // Pendiente
-  --st-delivered:       light-dark(#1a8f4c, #5ed98a); // Entregado
-  --st-partial:         light-dark(#e07d1a, #ffb865); // Parcial
-  --st-rejected:        light-dark(#d13b3b, #ff8a80); // Rechazado
+  --st-pending: light-dark(#6b7280, #b6bcc6); // Pendiente
+  --st-delivered: light-dark(#1a8f4c, #5ed98a); // Entregado
+  --st-partial: light-dark(#e07d1a, #ffb865); // Parcial
+  --st-rejected: light-dark(#d13b3b, #ff8a80); // Rechazado
   // Conciliación de factura
-  --st-unmatched:       light-dark(#6b7280, #b6bcc6); // Sin conciliar
-  --st-matched-auto:    light-dark(#1a8f4c, #5ed98a); // Conciliada (auto)
-  --st-matched-manual:  light-dark(#0f8f8f, #57d4d4); // Conciliada (manual)
-  --st-mismatch:        light-dark(#d13b3b, #ff8a80); // Diferencia
+  --st-unmatched: light-dark(#6b7280, #b6bcc6); // Sin conciliar
+  --st-matched-auto: light-dark(#1a8f4c, #5ed98a); // Conciliada (auto)
+  --st-matched-manual: light-dark(#0f8f8f, #57d4d4); // Conciliada (manual)
+  --st-mismatch: light-dark(#d13b3b, #ff8a80); // Diferencia
   // Visita
-  --st-attended:        light-dark(#1a8f4c, #5ed98a); // Atendido
-  --st-closed:          light-dark(#6b7280, #b6bcc6); // Cerrado
-  --st-no-purchase:     light-dark(#e07d1a, #ffb865); // No compró
+  --st-attended: light-dark(#1a8f4c, #5ed98a); // Atendido
+  --st-closed: light-dark(#6b7280, #b6bcc6); // Cerrado
+  --st-no-purchase: light-dark(#e07d1a, #ffb865); // No compró
+
+  // Semáforo genérico (home) — mismos valores que --st-sent-to-billing /
+  // --st-in-route / --st-cancelled, con nombre neutro para uso fuera de un
+  // dominio de negocio puntual (estado del día, salud operativa).
+  --status-ok: light-dark(#1a8f4c, #5ed98a);
+  --status-warn: light-dark(#e07d1a, #ffb865);
+  --status-danger: light-dark(#d13b3b, #ff8a80);
 
   // ---- Espaciado (escala 4px) ----
-  --sp-1: 4px;   --sp-2: 8px;   --sp-3: 12px;  --sp-4: 16px;
-  --sp-5: 20px;  --sp-6: 24px;  --sp-8: 32px;  --sp-10: 40px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
 
   // ---- Objetivo táctil (calle, archivo 10.8: botones ≥ 44px) ----
   --touch-min: 44px;
 
   // ---- Radios ----
-  --radius-sm: 8px;  --radius-md: 12px;  --radius-lg: 16px;  --radius-pill: 999px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
 
   // ---- Anchos de tarjeta (.card en páginas) — 3 tamaños con nombre en vez de
   // números sueltos por archivo (formularios simples / formularios con grillas / tablas anchas) ----
-  --card-w-sm: 640px;  --card-w-md: 820px;  --card-w-lg: 920px;
+  --card-w-sm: 640px;
+  --card-w-md: 820px;
+  --card-w-lg: 920px;
 
   // ---- Sombras suaves (encima de las de Material) ----
-  --shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.06);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.06);
 
   // ==========================================================================
   // Módulo de Promociones — sistema nuevo (sin Material, radio 0)
@@ -49,54 +67,66 @@
   color-scheme: light dark;
 
   /* — Superficies y tinta — */
-  --bg:            light-dark(#f3f2f2, #1a1918);
-  --surface:       light-dark(#eae9e9, #242221);
-  --surface-sunk:  light-dark(#f8f4f4, #201e1d);
-  --ink:           light-dark(#201e1d, #f3f2f2);
-  --ink-muted:     light-dark(#605d5d, #a09b98);
-  --divider:       light-dark(rgba(32,30,29,.40), rgba(243,242,242,.26)); /* 2px, secciones */
-  --hairline:      light-dark(rgba(32,30,29,.14), rgba(243,242,242,.14)); /* 1px, filas */
-  --faint:         light-dark(rgba(32,30,29,.06), rgba(243,242,242,.06)); /* relleno sutil */
+  --bg: light-dark(#f3f2f2, #1a1918);
+  --surface: light-dark(#eae9e9, #242221);
+  --surface-sunk: light-dark(#f8f4f4, #201e1d);
+  --ink: light-dark(#201e1d, #f3f2f2);
+  --ink-muted: light-dark(#605d5d, #a09b98);
+  --divider: light-dark(rgba(32, 30, 29, 0.4), rgba(243, 242, 242, 0.26)); /* 2px, secciones */
+  --hairline: light-dark(rgba(32, 30, 29, 0.14), rgba(243, 242, 242, 0.14)); /* 1px, filas */
+  --faint: light-dark(rgba(32, 30, 29, 0.06), rgba(243, 242, 242, 0.06)); /* relleno sutil */
 
   /* — Acento (una sola familia; rojo institucional) — */
-  --accent:        #ec3013;
-  --accent-hover:  light-dark(#dd2b0f, #ff563c);
-  --accent-press:  light-dark(#ae1800, #ff9783);
-  --accent-ink:    light-dark(#ae1800, #ff9783);  /* acento en texto tamaño párrafo */
-  --accent-wash:   light-dark(#fff2ef, rgba(236,48,19,.16));
-  --on-accent:     light-dark(#f3f2f2, #1a1918);
+  --accent: #ec3013;
+  --accent-hover: light-dark(#dd2b0f, #ff563c);
+  --accent-press: light-dark(#ae1800, #ff9783);
+  --accent-ink: light-dark(#ae1800, #ff9783); /* acento en texto tamaño párrafo */
+  --accent-wash: light-dark(#fff2ef, rgba(236, 48, 19, 0.16));
+  --on-accent: light-dark(#f3f2f2, #1a1918);
 
   /* — Estados de promoción (nuevos; mismo patrón que --st-*) — */
-  --st-vigente:    light-dark(#0d6b3f, #54d19a);
+  --st-vigente: light-dark(#0d6b3f, #54d19a);
   --st-programada: light-dark(#1d4ed8, #92b6ff);
-  --st-vencida:    light-dark(#6b6663, #a09b98);
-  --st-apagada:    light-dark(#8a5a00, #e0b055);
-  --st-pendiente:  light-dark(#b03a00, #ffab7a);
-  --st-sin-stock:  light-dark(#6b6663, #7d7979);
+  --st-vencida: light-dark(#6b6663, #a09b98);
+  --st-apagada: light-dark(#8a5a00, #e0b055);
+  --st-pendiente: light-dark(#b03a00, #ffab7a);
+  --st-sin-stock: light-dark(#6b6663, #7d7979);
 
   /* — Tipografía (Archivo 400/600/800) — */
   --font-sans: 'Archivo', system-ui, sans-serif;
-  --fs-display: 30px; --lh-display: 1.12; --fw-display: 800;
-  --fs-h1: 24px;      --lh-h1: 1.15;     --fw-h1: 800;
-  --fs-h2: 18px;      --lh-h2: 1.25;     --fw-h2: 800;
-  --fs-body: 15px;    --lh-body: 1.55;   --fw-body: 400;
-  --fs-dense: 14px;   --lh-dense: 1.45;  /* tablas y matrices */
-  --fs-meta: 12px;    --lh-meta: 1.4;    /* dato secundario, códigos */
-  --fs-label: 11px;   --ls-label: .08em; /* mayúsculas de cabecera */
-  --fs-metric: 22px;  --fw-metric: 800;  /* saldo disponible, KPI */
-  --tnum: tabular-nums;                  /* font-variant-numeric en cifras */
+  --fs-display: 30px;
+  --lh-display: 1.12;
+  --fw-display: 800;
+  --fs-h1: 24px;
+  --lh-h1: 1.15;
+  --fw-h1: 800;
+  --fs-h2: 18px;
+  --lh-h2: 1.25;
+  --fw-h2: 800;
+  --fs-body: 15px;
+  --lh-body: 1.55;
+  --fw-body: 400;
+  --fs-dense: 14px;
+  --lh-dense: 1.45; /* tablas y matrices */
+  --fs-meta: 12px;
+  --lh-meta: 1.4; /* dato secundario, códigos */
+  --fs-label: 11px;
+  --ls-label: 0.08em; /* mayúsculas de cabecera */
+  --fs-metric: 22px;
+  --fw-metric: 800; /* saldo disponible, KPI */
+  --tnum: tabular-nums; /* font-variant-numeric en cifras */
 
   /* — Bordes y elevación — */
   --border-hair: 1px solid var(--hairline);
   --border-rule: 2px solid var(--divider);
   --border-focus: 2px solid var(--accent);
-  --elev-menu: 0 3px 10px light-dark(rgba(45, 43, 43, .16), rgba(0, 0, 0, .5));
-  --elev-dialog: 0 12px 32px light-dark(rgba(45, 43, 43, .22), rgba(0, 0, 0, .6));
+  --elev-menu: 0 3px 10px light-dark(rgba(45, 43, 43, 0.16), rgba(0, 0, 0, 0.5));
+  --elev-dialog: 0 12px 32px light-dark(rgba(45, 43, 43, 0.22), rgba(0, 0, 0, 0.6));
 
   /* — Motion (definidos ahora, se implementan al cierre) — */
-  --dur-fast: 120ms;   /* hover, foco, cambio de estado de un control */
-  --dur-base: 200ms;   /* entrada de filas, confirmaciones */
-  --dur-slow: 320ms;   /* transición entre pasos del wizard */
-  --ease-standard: cubic-bezier(.2, 0, .2, 1);
-  --ease-exit:     cubic-bezier(.4, 0, 1, 1);
+  --dur-fast: 120ms; /* hover, foco, cambio de estado de un control */
+  --dur-base: 200ms; /* entrada de filas, confirmaciones */
+  --dur-slow: 320ms; /* transición entre pasos del wizard */
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
