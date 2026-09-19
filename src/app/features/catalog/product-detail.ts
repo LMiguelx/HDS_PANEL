@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
@@ -20,7 +21,7 @@ import { formatSoles } from '../../shared/pipes/money';
  */
 @Component({
   selector: 'app-product-detail',
-  imports: [UiButton, UiEmpty],
+  imports: [RouterLink, UiButton, UiEmpty],
   template: `
     <section class="pd-page">
       @if (loading()) {
@@ -40,13 +41,23 @@ import { formatSoles } from '../../shared/pipes/money';
             <h1>{{ p.name }}</h1>
             <p class="pd-meta">{{ p.familyName }} · {{ p.brandName }}</p>
           </div>
-          @if (canEdit()) {
-            <div class="pd-actions">
+          <div class="pd-actions">
+            @if (canViewKardex()) {
+              <button
+                uiButton
+                variant="secondary"
+                [routerLink]="['/inventario/kardex', p.productId]"
+                [queryParams]="{ warehouseId: resolvedWarehouseId() }"
+              >
+                Ver kardex
+              </button>
+            }
+            @if (canEdit()) {
               <button uiButton variant="secondary" (click)="edit(p)">Editar</button>
               <button uiButton variant="secondary" (click)="activate(p)">Activar</button>
               <button uiButton variant="secondary" (click)="deactivate(p)">Desactivar</button>
-            </div>
-          }
+            }
+          </div>
         </div>
 
         <div class="pd-grid">
@@ -247,6 +258,7 @@ export class ProductDetailPage {
   protected canEdit = computed(() => this.auth.hasAny('product.edit'));
   protected showPrices = computed(() => this.auth.hasAny('price.view', 'price.edit'));
   protected canEditPrices = computed(() => this.auth.hasAny('price.edit'));
+  protected canViewKardex = computed(() => this.auth.hasAny('report.view'));
 
   protected product = signal<ProductView | null>(null);
   protected loading = signal(true);

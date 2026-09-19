@@ -298,6 +298,22 @@ function isToday(isoDateTime: string): boolean {
           <span class="home-tile-name">Catálogo y precios</span>
           <span class="home-tile-note">Productos, escala de precios y seguimiento sin precio.</span>
         </a>
+        <a
+          class="home-tile is-ready"
+          routerLink="/inventario"
+          *hasPermission="['report.view', 'config.edit']"
+        >
+          <span class="home-tile-name">Inventario</span>
+          <span class="home-tile-note">Stock por almacén, kardex y ajustes.</span>
+        </a>
+        <a class="home-tile is-ready" routerLink="/usuarios" *hasPermission="'user.manage'">
+          <span class="home-tile-name">Usuarios</span>
+          <span class="home-tile-note">Alta, roles, contraseñas y estado de cada usuario.</span>
+        </a>
+        <a class="home-tile is-ready" routerLink="/empresa" *hasPermission="'config.edit'">
+          <span class="home-tile-name">Empresa</span>
+          <span class="home-tile-note">Sedes y parámetros de configuración.</span>
+        </a>
       </div>
 
       <div class="home-section-label">Próximamente</div>

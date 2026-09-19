@@ -20,6 +20,12 @@ export const routes: Routes = [
         path: 'dashboard',
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardPage),
       },
+      // Mi perfil — autoservicio, cualquier autenticado (no cuelga de /usuarios,
+      // que sí requiere user.manage).
+      {
+        path: 'mi-perfil',
+        loadComponent: () => import('./features/users/my-profile').then((m) => m.MyProfilePage),
+      },
 
       // Clientes (módulo 2) — rediseñado
       {
@@ -94,12 +100,17 @@ export const routes: Routes = [
           import('./features/billing/invoice-detail').then((m) => m.InvoiceDetailPage),
       },
 
-      // Administración (módulo 7) — sin rediseñar todavía, ver _archive/admin/
+      // Administración (módulo 7) — rediseñado
+      {
+        path: 'usuarios',
+        canActivate: [permissionGuard('user.manage')],
+        loadChildren: () => import('./features/users/user.routes').then((m) => m.USER_ROUTES),
+      },
       {
         path: 'empresa',
         canActivate: [permissionGuard('config.edit')],
-        loadComponent: comingSoon,
-        data: { title: 'Empresa', icon: 'business' },
+        loadChildren: () =>
+          import('./features/company/company.routes').then((m) => m.COMPANY_ROUTES),
       },
       // Catálogo y precios — rediseñado
       {
@@ -110,9 +121,9 @@ export const routes: Routes = [
       },
       {
         path: 'inventario',
-        canActivate: [permissionGuard('report.view')],
-        loadComponent: comingSoon,
-        data: { title: 'Inventario', icon: 'inventory' },
+        canActivate: [permissionGuard('report.view', 'config.edit')],
+        loadChildren: () =>
+          import('./features/inventory/inventory.routes').then((m) => m.INVENTORY_ROUTES),
       },
       // Mantenimiento — rediseñado
       {

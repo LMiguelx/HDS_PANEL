@@ -16,6 +16,7 @@ export const PROMO_ANY_PERMISSION = ['promo.create', 'promo.approve', 'promo.all
 
 export const NAV: NavItem[] = [
   { label: 'Inicio', icon: 'home', route: '/dashboard', anyOf: [] },
+  { label: 'Mi perfil', icon: 'person', route: '/mi-perfil', anyOf: [] },
 
   // Clientes
   {
@@ -117,9 +118,15 @@ export const NAV: NavItem[] = [
     label: 'Inventario',
     icon: 'inventory',
     route: '/inventario',
-    anyOf: ['report.view'],
+    anyOf: ['report.view', 'config.edit'],
     group: 'Administración',
-    comingSoon: true,
+  },
+  {
+    label: 'Usuarios',
+    icon: 'group',
+    route: '/usuarios',
+    anyOf: ['user.manage'],
+    group: 'Administración',
   },
   {
     label: 'Empresa',
@@ -127,7 +134,6 @@ export const NAV: NavItem[] = [
     route: '/empresa',
     anyOf: ['config.edit'],
     group: 'Administración',
-    comingSoon: true,
   },
   {
     label: 'Mantenimiento',

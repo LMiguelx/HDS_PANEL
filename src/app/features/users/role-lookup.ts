@@ -3,13 +3,12 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { Role } from '../../shared/models/auth.models';
 
-/** Catálogo de roles (user.manage). Sin pantalla propia todavía — falta el alta/edición de usuarios. */
+/** RoleController, /api/roles — catálogo de roles activos (`user.manage`). */
 @Injectable({ providedIn: 'root' })
-export class RoleService {
+export class RoleLookupService {
   private http = inject(HttpClient);
-  private base = `${environment.apiUrl}/roles`;
 
   list() {
-    return this.http.get<Role[]>(this.base);
+    return this.http.get<Role[]>(`${environment.apiUrl}/roles`);
   }
 }
