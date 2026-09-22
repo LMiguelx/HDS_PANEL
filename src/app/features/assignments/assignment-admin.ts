@@ -6,6 +6,7 @@ import {
   AssignmentView,
   AutoAssignmentResult,
   CoverageAdminView,
+  CoverageCandidateView,
   CoverageListFilters,
   CoverageView,
   CreateAssignmentCommand,
@@ -73,6 +74,12 @@ export class AssignmentAdminService {
 
   coverage(cmd: CreateCoverageCommand) {
     return this.http.post<CoverageView[]>(`${this.base}/coverage`, cmd);
+  }
+
+  /** Cartera real del vendedor ausente en la fecha dada, para el checklist del modal. */
+  coverageCandidates(userId: number, date: string) {
+    const params = new HttpParams().set('userId', userId).set('date', date);
+    return this.http.get<CoverageCandidateView[]>(`${this.base}/coverage-candidates`, { params });
   }
 
   /** Coberturas ya realizadas — para confirmar que una puntual no siga apareciendo al día siguiente. */

@@ -671,7 +671,6 @@ export class AssignmentMapPage {
       data: {
         absentUserId,
         absentUserName: this.vendorNameFor(absentUserId),
-        customers: this.customers(),
       },
       width: '520px',
     });

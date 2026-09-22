@@ -1,240 +1,268 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth';
 import { NAV, NavItem } from '../../core/layout/nav.config';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
-import { UiButton } from '../../shared/ui/button/button';
-import { DeliveryAdminService } from '../delivery/delivery-admin';
-import { InvoiceAdminService } from '../billing/invoice-admin';
-import { InvoiceSummary } from '../../shared/models/invoice.models';
-import { BatchSummary } from '../../shared/models/delivery.models';
-import { OrderAdminService } from '../orders/order-admin';
-import { OrderSummary, PendingBonusOrderView } from '../../shared/models/order.models';
-import { DELIVERY_STATUS_COLOR_VAR, DELIVERY_STATUS_OPTIONS } from '../orders/order-format';
+import { UiField } from '../../shared/ui/field/field';
+import { UiEmpty } from '../../shared/ui/empty/empty';
+import { DashboardAdminService } from './dashboard-admin';
+import {
+  DashboardCustomersView,
+  DashboardDeliverySummaryView,
+  DashboardOrdersSummaryView,
+  DashboardTodayView,
+  TopProductView,
+} from '../../shared/models/dashboard.models';
+import { BATCH_STATUS_COLOR_VAR, BATCH_STATUS_OPTIONS } from '../delivery/delivery-format';
 import { formatSoles } from '../../shared/pipes/money';
 
-const BATCH_SAMPLE_SIZE = 100; // tope documentado del endpoint (máx. 100)
-const ORDER_SAMPLE_SIZE = 100; // GET /orders no filtra por fecha en backend
-const INVOICE_SAMPLE_SIZE = 100; // GET /invoices/unmatched — mismo tope que los demás listados
-
-interface ActionItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  amount?: number;
-  actionLabel: string;
-  link: (string | number)[];
-}
-
-interface FunnelRow {
-  code: string;
-  name: string;
-  count: number;
-  pct: number;
-  colorVar: string;
-}
-
-function todayIsoDate(): string {
+function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function isToday(isoDateTime: string): boolean {
-  return new Date(isoDateTime).toDateString() === new Date().toDateString();
-}
+const ROLE_AVATAR_COLORS = [
+  'var(--accent)',
+  'var(--st-in-route)',
+  'var(--status-ok)',
+  'var(--st-matched-manual)',
+];
 
 /**
- * Home en 4 niveles — estado del día → ritmo/avance → contexto → acciones
- * pendientes. Todos los KPIs se calculan en frontend sobre las muestras ya
- * cargadas (pedidos/planillas: hasta 100, el máximo documentado; facturas
- * sin conciliar: ídem) — se lo señala en cada bloque. El color se reserva
- * para estado: el semáforo del nivel 1 colapsa a 3 estados genéricos
- * (--status-ok/warn/danger); los gráficos de nivel 2/3 reutilizan los mismos
- * tokens --st-* que ya usan Pedidos/Reparto, para que el color signifique lo
- * mismo en el home que dentro de cada módulo.
+ * Home — resumen del día en 6 bloques (pedidos, reparto, usuarios activos
+ * por rol, mejores ventas, producto en mejor movimiento, clientes
+ * atendidos), todo desde un único endpoint agregado
+ * (GET /api/admin/dashboard/today, `report.view`). Reemplaza la versión
+ * anterior armada en frontend a partir de muestras de otros módulos.
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, HasPermissionDirective, UiButton],
+  imports: [RouterLink, HasPermissionDirective, UiField, UiEmpty],
   template: `
     <section class="home-page">
       <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
-      <p class="home-sub">¿Cómo va el día, vamos a llegar, qué se rompe y qué decido ahora?</p>
+      <p class="home-sub">Resumen del día de un vistazo.</p>
 
-      <div class="home-grid-12">
-        <!-- Nivel 1 — Estado del día -->
-        @if (showDayStatus()) {
-          <div class="home-block home-span-12">
-            <div class="home-day-status" [class]="'is-' + dayStatus().level">
-              <span class="home-day-dot"></span>
-              <span class="home-day-label">{{ dayStatus().label }}</span>
-            </div>
+      @if (showDashboard()) {
+        <div class="home-toolbar">
+          <ui-field label="Fecha" type="date" [(value)]="date" />
+        </div>
 
+        @if (loading()) {
+          <div class="home-dash-skeleton" role="status" aria-label="Cargando"></div>
+        } @else if (error()) {
+          <ui-empty
+            variant="error"
+            title="No pudimos cargar el resumen del día"
+            body="Intenta de nuevo en unos segundos."
+            actionLabel="Reintentar"
+            (action)="load()"
+          />
+        } @else if (data(); as d) {
+          <!-- 1. Pedidos del día -->
+          <div class="home-block">
+            <h2 class="home-block-title">Pedidos del día</h2>
             <div class="home-kpi-row">
-              @if (showOrderKpis()) {
-                <a class="home-kpi" routerLink="/pedidos">
-                  <span class="home-kpi-value">{{ orderKpis().todayCount }}</span>
-                  <span class="home-kpi-label">Pedidos hoy</span>
-                  <span class="home-kpi-compare">vs. {{ avgOrdersPerDay() }}/día prom.</span>
-                </a>
-                <a class="home-kpi" routerLink="/pedidos">
-                  <span class="home-kpi-value">{{ formatSoles(orderKpis().todayAmount) }}</span>
-                  <span class="home-kpi-label">Monto hoy</span>
+              <a class="home-kpi" routerLink="/pedidos">
+                <span class="home-kpi-value">{{ d.orders.totalOrders }}</span>
+                <span class="home-kpi-label">Pedidos hoy</span>
+              </a>
+              <div class="home-kpi">
+                <span class="home-kpi-value">{{ formatSoles(d.orders.totalAmount) }}</span>
+                <span class="home-kpi-label">Monto total</span>
+              </div>
+              <div class="home-kpi">
+                <span class="home-kpi-value">{{ d.orders.totalBonusLines }}</span>
+                <span class="home-kpi-label">Bonificaciones entregadas</span>
+                <span class="home-kpi-compare">{{ d.orders.totalBonusUnits }} unidades</span>
+              </div>
+              <div class="home-kpi">
+                <span class="home-kpi-value">{{ d.orders.topBrandName ?? 'Sin ventas' }}</span>
+                <span class="home-kpi-label">Marca más vendida</span>
+                @if (d.orders.topBrandAmount != null) {
                   <span class="home-kpi-compare"
-                    >vs. {{ formatSoles(avgAmountPerDay()) }}/día prom.</span
+                    >{{ formatSoles(d.orders.topBrandAmount) }} · {{ topBrandPct(d.orders) }}% del
+                    monto del día</span
                   >
-                </a>
-                <a class="home-kpi" routerLink="/pedidos" [queryParams]="{ estado: 'OPEN' }">
-                  <span class="home-kpi-value">{{ orderKpis().openCount }}</span>
-                  <span class="home-kpi-label">Abiertos hoy</span>
-                  <span class="home-kpi-compare">de {{ orderKpis().todayCount }} pedidos hoy</span>
-                </a>
-                <a
-                  class="home-kpi"
-                  routerLink="/pedidos"
-                  [queryParams]="{ estado: 'SENT_TO_BILLING' }"
-                >
-                  <span class="home-kpi-value">{{ orderKpis().billedCount }}</span>
-                  <span class="home-kpi-label">Enviados a facturación hoy</span>
-                  <span class="home-kpi-compare">de {{ orderKpis().todayCount }} pedidos hoy</span>
-                </a>
-              }
-              @if (showPendingBonuses()) {
-                <a class="home-kpi" routerLink="/pedidos/bonificaciones-pendientes">
-                  <span class="home-kpi-value">{{ pendingBonusOrders().length }}</span>
-                  <span class="home-kpi-label">Bonificaciones pendientes</span>
-                  <span class="home-kpi-compare">de {{ orderKpis().openCount }} abiertos hoy</span>
-                </a>
-              }
-              @if (showInvoiceKpis()) {
-                <a class="home-kpi" routerLink="/facturas">
-                  <span class="home-kpi-value">{{ unmatchedTotal() }}</span>
-                  <span class="home-kpi-label">Facturas sin conciliar</span>
-                  <span class="home-kpi-compare">{{ unmatchedTodayCount() }} nuevas hoy</span>
-                </a>
-              }
+                }
+              </div>
             </div>
           </div>
-        }
 
-        <!-- Nivel 2 — Ritmo / avance -->
-        @if (showDeliveryKpis() || showOrderKpis()) {
-          <div class="home-block home-span-6">
-            <h2 class="home-card-title">Ritmo del día</h2>
-            <p class="home-card-note">
-              ¿Vamos a llegar? Avance de hoy sobre lo cargado hasta ahora.
-            </p>
+          <!-- 2. Reparto -->
+          <div class="home-block">
+            <h2 class="home-block-title">Reparto</h2>
+            <div class="home-reparto-grid">
+              <div class="home-reparto-bars">
+                <div class="home-amount-row">
+                  <span class="home-amount-label">Monto definido</span>
+                  <div class="home-amount-track">
+                    <div
+                      class="home-amount-fill"
+                      style="width: 100%; background: var(--st-open)"
+                    ></div>
+                  </div>
+                  <span class="home-amount-value">{{ formatSoles(d.delivery.totalAmount) }}</span>
+                </div>
+                <div class="home-amount-row">
+                  <span class="home-amount-label">Devoluciones</span>
+                  <div class="home-amount-track">
+                    <div
+                      class="home-amount-fill"
+                      [style.width.%]="amountPct(d.delivery.returnedAmount, d.delivery.totalAmount)"
+                      style="background: var(--status-danger)"
+                    ></div>
+                  </div>
+                  <span class="home-amount-value">{{
+                    formatSoles(d.delivery.returnedAmount)
+                  }}</span>
+                </div>
+                <div class="home-amount-row">
+                  <span class="home-amount-label">Monto neto</span>
+                  <div class="home-amount-track">
+                    <div
+                      class="home-amount-fill"
+                      [style.width.%]="amountPct(d.delivery.netAmount, d.delivery.totalAmount)"
+                      style="background: var(--status-ok)"
+                    ></div>
+                  </div>
+                  <span class="home-amount-value">{{ formatSoles(d.delivery.netAmount) }}</span>
+                </div>
 
-            @if (showOrderKpis()) {
-              <div class="home-progress">
-                <div class="home-progress-head">
-                  <span>Pedidos → facturación</span>
-                  <span class="home-progress-pct">{{ orderProgressPct() }}%</span>
+                <div class="home-progress">
+                  <div class="home-progress-head">
+                    <span>Avance de comprobantes</span>
+                    <span class="home-progress-pct">{{ deliveryProgressPct(d.delivery) }}%</span>
+                  </div>
+                  <div class="home-progress-track">
+                    <div
+                      class="home-progress-fill"
+                      [style.width.%]="deliveryProgressPct(d.delivery)"
+                    ></div>
+                  </div>
+                  <span class="home-progress-note"
+                    >{{ d.delivery.totalItems - d.delivery.itemStatusCounts.pending }} de
+                    {{ d.delivery.totalItems }} comprobantes conciliados</span
+                  >
                 </div>
-                <div class="home-progress-track">
-                  <div class="home-progress-fill is-ok" [style.width.%]="orderProgressPct()"></div>
-                </div>
-                <span class="home-progress-note"
-                  >{{ orderKpis().billedCount }} de {{ orderKpis().todayCount }} pedidos de hoy ya
-                  avanzaron de estado.</span
-                >
               </div>
-            }
-            @if (showDeliveryKpis()) {
-              <div class="home-progress">
-                <div class="home-progress-head">
-                  <span>Planillas → liquidadas</span>
-                  <span class="home-progress-pct">{{ batchProgressPct() }}%</span>
+
+              <div class="home-donut-wrap">
+                <span class="home-donut-title">Planillas por estado</span>
+                <div class="home-donut" [style.background]="donutGradient(d.delivery)">
+                  <div class="home-donut-hole">
+                    <span class="home-donut-value">{{ d.delivery.totalBatches }}</span>
+                    <span class="home-donut-label">planillas</span>
+                  </div>
                 </div>
-                <div class="home-progress-track">
-                  <div class="home-progress-fill is-ok" [style.width.%]="batchProgressPct()"></div>
-                </div>
-                @if (todayBatches().length === 0) {
-                  <span class="home-progress-note">Todavía no hay planillas con fecha de hoy.</span>
-                } @else {
-                  <span class="home-progress-note">
-                    @for (row of batchFunnel(); track row.code) {
+                <div class="home-donut-legend">
+                  @for (row of batchStatusSegments(d.delivery); track row.code) {
+                    @if (row.count > 0) {
                       <a
-                        class="home-funnel-chip"
+                        class="home-legend-row"
                         routerLink="/reparto"
                         [queryParams]="{ estado: row.code }"
                       >
-                        <span class="home-kpi-dot" [style.background]="row.colorVar"></span>
-                        {{ row.name }} {{ row.count }}
+                        <span class="home-legend-dot" [style.background]="row.colorVar"></span>
+                        <span class="home-legend-name">{{ row.name }}</span>
+                        <span class="home-legend-value">{{ row.count }} · {{ row.pct }}%</span>
                       </a>
                     }
-                  </span>
-                }
-              </div>
-            }
-          </div>
-        }
-
-        <!-- Nivel 3 — Contexto -->
-        @if (showOrderKpis()) {
-          <div class="home-block home-span-6">
-            <h2 class="home-card-title">Qué se rompe — reparto por pedido</h2>
-            <p class="home-card-note">
-              Sobre la muestra cargada ({{ orders().length }} de {{ totalOrders() }} pedidos).
-            </p>
-            @if (ordersLoading()) {
-              <div class="home-chart-skeleton" role="status" aria-label="Cargando"></div>
-            } @else if (deliveryStatusBars().length === 0) {
-              <p class="home-chart-empty">
-                Ningún pedido de la muestra tiene reparto asociado todavía.
-              </p>
-            } @else {
-              <div class="home-bar-chart">
-                @for (row of deliveryStatusBars(); track row.code) {
-                  <a
-                    class="home-bar-row"
-                    routerLink="/pedidos"
-                    [queryParams]="{ reparto: row.code }"
-                  >
-                    <span class="home-bar-label">{{ row.name }}</span>
-                    <div class="home-bar-track">
-                      <div
-                        class="home-bar-fill"
-                        [style.width.%]="row.pct"
-                        [style.background]="row.colorVar"
-                      ></div>
-                    </div>
-                    <span class="home-bar-count">{{ row.count }}</span>
-                  </a>
-                }
-              </div>
-            }
-          </div>
-        }
-
-        <!-- Nivel 4 — Acciones pendientes -->
-        @if (actionItems().length > 0) {
-          <div class="home-block home-span-12">
-            <h2 class="home-card-title">Qué decido ahora</h2>
-            <p class="home-card-note">
-              Hasta 5 pendientes concretos, cada uno con su acción directa.
-            </p>
-            <div class="home-actions-list">
-              @for (item of actionItems(); track item.id) {
-                <div class="home-action-row">
-                  <div>
-                    <span class="home-action-title">{{ item.title }}</span>
-                    <span class="home-action-subtitle">{{ item.subtitle }}</span>
-                  </div>
-                  <div class="home-action-tail">
-                    @if (item.amount != null) {
-                      <span class="home-action-amount">{{ formatSoles(item.amount) }}</span>
-                    }
-                    <button uiButton variant="secondary" size="sm" [routerLink]="item.link">
-                      {{ item.actionLabel }}
-                    </button>
-                  </div>
+                  }
                 </div>
-              }
+              </div>
             </div>
           </div>
+
+          <!-- 3. Usuarios activos hoy -->
+          <div class="home-block">
+            <h2 class="home-block-title">Usuarios activos hoy</h2>
+            @if (d.activeUsers.byRole.length === 0) {
+              <p class="home-block-empty">Nadie ha iniciado ruta todavía.</p>
+            } @else {
+              <div class="home-roles-grid">
+                @for (r of d.activeUsers.byRole; track r.roleCode; let i = $index) {
+                  <div class="home-role-card">
+                    <span class="home-role-avatar" [style.background]="roleColor(i)">{{
+                      r.roleName.charAt(0)
+                    }}</span>
+                    <span class="home-role-count">{{ r.activeCount }}</span>
+                    <span class="home-role-name">{{ r.roleName }}</span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- 4-5-6 -->
+          <div class="home-triple-grid">
+            <div class="home-block">
+              <h2 class="home-block-title">Mejores ventas del día</h2>
+              @if (d.topSalespeople.length === 0) {
+                <p class="home-block-empty">Todavía no hay ventas registradas hoy.</p>
+              } @else {
+                <ol class="home-rank-list">
+                  @for (s of d.topSalespeople; track s.userId; let i = $index) {
+                    <li class="home-rank-row">
+                      <span class="home-rank-num">{{ i + 1 }}</span>
+                      <span class="home-rank-body">
+                        <span class="home-rank-name">{{ s.fullName }}</span>
+                        <span class="home-rank-meta">{{ s.branchName || '—' }}</span>
+                      </span>
+                      <span class="home-rank-amount">{{ formatSoles(s.netAmount) }}</span>
+                    </li>
+                  }
+                </ol>
+              }
+            </div>
+
+            <div class="home-block">
+              <h2 class="home-block-title">Producto en mejor movimiento</h2>
+              @if (d.topProducts.length === 0) {
+                <p class="home-block-empty">Todavía no hay unidades despachadas hoy.</p>
+              } @else {
+                <div class="home-product-bars">
+                  @for (p of d.topProducts; track p.productId) {
+                    <div class="home-product-row">
+                      <span class="home-product-name">{{ p.productName }}</span>
+                      <div class="home-product-track">
+                        <div
+                          class="home-product-fill"
+                          [style.width.%]="productBarPct(d.topProducts, p.totalQuantity)"
+                        ></div>
+                      </div>
+                      <span class="home-product-value">{{ p.totalQuantity }} u.</span>
+                    </div>
+                  }
+                </div>
+                <p class="home-block-note">Unidades despachadas hoy.</p>
+              }
+            </div>
+
+            <div class="home-block">
+              <h2 class="home-block-title">Clientes atendidos hoy</h2>
+              <div class="home-ring-wrap">
+                <div class="home-ring" [style.background]="customersRingGradient(d.customers)">
+                  <div class="home-ring-hole">
+                    <span class="home-ring-value"
+                      >{{ d.customers.coveragePercentage.toFixed(0) }}%</span
+                    >
+                  </div>
+                </div>
+                <div class="home-ring-body">
+                  <span class="home-ring-count">{{ d.customers.customersWithOrder }}</span>
+                  <span class="home-ring-note"
+                    >clientes con pedido hoy de {{ d.customers.totalActiveCustomers }} activos en
+                    cartera</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p class="home-dash-footer">Datos al {{ d.date }}.</p>
         }
-      </div>
+      }
 
       <div class="home-section-label">Disponible</div>
       <div class="home-grid">
@@ -349,76 +377,47 @@ function isToday(isoDateTime: string): boolean {
         max-width: 620px;
       }
 
-      /* — Rejilla de 12 columnas — */
-      .home-grid-12 {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 16px;
-        margin-top: 24px;
+      .home-toolbar {
+        margin-top: 20px;
+        max-width: 220px;
       }
-      .home-span-12 {
-        grid-column: span 12;
+      .home-dash-skeleton {
+        height: 320px;
+        background: var(--faint);
+        margin-top: 20px;
       }
-      .home-span-6 {
-        grid-column: span 6;
-      }
-      .home-block {
-        border: 1px solid var(--hairline);
-        padding: 18px 20px;
-      }
-      .home-card-title {
-        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
-        margin: 0;
-        color: var(--ink);
-      }
-      .home-card-note {
+      .home-dash-footer {
         margin: 4px 0 0;
         font-size: 12px;
         color: var(--ink-muted);
       }
-      .home-chart-skeleton {
-        height: 100px;
-        background: var(--faint);
-        margin-top: 14px;
+
+      .home-block {
+        border: 1px solid var(--hairline);
+        padding: 18px 20px;
+        margin-top: 18px;
       }
-      .home-chart-empty {
-        margin: 14px 0 0;
+      .home-block-title {
+        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
+        margin: 0 0 16px;
+        color: var(--ink);
+      }
+      .home-block-empty {
+        margin: 0;
         font-size: 13px;
         color: var(--ink-muted);
       }
-
-      /* — Nivel 1: semáforo — */
-      .home-day-status {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .home-day-dot {
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        flex: none;
-      }
-      .home-day-status.is-ok .home-day-dot {
-        background: var(--status-ok);
-      }
-      .home-day-status.is-warn .home-day-dot {
-        background: var(--status-warn);
-      }
-      .home-day-status.is-danger .home-day-dot {
-        background: var(--status-danger);
-      }
-      .home-day-label {
-        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
-        color: var(--ink);
+      .home-block-note {
+        margin: 10px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
       }
 
-      /* — Nivel 1: tiras de KPI — */
+      /* — Bloque 1: KPIs — */
       .home-kpi-row {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
         gap: 14px;
-        margin-top: 18px;
       }
       .home-kpi {
         border: 1px solid var(--hairline);
@@ -428,23 +427,15 @@ function isToday(isoDateTime: string): boolean {
         display: block;
         transition: border-color var(--dur-fast) var(--ease-standard);
       }
-      .home-kpi:hover {
+      a.home-kpi:hover {
         border-color: var(--accent);
       }
       .home-kpi-value {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        display: block;
         font-size: var(--fs-metric);
         font-weight: var(--fw-metric);
         color: var(--ink);
         font-variant-numeric: var(--tnum);
-      }
-      .home-kpi-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        flex: none;
       }
       .home-kpi-label {
         display: block;
@@ -459,12 +450,44 @@ function isToday(isoDateTime: string): boolean {
         color: var(--ink-muted);
       }
 
-      /* — Nivel 2: barras de progreso — */
-      .home-progress {
-        margin-top: 18px;
+      /* — Bloque 2: Reparto — */
+      .home-reparto-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 32px;
       }
-      .home-progress:first-of-type {
-        margin-top: 16px;
+      .home-reparto-bars {
+        display: grid;
+        gap: 14px;
+        align-content: start;
+      }
+      .home-amount-row {
+        display: grid;
+        grid-template-columns: 110px 1fr auto;
+        align-items: center;
+        gap: 12px;
+      }
+      .home-amount-label {
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+      .home-amount-track {
+        height: 14px;
+        background: var(--faint);
+      }
+      .home-amount-fill {
+        height: 100%;
+        transition: width var(--dur-base) var(--ease-standard);
+      }
+      .home-amount-value {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+        white-space: nowrap;
+      }
+      .home-progress {
+        margin-top: 6px;
       }
       .home-progress-head {
         display: flex;
@@ -483,105 +506,261 @@ function isToday(isoDateTime: string): boolean {
       }
       .home-progress-fill {
         height: 100%;
+        background: var(--status-ok);
         transition: width var(--dur-base) var(--ease-standard);
       }
-      .home-progress-fill.is-ok {
-        background: var(--status-ok);
-      }
       .home-progress-note {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 8px;
+        display: block;
+        margin-top: 6px;
         font-size: 12px;
         color: var(--ink-muted);
       }
-      .home-funnel-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        text-decoration: none;
-        color: var(--ink-muted);
-        border: 1px solid var(--hairline);
-        padding: 2px 8px;
+
+      .home-donut-wrap {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+        justify-items: center;
       }
-      .home-funnel-chip:hover {
-        border-color: var(--accent);
+      .home-donut-title {
+        font-size: 13px;
+        font-weight: 600;
         color: var(--ink);
       }
-
-      /* — Nivel 3: gráfico de barras — */
-      .home-bar-chart {
-        display: grid;
-        gap: 10px;
-        margin-top: 16px;
-      }
-      .home-bar-row {
-        display: grid;
-        grid-template-columns: 90px 1fr 36px;
+      .home-donut {
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        display: flex;
         align-items: center;
-        gap: 10px;
-        text-decoration: none;
-        color: inherit;
+        justify-content: center;
       }
-      .home-bar-label {
-        font-size: 13px;
+      .home-donut-hole {
+        width: 88px;
+        height: 88px;
+        border-radius: 50%;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .home-donut-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .home-donut-label {
+        font-size: 11px;
         color: var(--ink-muted);
       }
-      .home-bar-track {
+      .home-donut-legend {
+        display: grid;
+        gap: 4px;
+        width: 100%;
+      }
+      .home-legend-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        color: var(--ink);
+        font-size: 12px;
+        padding: 3px 4px;
+      }
+      .home-legend-row:hover {
+        background: var(--faint);
+      }
+      .home-legend-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .home-legend-name {
+        flex: 1;
+        color: var(--ink-muted);
+      }
+      .home-legend-value {
+        font-weight: 800;
+        font-variant-numeric: var(--tnum);
+      }
+
+      /* — Bloque 3: usuarios activos — */
+      .home-roles-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+        gap: 14px;
+      }
+      .home-role-card {
+        border: 1px solid var(--hairline);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        text-align: center;
+      }
+      .home-role-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--on-accent);
+        font-weight: 800;
+      }
+      .home-role-count {
+        font-size: var(--fs-metric);
+        font-weight: var(--fw-metric);
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .home-role-name {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      /* — Bloques 4-5-6 — */
+      .home-triple-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+      .home-triple-grid .home-block {
+        margin-top: 0;
+      }
+
+      .home-rank-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 1px;
+        background: var(--hairline);
+        border: 1px solid var(--hairline);
+      }
+      .home-rank-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--bg);
+        padding: 8px 10px;
+      }
+      .home-rank-num {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--ink-muted);
+        width: 16px;
+      }
+      .home-rank-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+      }
+      .home-rank-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .home-rank-meta {
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+      .home-rank-amount {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+        white-space: nowrap;
+      }
+
+      .home-product-bars {
+        display: grid;
+        gap: 10px;
+      }
+      .home-product-row {
+        display: grid;
+        grid-template-columns: 84px 1fr 44px;
+        align-items: center;
+        gap: 10px;
+      }
+      .home-product-name {
+        font-size: 12px;
+        color: var(--ink-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .home-product-track {
         height: 14px;
         background: var(--faint);
       }
-      .home-bar-fill {
+      .home-product-fill {
         height: 100%;
+        background: var(--st-in-route);
         transition: width var(--dur-base) var(--ease-standard);
       }
-      .home-bar-count {
-        font-size: 13px;
+      .home-product-value {
+        font-size: 12px;
         font-weight: 800;
         color: var(--ink);
         text-align: right;
         font-variant-numeric: var(--tnum);
       }
 
-      /* — Nivel 4: lista de acciones — */
-      .home-actions-list {
-        display: grid;
-        gap: 1px;
-        background: var(--hairline);
-        border: 1px solid var(--hairline);
-        margin-top: 16px;
-      }
-      .home-action-row {
+      .home-ring-wrap {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 16px;
+        gap: 18px;
+      }
+      .home-ring {
+        width: 110px;
+        height: 110px;
+        border-radius: 50%;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .home-ring-hole {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
         background: var(--bg);
-        padding: 12px 16px;
-        flex-wrap: wrap;
-      }
-      .home-action-title {
-        display: block;
-        font-weight: 800;
-        font-size: 14px;
-        color: var(--ink);
-      }
-      .home-action-subtitle {
-        display: block;
-        font-size: 12px;
-        color: var(--ink-muted);
-      }
-      .home-action-tail {
         display: flex;
         align-items: center;
-        gap: 12px;
+        justify-content: center;
       }
-      .home-action-amount {
-        font-size: 13px;
+      .home-ring-value {
+        font-size: 18px;
         font-weight: 800;
         color: var(--ink);
         font-variant-numeric: var(--tnum);
+      }
+      .home-ring-body {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .home-ring-count {
+        font-size: var(--fs-metric);
+        font-weight: var(--fw-metric);
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .home-ring-note {
+        font-size: 12px;
+        color: var(--ink-muted);
+        max-width: 160px;
       }
 
       /* — Navegación por tiles (ya existente) — */
@@ -635,25 +814,19 @@ function isToday(isoDateTime: string): boolean {
         line-height: 1.45;
       }
 
+      @media (max-width: 1100px) {
+        .home-triple-grid {
+          grid-template-columns: 1fr;
+        }
+      }
       @media (max-width: 900px) {
-        .home-span-6 {
-          grid-column: span 12;
+        .home-reparto-grid {
+          grid-template-columns: 1fr;
         }
       }
       @media (max-width: 767px) {
         .home-page {
           padding: var(--sp-4);
-        }
-        .home-grid-12 {
-          grid-template-columns: 1fr;
-        }
-        .home-span-12,
-        .home-span-6 {
-          grid-column: 1;
-        }
-        .home-action-row {
-          flex-direction: column;
-          align-items: flex-start;
         }
       }
     `,
@@ -661,259 +834,104 @@ function isToday(isoDateTime: string): boolean {
 })
 export class DashboardPage {
   private auth = inject(AuthService);
-  private deliverySvc = inject(DeliveryAdminService);
-  private invoiceSvc = inject(InvoiceAdminService);
-  private orderSvc = inject(OrderAdminService);
+  private dashboardSvc = inject(DashboardAdminService);
 
   readonly user = this.auth.currentUser;
   readonly promoPermissions = ['promo.create', 'promo.approve', 'promo.allocate'];
 
   protected formatSoles = formatSoles;
+  protected showDashboard = computed(() => this.auth.hasAny('report.view'));
 
-  protected showDeliveryKpis = computed(() =>
-    this.auth.hasAny('delivery.deliver', 'delivery.settle'),
-  );
-  protected showInvoiceKpis = computed(() => this.auth.hasAny('invoice.reconcile'));
-  protected showOrderKpis = computed(() => this.auth.hasAny('order.view_all', 'order.create'));
-  protected showPendingBonuses = computed(() => this.auth.hasAny('order.view_all'));
-  protected showDayStatus = computed(
-    () => this.showOrderKpis() || this.showPendingBonuses() || this.showInvoiceKpis(),
-  );
+  protected date = signal(todayIso());
+  protected data = signal<DashboardTodayView | null>(null);
+  protected loading = signal(true);
+  protected error = signal(false);
 
-  protected batches = signal<BatchSummary[]>([]);
-  protected totalBatches = signal(0);
-  protected batchesLoading = signal(false);
-
-  protected unmatchedInvoices = signal<InvoiceSummary[]>([]);
-  protected unmatchedTotal = signal(0);
-  protected invoicesLoading = signal(false);
-
-  protected orders = signal<OrderSummary[]>([]);
-  protected totalOrders = signal(0);
-  protected ordersLoading = signal(false);
-
-  protected pendingBonusOrders = signal<PendingBonusOrderView[]>([]);
-
-  protected todayOrders = computed(() => this.orders().filter((o) => isToday(o.orderDate)));
-
-  protected avgOrdersPerDay = computed(() => {
-    const rows = this.orders().filter((o) => !isToday(o.orderDate));
-    if (rows.length === 0) return 0;
-    const days = new Set(rows.map((o) => new Date(o.orderDate).toDateString()));
-    return Math.round(rows.length / days.size);
+  private loadEffect = effect(() => {
+    this.date();
+    untracked(() => {
+      if (this.showDashboard()) this.load();
+    });
   });
 
-  protected avgAmountPerDay = computed(() => {
-    const rows = this.orders().filter((o) => !isToday(o.orderDate));
-    if (rows.length === 0) return 0;
-    const days = new Set(rows.map((o) => new Date(o.orderDate).toDateString()));
-    const total = rows.reduce((sum, o) => sum + o.netAmount, 0);
-    return total / days.size;
-  });
+  load() {
+    this.loading.set(true);
+    this.error.set(false);
+    this.dashboardSvc.today(this.date()).subscribe({
+      next: (result) => {
+        this.data.set(result);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.error.set(true);
+      },
+    });
+  }
 
-  protected orderKpis = computed(() => {
-    const rows = this.todayOrders();
-    return {
-      todayCount: rows.length,
-      todayAmount: rows.reduce((sum, o) => sum + o.netAmount, 0),
-      openCount: rows.filter((o) => o.statusCode === 'OPEN').length,
-      billedCount: rows.filter((o) => o.statusCode === 'SENT_TO_BILLING').length,
-    };
-  });
+  protected topBrandPct(orders: DashboardOrdersSummaryView): number {
+    if (!orders.topBrandAmount || !orders.totalAmount) return 0;
+    return Math.round((orders.topBrandAmount / orders.totalAmount) * 100);
+  }
 
-  protected orderProgressPct = computed(() => {
-    const rows = this.todayOrders();
-    if (rows.length === 0) return 0;
-    return Math.round((rows.filter((o) => o.statusCode !== 'OPEN').length / rows.length) * 100);
-  });
+  protected amountPct(part: number, whole: number): number {
+    if (!whole) return 0;
+    return Math.min(100, Math.round((part / whole) * 100));
+  }
 
-  protected deliveryStatusBars = computed(() => {
-    const rows = this.orders().filter((o) => !!o.deliveryStatusCode);
-    const total = rows.length || 1;
-    return DELIVERY_STATUS_OPTIONS.filter((opt) =>
-      rows.some((o) => o.deliveryStatusCode === opt.code),
-    ).map((opt) => {
-      const count = rows.filter((o) => o.deliveryStatusCode === opt.code).length;
+  protected deliveryProgressPct(delivery: DashboardDeliverySummaryView): number {
+    if (!delivery.totalItems) return 0;
+    return Math.round(
+      ((delivery.totalItems - delivery.itemStatusCounts.pending) / delivery.totalItems) * 100,
+    );
+  }
+
+  protected batchStatusSegments(delivery: DashboardDeliverySummaryView) {
+    const total = delivery.totalBatches || 1;
+    let cumulativePct = 0;
+    return BATCH_STATUS_OPTIONS.map((opt) => {
+      const count = delivery.batchesByStatus.find((b) => b.statusCode === opt.code)?.count ?? 0;
+      const pct = (count / total) * 100;
+      const startDeg = (cumulativePct / 100) * 360;
+      cumulativePct += pct;
+      const endDeg = (cumulativePct / 100) * 360;
       return {
         code: opt.code,
         name: opt.name,
         count,
-        pct: Math.round((count / total) * 100),
-        colorVar: `var(${DELIVERY_STATUS_COLOR_VAR[opt.code]})`,
+        pct: Math.round(pct),
+        colorVar: `var(${BATCH_STATUS_COLOR_VAR[opt.code]})`,
+        startDeg,
+        endDeg,
       };
     });
-  });
+  }
 
-  protected todayBatches = computed(() => {
-    const today = todayIsoDate();
-    return this.batches().filter((b) => b.batchDate === today);
-  });
+  protected donutGradient(delivery: DashboardDeliverySummaryView): string {
+    if (!delivery.totalBatches) return 'var(--faint)';
+    const stops = this.batchStatusSegments(delivery)
+      .map((s) => `${s.colorVar} ${s.startDeg}deg ${s.endDeg}deg`)
+      .join(', ');
+    return `conic-gradient(${stops})`;
+  }
 
-  protected batchFunnel = computed<FunnelRow[]>(() => {
-    const rows = this.todayBatches();
-    const total = rows.length || 1;
-    const of = (code: string, name: string, colorVar: string) => {
-      const count = rows.filter((b) => b.statusCode === code).length;
-      return { code, name, count, pct: Math.round((count / total) * 100), colorVar };
-    };
-    return [
-      of('OPEN', 'Abiertas', 'var(--st-open)'),
-      of('IN_ROUTE', 'En ruta', 'var(--st-in-route)'),
-      of('SETTLED', 'Liquidadas', 'var(--st-settled)'),
-    ];
-  });
+  protected productBarPct(products: TopProductView[], qty: number): number {
+    const max = Math.max(...products.map((p) => p.totalQuantity), 1);
+    return Math.round((qty / max) * 100);
+  }
 
-  protected batchProgressPct = computed(() => {
-    const rows = this.todayBatches();
-    if (rows.length === 0) return 0;
-    return Math.round((rows.filter((b) => b.statusCode !== 'OPEN').length / rows.length) * 100);
-  });
+  protected customersRingGradient(c: DashboardCustomersView): string {
+    const pct = Math.max(0, Math.min(100, c.coveragePercentage));
+    const deg = pct * 3.6;
+    return `conic-gradient(var(--accent) 0deg ${deg}deg, var(--faint) ${deg}deg 360deg)`;
+  }
 
-  protected unmatchedTodayCount = computed(
-    () => this.unmatchedInvoices().filter((i) => isToday(i.issueDate)).length,
-  );
-
-  protected dayStatus = computed(() => {
-    const rejectedCount = this.orders().filter((o) => o.deliveryStatusCode === 'REJECTED').length;
-    const mismatchCount = this.unmatchedInvoices().filter(
-      (i) => i.matchStatusCode === 'MISMATCH',
-    ).length;
-    const openNoTeamToday = this.todayBatches().filter(
-      (b) => b.statusCode === 'OPEN' && b.deliveryTeamId == null,
-    ).length;
-
-    if (rejectedCount > 0 || mismatchCount > 0) {
-      return { level: 'danger', label: 'Atención — hay pendientes críticos hoy' };
-    }
-    if (this.pendingBonusOrders().length > 0 || this.unmatchedTotal() > 0 || openNoTeamToday > 0) {
-      return { level: 'warn', label: 'Bajo control — con pendientes' };
-    }
-    return { level: 'ok', label: 'Día tranquilo' };
-  });
-
-  protected actionItems = computed<ActionItem[]>(() => {
-    const items: ActionItem[] = [];
-
-    for (const o of this.orders()
-      .filter((o) => o.deliveryStatusCode === 'REJECTED')
-      .slice(0, 2)) {
-      items.push({
-        id: `rejected-${o.orderId}`,
-        title: o.customerName,
-        subtitle: `Pedido #${o.orderId} — rechazado en reparto`,
-        actionLabel: 'Ver pedido',
-        link: ['/pedidos/detalle', o.orderId],
-      });
-    }
-
-    for (const inv of this.unmatchedInvoices()
-      .filter((i) => i.matchStatusCode === 'MISMATCH')
-      .slice(0, 2)) {
-      items.push({
-        id: `mismatch-${inv.invoiceId}`,
-        title: inv.customerName,
-        subtitle: `Factura ${inv.series}-${inv.number} — con diferencia`,
-        amount: inv.grandTotal,
-        actionLabel: 'Revisar',
-        link: ['/factura', inv.invoiceId],
-      });
-    }
-
-    const today = todayIsoDate();
-    for (const b of this.batches()
-      .filter((b) => b.batchDate === today && b.statusCode === 'OPEN' && b.deliveryTeamId == null)
-      .slice(0, 2)) {
-      items.push({
-        id: `no-team-${b.batchId}`,
-        title: `Planilla ${b.series}-${b.number}`,
-        subtitle: 'Abierta hoy — sin equipo asignado',
-        actionLabel: 'Asignar equipo',
-        link: ['/reparto', b.batchId],
-      });
-    }
-
-    if (items.length < 5) {
-      for (const inv of this.unmatchedInvoices()
-        .filter((i) => i.matchStatusCode !== 'MISMATCH')
-        .slice(0, 5 - items.length)) {
-        items.push({
-          id: `unmatched-${inv.invoiceId}`,
-          title: inv.customerName,
-          subtitle: `Factura ${inv.series}-${inv.number} — sin conciliar`,
-          amount: inv.grandTotal,
-          actionLabel: 'Conciliar',
-          link: ['/factura', inv.invoiceId],
-        });
-      }
-    }
-
-    if (items.length < 5) {
-      for (const o of this.pendingBonusOrders().slice(0, 5 - items.length)) {
-        items.push({
-          id: `bonus-${o.orderId}`,
-          title: o.customerName,
-          subtitle: `Pedido #${o.orderId} — bonificación pendiente`,
-          actionLabel: 'Ver pedido',
-          link: ['/pedidos/detalle', o.orderId],
-        });
-      }
-    }
-
-    return items.slice(0, 5);
-  });
+  protected roleColor(index: number): string {
+    return ROLE_AVATAR_COLORS[index % ROLE_AVATAR_COLORS.length];
+  }
 
   /** Los módulos apagados que este usuario sí puede ver en el menú. */
   pendingModules(): NavItem[] {
     return NAV.filter((i) => i.comingSoon && this.auth.hasAny(...i.anyOf));
-  }
-
-  constructor() {
-    if (this.showDeliveryKpis()) this.loadBatches();
-    if (this.showInvoiceKpis()) this.loadUnmatched();
-    if (this.showOrderKpis()) this.loadOrders();
-    if (this.showPendingBonuses()) this.loadPendingBonuses();
-  }
-
-  private loadBatches() {
-    this.batchesLoading.set(true);
-    this.deliverySvc.batchesAll({ page: 0, size: BATCH_SAMPLE_SIZE }).subscribe({
-      next: (result) => {
-        this.batches.set(result.content ?? []);
-        this.totalBatches.set(result.totalElements ?? (result.content ?? []).length);
-        this.batchesLoading.set(false);
-      },
-      error: () => this.batchesLoading.set(false),
-    });
-  }
-
-  private loadUnmatched() {
-    this.invoicesLoading.set(true);
-    this.invoiceSvc.unmatched({ page: 0, size: INVOICE_SAMPLE_SIZE }).subscribe({
-      next: (result) => {
-        this.unmatchedInvoices.set(result.content ?? []);
-        this.unmatchedTotal.set(result.totalElements ?? 0);
-        this.invoicesLoading.set(false);
-      },
-      error: () => this.invoicesLoading.set(false),
-    });
-  }
-
-  private loadOrders() {
-    this.ordersLoading.set(true);
-    this.orderSvc.list({ page: 0, size: ORDER_SAMPLE_SIZE }).subscribe({
-      next: (result) => {
-        this.orders.set(result.content ?? []);
-        this.totalOrders.set(result.totalElements ?? (result.content ?? []).length);
-        this.ordersLoading.set(false);
-      },
-      error: () => this.ordersLoading.set(false),
-    });
-  }
-
-  private loadPendingBonuses() {
-    this.orderSvc.pendingBonuses().subscribe({
-      next: (list) => this.pendingBonusOrders.set(list),
-      error: () => {},
-    });
   }
 }

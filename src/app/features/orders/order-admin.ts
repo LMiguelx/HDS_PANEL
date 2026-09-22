@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
 import {
+  GlobalDailyOrderSummaryView,
   OrderDetail,
   OrderListFilters,
   OrderSummary,
@@ -51,5 +52,16 @@ export class OrderAdminService {
     let params = new HttpParams();
     if (branchId) params = params.set('branchId', String(branchId));
     return this.http.get<PendingBonusOrderView[]>(`${this.base}/pending-bonuses`, { params });
+  }
+
+  /**
+   * Equivalente global (todo el tenant) de "mi liquidación del día", para
+   * el admin — `order.view_all`. Sin pantalla propia todavía (base para una
+   * futura vista); se deja disponible para reuso, p.ej. desde el dashboard.
+   */
+  dailySummary(date?: string) {
+    let params = new HttpParams();
+    if (date) params = params.set('date', date);
+    return this.http.get<GlobalDailyOrderSummaryView>(`${this.base}/daily-summary`, { params });
   }
 }

@@ -2,6 +2,13 @@
 // 16-panel-supervision-reparto-facturas.md. Las planillas y sus líneas nacen
 // en el ERP externo — el backend solo las lee y actualiza equipo/estado.
 
+export interface ItemStatusCounts {
+  pending: number;
+  delivered: number;
+  partial: number;
+  rejected: number;
+}
+
 export interface BatchSummary {
   batchId: number;
   batchDate: string; // yyyy-MM-dd
@@ -17,7 +24,7 @@ export interface BatchSummary {
   returnedQuantity: number; // unidades devueltas
   returnedProductCount: number; // productos distintos devueltos
   totalItems: number;
-  pendingItems: number;
+  statusCounts: ItemStatusCounts;
 }
 
 export interface BatchListFilters {
@@ -30,6 +37,8 @@ export interface BatchItemView {
   invoiceId: string;
   customerName: string;
   amount: number;
+  returnedAmount: number;
+  netAmount: number;
   statusCode: string; // PENDING | DELIVERED | PARTIAL | REJECTED
 }
 

@@ -41,14 +41,6 @@ export function timeText(value?: string | null): string {
   return value ? format(parseISO(value), 'HH:mm') : '—';
 }
 
-/**
- * `visitStatusCode` es null si el cliente no tiene visita registrada hoy, o
- * uno de ATTENDED/CLOSED/NO_PURCHASE si ya se registró un resultado.
- */
-export function isVisited(visitStatusCode: string | null | undefined): boolean {
-  return !!visitStatusCode;
-}
-
 export function visitStatusLabel(visitStatusCode: string | null | undefined): string {
   if (!visitStatusCode) return 'Sin visita hoy';
   const labels: Record<string, string> = {

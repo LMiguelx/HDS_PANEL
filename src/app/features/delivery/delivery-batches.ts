@@ -84,7 +84,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                     >
                   }
                 </td>
-                <td class="db-muted">{{ b.totalItems - b.pendingItems }}/{{ b.totalItems }}</td>
+                <td class="db-muted">{{ resolvedCount(b) }}/{{ b.totalItems }}</td>
                 <td class="db-row-action">
                   <button uiButton variant="ghost" size="sm" [routerLink]="['/reparto', b.batchId]">
                     Ver detalle
@@ -106,9 +106,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 {{ dateText(b.batchDate) }} · {{ b.vehiclePlate || 'Sin asignar' }}
               </div>
               <div class="db-muted">
-                Neto {{ formatSoles(b.netAmount) }} · {{ b.totalItems - b.pendingItems }}/{{
-                  b.totalItems
-                }}
+                Neto {{ formatSoles(b.netAmount) }} · {{ resolvedCount(b) }}/{{ b.totalItems }}
                 ítems
               </div>
               @if (b.returnedAmount > 0) {
@@ -291,6 +289,12 @@ export class DeliveryBatchesPage {
   protected countText(): string {
     const n = this.totalElements();
     return n === 1 ? '1 planilla' : `${n} planillas`;
+  }
+
+  /** Resueltos = entregados + parciales + rechazados, sobre totalItems. */
+  protected resolvedCount(b: BatchSummary): number {
+    const c = b.statusCounts;
+    return c.delivered + c.partial + c.rejected;
   }
 
   protected prevPage() {

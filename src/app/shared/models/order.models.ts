@@ -77,3 +77,31 @@ export interface PendingBonusOrderView {
   orderDate: string;
   pendingLines: PendingBonusLineView[];
 }
+
+// — Resumen global del día (admin), ver 24-panel-admin-... sección 7 —
+
+export interface BrandSalesView {
+  brandId: number;
+  brandName: string;
+  grossAmount: number; // subtotal de líneas no-bonus
+  discountAmount: number; // descuento del pedido, prorrateado por marca
+  netAmount: number; // grossAmount - discountAmount
+  bonusUnits: number; // unidades regaladas, sin monto — aparte
+}
+
+/**
+ * Equivalente global (todo el tenant) de la liquidación diaria de un
+ * vendedor, sin lista de pedidos — para el detalle línea por línea usar
+ * GET /api/orders. totalOrders cuenta también los CANCELLED; ningún monto
+ * los incluye.
+ */
+export interface GlobalDailyOrderSummaryView {
+  date: string;
+  totalOrders: number;
+  totalAmount: number;
+  totalDiscountAmount: number;
+  totalNetAmount: number;
+  totalBonusLines: number;
+  totalBonusUnits: number;
+  salesByBrand: BrandSalesView[];
+}

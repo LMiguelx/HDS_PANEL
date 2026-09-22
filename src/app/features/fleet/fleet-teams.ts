@@ -6,7 +6,6 @@ import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { ToastService } from '../../core/ui/toast';
 import { FleetModuleTabs } from './ui/module-tabs';
 import { CreateTeamDialog } from './ui/create-team-dialog';
-import { EndTeamDialog } from './ui/end-team-dialog';
 import { FleetAdminService } from './fleet-admin';
 import { TeamView } from '../../shared/models/fleet.models';
 import { dateText } from '../assignments/assignment-format';
@@ -47,6 +46,7 @@ import { dateText } from '../assignments/assignment-format';
               <th>Conductor</th>
               <th>Ayudantes</th>
               <th>Vigente desde</th>
+              <th>Vigente hasta</th>
               <th></th>
             </tr>
           </thead>
@@ -57,6 +57,7 @@ import { dateText } from '../assignments/assignment-format';
                 <td>{{ t.driverName }}</td>
                 <td class="ft-muted">{{ membersText(t) }}</td>
                 <td class="ft-muted">{{ dateText(t.effectiveFrom) }}</td>
+                <td class="ft-muted">{{ dateText(t.effectiveTo) }}</td>
                 <td class="ft-row-action">
                   <button
                     uiButton
@@ -78,7 +79,9 @@ import { dateText } from '../assignments/assignment-format';
             <div class="ft-card-mobile">
               <div class="ft-card-mobile-name">{{ t.vehiclePlate }} · {{ t.driverName }}</div>
               <div class="ft-muted">{{ membersText(t) }}</div>
-              <div class="ft-muted">Desde {{ dateText(t.effectiveFrom) }}</div>
+              <div class="ft-muted">
+                {{ dateText(t.effectiveFrom) }} – {{ dateText(t.effectiveTo) }}
+              </div>
               <button
                 uiButton
                 variant="ghost"
@@ -211,16 +214,23 @@ export class FleetTeamsPage {
 
   protected closeTeam(t: TeamView) {
     this.dialog
-      .open(EndTeamDialog, {
-        data: { teamId: t.deliveryTeamId, vehiclePlate: t.vehiclePlate, driverName: t.driverName },
-        width: '400px',
+      .confirm({
+        title: 'Cerrar equipo',
+        message: `¿Cerrar el equipo de ${t.vehiclePlate} (${t.driverName})?`,
+        confirmLabel: 'Cerrar equipo',
+        destructive: true,
       })
-      .afterClosed()
-      .subscribe((closed) => {
-        if (closed) {
-          this.toast.success(`Equipo de ${t.vehiclePlate} cerrado.`);
-          this.load();
-        }
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.closingId.set(t.deliveryTeamId);
+        this.fleetSvc.deactivateTeam(t.deliveryTeamId).subscribe({
+          next: () => {
+            this.closingId.set(null);
+            this.toast.success(`Equipo de ${t.vehiclePlate} cerrado.`);
+            this.load();
+          },
+          error: () => this.closingId.set(null),
+        });
       });
   }
 }

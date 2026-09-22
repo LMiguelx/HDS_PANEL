@@ -51,7 +51,7 @@ import { dateTimeText } from '../assignments/assignment-format';
               <tr>
                 <td class="rcl-cell-strong">{{ r.businessName }}</td>
                 <td class="rcl-muted">{{ r.reason || '—' }}</td>
-                <td class="rcl-muted">Usuario #{{ r.requestedBy }}</td>
+                <td class="rcl-muted">{{ r.requestedByName }}</td>
                 <td class="rcl-muted">{{ dateTimeText(r.createdAt) }}</td>
                 <td class="rcl-row-actions">
                   <button uiButton variant="primary" size="sm" (click)="approve(r)">Aprobar</button>
@@ -67,9 +67,7 @@ import { dateTimeText } from '../assignments/assignment-format';
             <div class="rcl-card-mobile">
               <div class="rcl-card-mobile-name">{{ r.businessName }}</div>
               <div class="rcl-muted">{{ r.reason || 'Sin motivo' }}</div>
-              <div class="rcl-muted">
-                Usuario #{{ r.requestedBy }} · {{ dateTimeText(r.createdAt) }}
-              </div>
+              <div class="rcl-muted">{{ r.requestedByName }} · {{ dateTimeText(r.createdAt) }}</div>
               <div class="rcl-card-mobile-actions">
                 <button uiButton variant="primary" size="sm" (click)="approve(r)">Aprobar</button>
                 <button uiButton variant="ghost" size="sm" (click)="reject(r)">Rechazar</button>

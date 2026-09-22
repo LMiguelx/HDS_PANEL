@@ -175,7 +175,14 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                     }
                   </td>
                   <td>{{ item.customerName }}</td>
-                  <td class="dbd-muted">{{ formatSoles(item.amount) }}</td>
+                  <td class="dbd-muted">
+                    @if (item.returnedAmount > 0) {
+                      <span class="dbd-item-struck">{{ formatSoles(item.amount) }}</span>
+                      {{ formatSoles(item.netAmount) }}
+                    } @else {
+                      {{ formatSoles(item.amount) }}
+                    }
+                  </td>
                   <td><ui-status [label]="itemStatusText(item.statusCode)" /></td>
                   <td class="dbd-row-action">
                     <button
@@ -207,7 +214,13 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                   <ui-status [label]="itemStatusText(item.statusCode)" />
                 </div>
                 <div class="dbd-muted">
-                  {{ item.customerName }} · {{ formatSoles(item.amount) }}
+                  {{ item.customerName }} ·
+                  @if (item.returnedAmount > 0) {
+                    <span class="dbd-item-struck">{{ formatSoles(item.amount) }}</span>
+                    {{ formatSoles(item.netAmount) }}
+                  } @else {
+                    {{ formatSoles(item.amount) }}
+                  }
                 </div>
                 <button
                   uiButton
@@ -341,6 +354,11 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
       .dbd-muted {
         color: var(--ink-muted);
         font-size: 13px;
+      }
+      .dbd-item-struck {
+        text-decoration: line-through;
+        text-decoration-color: var(--accent-ink);
+        margin-right: 4px;
       }
       .dbd-row-action {
         text-align: right;

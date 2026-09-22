@@ -32,7 +32,7 @@ export interface TeamView {
   driverUserId: number;
   driverName: string;
   effectiveFrom: string; // yyyy-MM-dd
-  effectiveTo: string | null; // null = vigente
+  effectiveTo: string; // siempre presente — obligatorio desde el alta
   members: TeamMemberView[];
 }
 
@@ -41,11 +41,13 @@ export interface TeamMemberCommand {
   roleInTeam: 'HELPER';
 }
 
+/** effectiveTo obligatorio — antes era opcional (vigencia abierta). */
 export interface CreateTeamCommand {
   vehicleId: number;
   driverUserId: number;
   effectiveFrom: string; // yyyy-MM-dd
-  members?: TeamMemberCommand[]; // opcional, máx 2
+  effectiveTo: string; // yyyy-MM-dd — OBLIGATORIO
+  members?: TeamMemberCommand[]; // opcional, máx 4
 }
 
 export interface AvailableDriverView {

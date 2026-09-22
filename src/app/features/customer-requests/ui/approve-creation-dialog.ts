@@ -2,10 +2,14 @@ import { Component, inject, signal } from '@angular/core';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiField } from '../../../shared/ui/field/field';
+import { UiEmpty } from '../../../shared/ui/empty/empty';
 import { UiTypeahead, UiLookupItem } from '../../../shared/ui/typeahead/typeahead';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { LookupService, toUiLookup } from '../../promos/lookup';
 import { CustomerRequestAdminService } from '../customer-request-admin';
+import { CreationRequestDetail } from '../../../shared/models/customer-request.models';
+import { customerTypeName, documentTypeName } from '../request-format';
+import { dateTimeText } from '../../assignments/assignment-format';
 
 export interface ApproveCreationDialogData {
   requestId: number;
@@ -31,11 +35,60 @@ const WEEKDAYS = [
  */
 @Component({
   selector: 'app-approve-creation-dialog',
-  imports: [UiButton, UiField, UiTypeahead],
+  imports: [UiButton, UiField, UiTypeahead, UiEmpty],
   template: `
     <div class="acd">
       <h2 class="acd-title">Aprobar creación de cliente</h2>
       <p class="acd-sub">{{ data.businessName }}</p>
+
+      @if (loadingDetail()) {
+        <div class="acd-detail-skeleton" role="status" aria-label="Cargando"></div>
+      } @else if (detailError()) {
+        <ui-empty
+          variant="error"
+          title="No pudimos cargar el detalle de la solicitud"
+          body="Puedes seguir aprobando sin verlo, o reintentar."
+          actionLabel="Reintentar"
+          (action)="loadDetail()"
+        />
+      } @else if (detail(); as d) {
+        <div class="acd-detail">
+          <div class="acd-detail-field">
+            <span class="acd-detail-label">Documento</span>
+            <span class="acd-detail-value"
+              >{{ documentTypeName(d.documentTypeId) }} {{ d.documentNumber }}</span
+            >
+          </div>
+          <div class="acd-detail-field">
+            <span class="acd-detail-label">Tipo de cliente</span>
+            <span class="acd-detail-value">{{ customerTypeName(d.customerTypeId) }}</span>
+          </div>
+          <div class="acd-detail-field">
+            <span class="acd-detail-label">Dirección</span>
+            <span class="acd-detail-value">{{ d.address || '—' }}</span>
+          </div>
+          <div class="acd-detail-field">
+            <span class="acd-detail-label">Actividad</span>
+            <span class="acd-detail-value">{{ d.businessActivity || '—' }}</span>
+          </div>
+          <div class="acd-detail-field">
+            <span class="acd-detail-label">Teléfono</span>
+            <span class="acd-detail-value">{{ d.phone || '—' }}</span>
+          </div>
+          <div class="acd-detail-field">
+            <span class="acd-detail-label">Ubicación</span>
+            <span class="acd-detail-value">{{
+              d.latitude != null && d.longitude != null ? 'Con GPS' : 'Sin GPS'
+            }}</span>
+          </div>
+          <div class="acd-detail-field">
+            <span class="acd-detail-label">Solicitado por</span>
+            <span class="acd-detail-value"
+              >{{ d.requestedByName }} · {{ dateTimeText(d.createdAt) }}</span
+            >
+          </div>
+        </div>
+      }
 
       <ui-field
         label="Código de cliente"
@@ -98,6 +151,31 @@ const WEEKDAYS = [
         font-size: 13px;
         color: var(--ink-muted);
       }
+      .acd-detail-skeleton {
+        height: 140px;
+        background: var(--faint);
+      }
+      .acd-detail {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+        gap: 10px;
+        border: 1px solid var(--hairline);
+        padding: 14px 16px;
+      }
+      .acd-detail-field {
+        display: grid;
+        gap: 2px;
+      }
+      .acd-detail-label {
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+      .acd-detail-value {
+        font-size: 13px;
+        color: var(--ink);
+      }
       .acd-weekdays {
         display: grid;
         gap: 6px;
@@ -153,12 +231,38 @@ export class ApproveCreationDialog {
   protected weekdays = WEEKDAYS;
   protected userSearch = (q: string) =>
     this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
+  protected documentTypeName = documentTypeName;
+  protected customerTypeName = customerTypeName;
+  protected dateTimeText = dateTimeText;
 
   protected customerCode = signal('');
   protected vendor = signal<UiLookupItem | null>(null);
   protected weekdaysValue = signal<number[]>([]);
   protected saving = signal(false);
   protected error = signal('');
+
+  protected detail = signal<CreationRequestDetail | null>(null);
+  protected loadingDetail = signal(true);
+  protected detailError = signal(false);
+
+  constructor() {
+    this.loadDetail();
+  }
+
+  protected loadDetail() {
+    this.loadingDetail.set(true);
+    this.detailError.set(false);
+    this.requestSvc.creationDetail(this.data.requestId).subscribe({
+      next: (detail) => {
+        this.detail.set(detail);
+        this.loadingDetail.set(false);
+      },
+      error: () => {
+        this.loadingDetail.set(false);
+        this.detailError.set(true);
+      },
+    });
+  }
 
   protected toggleWeekday(value: number) {
     const current = this.weekdaysValue();

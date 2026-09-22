@@ -127,6 +127,21 @@ export interface CoverageListFilters {
 }
 
 /**
+ * Cartera real del vendedor ausente en la fecha dada — GET /coverage-candidates.
+ * `existingCoveringUserId`/`existingCoveringUserName` son null si nadie cubre
+ * ese cliente ese día; si vienen, el front avisa antes de confirmar (el
+ * backend reasigna la cobertura, no rechaza).
+ */
+export interface CoverageCandidateView {
+  customerId: number;
+  code: string;
+  businessName: string;
+  rating: number | null; // 1 a 5
+  existingCoveringUserId: number | null;
+  existingCoveringUserName: string | null;
+}
+
+/**
  * Shape no detallado por el backend a la fecha de este documento (ver
  * 12-endpoints-admin-panel-asignaciones.md, sección `/auto-assign`). Se
  * define de forma defensiva (todo opcional) para no romper la UI si el DTO

@@ -10,11 +10,12 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-const MAX_HELPERS = 2;
+const MAX_HELPERS = 4;
 
 /**
- * Arma un equipo (conductor + vehículo + hasta 2 ayudantes) —
- * POST /api/fleet/teams. Si el conductor o el vehículo ya tenían equipo
+ * Arma un equipo (conductor + vehículo + hasta 4 ayudantes) —
+ * POST /api/fleet/teams. `effectiveTo` es obligatorio (ya no admite
+ * vigencia abierta). Si el conductor o el vehículo ya tenían equipo
  * abierto, el backend lo cierra automáticamente (rotación).
  */
 @Component({
@@ -40,6 +41,7 @@ const MAX_HELPERS = 2;
           [options]="driverOptions()"
         />
         <ui-field label="Vigente desde" type="date" [(value)]="effectiveFrom" />
+        <ui-field label="Vigente hasta" type="date" [(value)]="effectiveTo" />
 
         <div class="ctd-helpers">
           <span class="ctd-helpers-label">Ayudantes (opcional, máximo {{ maxHelpers }})</span>
@@ -172,6 +174,7 @@ export class CreateTeamDialog {
   protected vehicleId = signal('');
   protected driverUserId = signal('');
   protected effectiveFrom = signal(todayIso());
+  protected effectiveTo = signal('');
   protected pickedHelpers = signal<AvailableHelperView[]>([]);
   protected helperToAdd = signal('');
   protected saving = signal(false);
@@ -222,8 +225,8 @@ export class CreateTeamDialog {
   protected submit() {
     const vehicleId = Number(this.vehicleId());
     const driverUserId = Number(this.driverUserId());
-    if (!vehicleId || !driverUserId || !this.effectiveFrom()) {
-      this.error.set('Completa vehículo, conductor y fecha de vigencia.');
+    if (!vehicleId || !driverUserId || !this.effectiveFrom() || !this.effectiveTo()) {
+      this.error.set('Completa vehículo, conductor y las fechas de vigencia (desde y hasta).');
       return;
     }
     this.saving.set(true);
@@ -233,6 +236,7 @@ export class CreateTeamDialog {
         vehicleId,
         driverUserId,
         effectiveFrom: this.effectiveFrom(),
+        effectiveTo: this.effectiveTo(),
         members: this.pickedHelpers().map((h) => ({ userId: h.userId, roleInTeam: 'HELPER' })),
       })
       .subscribe({

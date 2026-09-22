@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
   AvailableDriverView,
@@ -31,11 +31,9 @@ export class FleetAdminService {
     return this.http.post<TeamView>(`${this.base}/teams`, cmd);
   }
 
-  /** `lastDay` opcional — si no se manda, hoy. */
-  endTeam(teamId: number, lastDay?: string) {
-    let params = new HttpParams();
-    if (lastDay) params = params.set('lastDay', lastDay);
-    return this.http.post<void>(`${this.base}/teams/${teamId}/end`, {}, { params });
+  /** Ruta nueva — reemplaza el antiguo /teams/{id}/end. Sin parámetros documentados. */
+  deactivateTeam(teamId: number) {
+    return this.http.post<void>(`${this.base}/teams/${teamId}/deactivate`, {});
   }
 
   teams() {

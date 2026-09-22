@@ -4,6 +4,7 @@ import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
 import {
   ApproveCreationCommand,
+  CreationRequestDetail,
   FieldChangeGroupView,
   RequestListFilters,
   RequestView,
@@ -35,6 +36,11 @@ export class CustomerRequestAdminService {
     return this.http.get<PageResponse<RequestView>>(`${this.base}/creation/pending`, {
       params: this.paramsFrom(filters),
     });
+  }
+
+  /** Detalle completo, para revisar antes de aprobar/rechazar una creación. */
+  creationDetail(requestId: number) {
+    return this.http.get<CreationRequestDetail>(`${this.base}/creation/${requestId}`);
   }
 
   pendingFieldChange() {

@@ -53,7 +53,7 @@ const FIELD_LABELS: Record<string, string> = {
                 <div>
                   <div class="rfc-card-customer">{{ g.businessName }}</div>
                   <div class="rfc-card-meta">
-                    Usuario #{{ g.requestedBy }} · {{ dateTimeText(g.createdAt) }}
+                    {{ g.requestedByName }} · {{ dateTimeText(g.createdAt) }}
                   </div>
                 </div>
               </div>

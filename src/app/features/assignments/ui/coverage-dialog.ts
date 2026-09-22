@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiField } from '../../../shared/ui/field/field';
@@ -6,14 +6,12 @@ import { UiTypeahead, UiLookupItem } from '../../../shared/ui/typeahead/typeahea
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { LookupService, toUiLookup } from '../../promos/lookup';
 import { AssignmentAdminService } from '../assignment-admin';
-import { MapCustomerView } from '../../../shared/models/assignment-admin.models';
-import { isVisited } from '../assignment-format';
+import { CoverageCandidateView } from '../../../shared/models/assignment-admin.models';
+import { ratingText } from '../../customers/customer-format';
 
 export interface CoverageDialogData {
   absentUserId: number;
   absentUserName: string;
-  /** Si ya se cargó la cartera de este vendedor (ej. desde el Mapa), se reutiliza en vez de pedirla de nuevo. */
-  customers?: MapCustomerView[];
 }
 
 function todayIso(): string {
@@ -23,7 +21,10 @@ function todayIso(): string {
 /**
  * Cobertura puntual (`POST /api/admin/assignments/coverage`): otro vendedor
  * cubre por hoy uno o varios clientes de un vendedor ausente. No cierra ni
- * modifica la asignación real.
+ * modifica la asignación real. El checklist sale de
+ * `GET /coverage-candidates` (cartera real del ausente en la fecha elegida,
+ * con rating y si el cliente ya tiene cobertura asignada ese día) — se
+ * vuelve a pedir cada vez que cambia la fecha.
  */
 @Component({
   selector: 'app-coverage-dialog',
@@ -60,11 +61,12 @@ function todayIso(): string {
                   [checked]="selected().has(c.customerId)"
                   (change)="toggle(c.customerId)"
                 />
-                <span class="cov-customer-name">{{ c.customerName }}</span>
-                @if (c.scheduledToday) {
-                  <span class="cov-badge" [class.cov-badge-done]="isVisited(c.visitStatusCode)">
-                    {{ isVisited(c.visitStatusCode) ? 'Ya visitado hoy' : 'Le tocaba hoy' }}
-                  </span>
+                <span class="cov-customer-body">
+                  <span class="cov-customer-name">{{ c.businessName }}</span>
+                  <span class="cov-customer-rating">{{ ratingText(c.rating) }}</span>
+                </span>
+                @if (c.existingCoveringUserId) {
+                  <span class="cov-badge">ya cubierto por {{ c.existingCoveringUserName }}</span>
                 }
               </label>
             }
@@ -150,19 +152,25 @@ function todayIso(): string {
       .cov-customer-row:hover {
         background: var(--faint);
       }
-      .cov-customer-name {
+      .cov-customer-body {
         flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .cov-customer-name {
         font-weight: 600;
         color: var(--ink);
+      }
+      .cov-customer-rating {
+        font-size: 11px;
+        color: var(--ink-muted);
       }
       .cov-badge {
         font-size: 11px;
         font-weight: 800;
         color: var(--st-pendiente);
         white-space: nowrap;
-      }
-      .cov-badge-done {
-        color: var(--ink-muted);
       }
       .cov-error {
         color: var(--accent-ink);
@@ -182,39 +190,38 @@ export class CoverageDialog {
   private lookupSvc = inject(LookupService);
   private assignmentSvc = inject(AssignmentAdminService);
 
-  protected isVisited = isVisited;
+  protected ratingText = ratingText;
 
   protected covering = signal<UiLookupItem | null>(null);
   protected coverageDate = signal(todayIso());
   protected reason = signal('');
-  protected customers = signal<MapCustomerView[]>(this.data.customers ?? []);
-  protected loadingCustomers = signal(!this.data.customers);
-  protected selected = signal<Set<number>>(
-    new Set(this.defaultSelection(this.data.customers ?? [])),
-  );
+  protected customers = signal<CoverageCandidateView[]>([]);
+  protected loadingCustomers = signal(true);
+  protected selected = signal<Set<number>>(new Set());
   protected saving = signal(false);
   protected error = signal('');
 
   protected userSearch = (q: string) =>
-    this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
+    this.lookupSvc
+      .users(q)
+      .pipe(map((items) => toUiLookup(items).filter((i) => i.id !== this.data.absentUserId)));
 
-  constructor() {
-    if (!this.data.customers) {
-      this.assignmentSvc.map({ userIds: [this.data.absentUserId] }).subscribe({
-        next: ({ customers: rows }) => {
-          this.customers.set(rows);
-          this.selected.set(new Set(this.defaultSelection(rows)));
-          this.loadingCustomers.set(false);
-        },
-        error: () => this.loadingCustomers.set(false),
-      });
-    }
-  }
+  private loadCandidatesEffect = effect(() => {
+    const date = this.coverageDate();
+    untracked(() => this.loadCandidates(date));
+  });
 
-  private defaultSelection(rows: MapCustomerView[]): number[] {
-    return rows
-      .filter((c) => c.scheduledToday && !isVisited(c.visitStatusCode))
-      .map((c) => c.customerId);
+  private loadCandidates(date: string) {
+    if (!date) return;
+    this.loadingCustomers.set(true);
+    this.assignmentSvc.coverageCandidates(this.data.absentUserId, date).subscribe({
+      next: (rows) => {
+        this.customers.set(rows);
+        this.selected.set(new Set(rows.map((c) => c.customerId)));
+        this.loadingCustomers.set(false);
+      },
+      error: () => this.loadingCustomers.set(false),
+    });
   }
 
   protected toggle(customerId: number) {

@@ -14,6 +14,7 @@ export interface RequestView {
   reason: string | null;
   status: string;
   requestedBy: number;
+  requestedByName: string;
   createdAt: string; // ISO datetime
   resolvedAt: string | null;
 }
@@ -31,9 +32,29 @@ export interface FieldChangeGroupView {
   reason: string | null;
   status: string;
   requestedBy: number;
+  requestedByName: string;
   createdAt: string;
   resolvedAt: string | null;
   changes: FieldChangeView[];
+}
+
+/** Detalle completo de una solicitud de creación pendiente — GET /creation/{requestId}. */
+export interface CreationRequestDetail {
+  requestId: number;
+  businessName: string;
+  documentTypeId: number; // ver catálogo DOCUMENT_TYPE_OPTIONS
+  documentNumber: string;
+  customerTypeId: number; // ver catálogo CUSTOMER_TYPE_OPTIONS
+  address: string | null;
+  businessActivity: string | null;
+  phone: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  status: string;
+  requestedBy: number;
+  requestedByName: string;
+  createdAt: string;
+  resolvedAt: string | null;
 }
 
 export interface ApproveCreationCommand {
