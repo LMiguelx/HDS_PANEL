@@ -25,6 +25,7 @@ export interface BatchSummary {
   returnedProductCount: number; // productos distintos devueltos
   totalItems: number;
   statusCounts: ItemStatusCounts;
+  itemsProgressPercentage: number; // (delivered+partial+rejected)/totalItems * 100
 }
 
 export interface BatchListFilters {
@@ -57,6 +58,7 @@ export interface BatchDetail {
   netAmount: number;
   returnedQuantity: number;
   returnedProductCount: number;
+  itemsProgressPercentage: number;
   settledAt: string | null; // ISO datetime
   items: BatchItemView[];
 }

@@ -64,7 +64,8 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               <th>Serie-Número</th>
               <th>Equipo</th>
               <th>Estado</th>
-              <th>Neto a liquidar</th>
+              <th>Devuelto</th>
+              <th>Neto</th>
               <th>Ítems</th>
               <th></th>
             </tr>
@@ -76,15 +77,9 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 <td class="db-cell-strong">{{ b.series }}-{{ b.number }}</td>
                 <td class="db-muted">{{ b.vehiclePlate || 'Sin asignar' }}</td>
                 <td><ui-status [label]="statusName(b.statusCode)" /></td>
-                <td>
-                  <span class="db-net">{{ formatSoles(b.netAmount) }}</span>
-                  @if (b.returnedAmount > 0) {
-                    <span class="db-returned"
-                      >{{ formatSoles(b.totalAmount) }} · −{{ formatSoles(b.returnedAmount) }}</span
-                    >
-                  }
-                </td>
-                <td class="db-muted">{{ resolvedCount(b) }}/{{ b.totalItems }}</td>
+                <td class="db-muted">{{ formatSoles(b.returnedAmount) }}</td>
+                <td class="db-net">{{ formatSoles(b.netAmount) }}</td>
+                <td class="db-muted">{{ pct(b.itemsProgressPercentage) }}%</td>
                 <td class="db-row-action">
                   <button uiButton variant="ghost" size="sm" [routerLink]="['/reparto', b.batchId]">
                     Ver detalle
@@ -106,13 +101,10 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 {{ dateText(b.batchDate) }} · {{ b.vehiclePlate || 'Sin asignar' }}
               </div>
               <div class="db-muted">
-                Neto {{ formatSoles(b.netAmount) }} · {{ resolvedCount(b) }}/{{ b.totalItems }}
-                ítems
+                Neto {{ formatSoles(b.netAmount) }} · {{ pct(b.itemsProgressPercentage) }}% ítems
               </div>
               @if (b.returnedAmount > 0) {
-                <div class="db-returned">
-                  {{ formatSoles(b.totalAmount) }} · −{{ formatSoles(b.returnedAmount) }} devuelto
-                </div>
+                <div class="db-muted">Devuelto {{ formatSoles(b.returnedAmount) }}</div>
               }
             </a>
           }
@@ -187,14 +179,6 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
         font-weight: 800;
         color: var(--ink);
         font-variant-numeric: var(--tnum);
-      }
-      .db-returned {
-        display: block;
-        margin-top: 2px;
-        font-size: 12px;
-        color: var(--accent-ink);
-        text-decoration: line-through;
-        text-decoration-color: var(--accent-ink);
       }
       .db-row-action {
         text-align: right;
@@ -291,10 +275,8 @@ export class DeliveryBatchesPage {
     return n === 1 ? '1 planilla' : `${n} planillas`;
   }
 
-  /** Resueltos = entregados + parciales + rechazados, sobre totalItems. */
-  protected resolvedCount(b: BatchSummary): number {
-    const c = b.statusCounts;
-    return c.delivered + c.partial + c.rejected;
+  protected pct(value: number): number {
+    return Math.round(value);
   }
 
   protected prevPage() {

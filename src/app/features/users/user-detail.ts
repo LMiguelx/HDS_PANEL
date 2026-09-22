@@ -7,6 +7,7 @@ import { UserEditDialog } from './ui/user-edit-dialog';
 import { ResetPasswordDialog } from './ui/reset-password-dialog';
 import { AssignRolesDialog } from './ui/assign-roles-dialog';
 import { UserView } from '../../shared/models/user.models';
+import { salesChannelName } from './user-format';
 
 /**
  * Ficha de usuario (GET /api/users/{id}) con las acciones de administración
@@ -53,7 +54,7 @@ import { UserView } from '../../shared/models/user.models';
           </div>
           <div class="ud-field">
             <span class="ud-label">Canal de venta</span>
-            <span class="ud-value">{{ u.salesChannelId ?? '—' }}</span>
+            <span class="ud-value">{{ salesChannelName(u.salesChannelId) }}</span>
           </div>
         </div>
 
@@ -164,6 +165,8 @@ export class UserDetailPage {
 
   userId = input('', { alias: 'userId' });
 
+  protected salesChannelName = salesChannelName;
+
   protected user = signal<UserView | null>(null);
   protected loading = signal(true);
   protected error = signal(false);
@@ -213,13 +216,18 @@ export class UserDetailPage {
 
   protected changeRoles(u: UserView) {
     this.dialog
-      .open<AssignRolesDialog, { userId: number; username: string; currentRoleIds: number[] }, boolean>(
+      .open<
         AssignRolesDialog,
-        {
-          data: { userId: u.userId, username: u.username, currentRoleIds: u.roles.map((r) => r.roleId) },
-          width: '480px',
+        { userId: number; username: string; currentRoleIds: number[] },
+        boolean
+      >(AssignRolesDialog, {
+        data: {
+          userId: u.userId,
+          username: u.username,
+          currentRoleIds: u.roles.map((r) => r.roleId),
         },
-      )
+        width: '480px',
+      })
       .afterClosed()
       .subscribe((saved) => {
         if (saved) this.load();

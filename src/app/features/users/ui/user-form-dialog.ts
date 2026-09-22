@@ -5,6 +5,7 @@ import { UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { UserAdminService } from '../user-admin';
 import { RoleLookupService } from '../role-lookup';
 import { CompanyAdminService } from '../../company/company-admin';
+import { SALES_CHANNEL_OPTIONS } from '../user-format';
 import { Role } from '../../../shared/models/auth.models';
 import { BranchView } from '../../../shared/models/tenant.models';
 import { UserCreatedResult } from '../../../shared/models/user.models';
@@ -33,10 +34,10 @@ import { UserCreatedResult } from '../../../shared/models/user.models';
           [disabled]="loadingBranches()"
         />
         <ui-field
-          label="Canal de venta (id)"
-          type="number"
+          label="Canal de venta"
+          type="select"
           [(value)]="salesChannelId"
-          hint="No hay catálogo de canales — usa el id que corresponda"
+          [options]="salesChannelOptions"
         />
       </div>
 
@@ -140,6 +141,8 @@ export class UserFormDialog {
   private roleSvc = inject(RoleLookupService);
   private companySvc = inject(CompanyAdminService);
 
+  protected salesChannelOptions = SALES_CHANNEL_OPTIONS;
+
   protected code = signal('');
   protected username = signal('');
   protected password = signal('');
@@ -148,7 +151,7 @@ export class UserFormDialog {
   protected email = signal('');
   protected phone = signal('');
   protected homeBranchId = signal('');
-  protected salesChannelId = signal('');
+  protected salesChannelId = signal('0');
 
   protected roles = signal<Role[]>([]);
   protected loadingRoles = signal(true);
@@ -196,7 +199,7 @@ export class UserFormDialog {
       !this.username().trim() ||
       !this.password() ||
       !this.firstName().trim() ||
-      !salesChannelId ||
+      this.salesChannelId() === '' ||
       this.selectedRoleIds().size === 0
     ) {
       this.error.set(

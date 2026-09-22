@@ -10,7 +10,7 @@ import { UiEmpty } from '../../shared/ui/empty/empty';
 import { LookupService, toUiLookup } from '../promos/lookup';
 import { OrderModuleTabs } from './ui/module-tabs';
 import { OrderAdminService } from './order-admin';
-import { OrderSummary } from '../../shared/models/order.models';
+import { GlobalDailyOrderSummaryView, OrderSummary } from '../../shared/models/order.models';
 import {
   DELIVERY_STATUS_OPTIONS,
   ORDER_STATUS_OPTIONS,
@@ -57,6 +57,60 @@ const DELIVERY_FILTER_OPTIONS: UiFieldOption[] = [
         </div>
       </div>
 
+      @if (summaryLoading()) {
+        <div class="ord-summary-skeleton" role="status" aria-label="Cargando resumen"></div>
+      } @else if (summary(); as s) {
+        <div class="ord-summary">
+          <h2 class="ord-summary-title">Resumen del día</h2>
+          <div class="ord-summary-kpis">
+            <div class="ord-summary-kpi">
+              <span class="ord-summary-value">{{ s.totalOrders }}</span>
+              <span class="ord-summary-label">Total de pedidos</span>
+            </div>
+            <div class="ord-summary-kpi">
+              <span class="ord-summary-value">{{ formatSoles(s.totalAmount) }}</span>
+              <span class="ord-summary-label">Monto total</span>
+            </div>
+            <div class="ord-summary-kpi">
+              <span class="ord-summary-value">{{ formatSoles(s.totalDiscountAmount) }}</span>
+              <span class="ord-summary-label">Descuento total</span>
+            </div>
+            <div class="ord-summary-kpi">
+              <span class="ord-summary-value">{{ formatSoles(s.totalNetAmount) }}</span>
+              <span class="ord-summary-label">Neto total</span>
+            </div>
+            <div class="ord-summary-kpi">
+              <span class="ord-summary-value">{{ s.totalBonusLines }}</span>
+              <span class="ord-summary-label">Líneas bonificadas</span>
+              <span class="ord-summary-compare">{{ s.totalBonusUnits }} unidades</span>
+            </div>
+          </div>
+
+          @if (s.salesByBrand.length > 0) {
+            <table class="ui-table-grid ord-summary-table">
+              <thead>
+                <tr>
+                  <th>Marca</th>
+                  <th>Bruto</th>
+                  <th>Descuento</th>
+                  <th>Neto</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (brand of s.salesByBrand; track brand.brandId) {
+                  <tr>
+                    <td>{{ brand.brandName }}</td>
+                    <td class="ord-muted">{{ formatSoles(brand.grossAmount) }}</td>
+                    <td class="ord-muted">{{ formatSoles(brand.discountAmount) }}</td>
+                    <td class="ord-cell-strong">{{ formatSoles(brand.netAmount) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
+
       <div class="ord-filters">
         <ui-typeahead
           label="Cliente"
@@ -77,6 +131,17 @@ const DELIVERY_FILTER_OPTIONS: UiFieldOption[] = [
           [(value)]="deliveryFilter"
           [options]="deliveryOptions"
         />
+        <ui-field label="Día" type="date" [(value)]="dayFilter" />
+        <div class="ord-month-field">
+          <label for="ord-month">Mes</label>
+          <input
+            id="ord-month"
+            type="month"
+            class="ord-month-input"
+            [value]="monthFilter()"
+            (input)="monthFilter.set($any($event.target).value)"
+          />
+        </div>
       </div>
 
       <ui-table
@@ -214,13 +279,88 @@ const DELIVERY_FILTER_OPTIONS: UiFieldOption[] = [
         color: var(--ink-muted);
         font-size: 14px;
       }
+      .ord-summary {
+        border: 1px solid var(--hairline);
+        padding: 18px 20px;
+        margin-top: 20px;
+      }
+      .ord-summary-skeleton {
+        height: 140px;
+        background: var(--faint);
+        margin-top: 20px;
+      }
+      .ord-summary-title {
+        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
+        margin: 0 0 14px;
+        color: var(--ink);
+      }
+      .ord-summary-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+        gap: 14px;
+      }
+      .ord-summary-kpi {
+        border: 1px solid var(--hairline);
+        padding: 12px 14px;
+      }
+      .ord-summary-value {
+        display: block;
+        font-size: var(--fs-metric);
+        font-weight: var(--fw-metric);
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .ord-summary-label {
+        display: block;
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .ord-summary-compare {
+        display: block;
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+      .ord-summary-table {
+        margin-top: 18px;
+      }
       .ord-filters {
         display: grid;
-        grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr) 200px 180px;
+        grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
         gap: 12px;
         margin: 24px 0 0;
         padding-bottom: 20px;
         border-bottom: var(--border-hair);
+      }
+      .ord-month-field {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+      .ord-month-field label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .ord-month-input {
+        font-family: var(--font-sans);
+        font-size: 15px;
+        color: var(--ink);
+        background: var(--surface-sunk);
+        border: 1px solid var(--divider);
+        border-radius: 0;
+        min-height: var(--touch-min);
+        padding: 0 12px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .ord-month-input:hover {
+        border-color: var(--ink-muted);
+      }
+      .ord-month-input:focus-visible {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
       }
       .ord-cell-strong {
         font-weight: 800;
@@ -307,6 +447,8 @@ export class OrderListPage {
   protected salespersonFilter = signal<UiLookupItem | null>(null);
   protected statusFilter = signal('');
   protected deliveryFilter = signal('');
+  protected dayFilter = signal('');
+  protected monthFilter = signal('');
 
   protected rows = signal<OrderSummary[]>([]);
   protected totalElements = signal(0);
@@ -315,6 +457,9 @@ export class OrderListPage {
   protected size = signal(20);
   protected loading = signal(true);
   protected error = signal(false);
+
+  protected summary = signal<GlobalDailyOrderSummaryView | null>(null);
+  protected summaryLoading = signal(true);
 
   protected customerSearch = (q: string) =>
     this.lookupSvc.customers(q).pipe(map((items) => toUiLookup(items)));
@@ -325,18 +470,29 @@ export class OrderListPage {
     let rows = this.rows();
     const status = this.statusFilter();
     const delivery = this.deliveryFilter();
+    const day = this.dayFilter();
+    const month = this.monthFilter();
     if (status) rows = rows.filter((o) => o.statusCode === status);
     if (delivery) rows = rows.filter((o) => o.deliveryStatusCode === delivery);
+    if (day) rows = rows.filter((o) => o.orderDate.slice(0, 10) === day);
+    if (month) rows = rows.filter((o) => o.orderDate.slice(0, 7) === month);
     return rows;
   });
 
   protected hasFrontendFilters(): boolean {
-    return !!(this.statusFilter() || this.deliveryFilter());
+    return !!(
+      this.statusFilter() ||
+      this.deliveryFilter() ||
+      this.dayFilter() ||
+      this.monthFilter()
+    );
   }
 
   protected clearFrontendFilters() {
     this.statusFilter.set('');
     this.deliveryFilter.set('');
+    this.dayFilter.set('');
+    this.monthFilter.set('');
   }
 
   private serverFiltersEffect = effect(() => {
@@ -356,6 +512,10 @@ export class OrderListPage {
       if (reparto) this.deliveryFilter.set(reparto);
     });
   });
+
+  constructor() {
+    this.loadSummary();
+  }
 
   protected countText(): string {
     const n = this.totalElements();
@@ -395,5 +555,16 @@ export class OrderListPage {
           this.error.set(true);
         },
       });
+  }
+
+  private loadSummary() {
+    this.summaryLoading.set(true);
+    this.orderSvc.dailySummary().subscribe({
+      next: (result) => {
+        this.summary.set(result);
+        this.summaryLoading.set(false);
+      },
+      error: () => this.summaryLoading.set(false),
+    });
   }
 }

@@ -84,7 +84,7 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
             <span class="dbd-metric-value">{{ formatSoles(b.totalAmount) }}</span>
             <span class="dbd-metric-label">Total</span>
           </div>
-          <div class="dbd-metric" [class.dbd-metric-alert]="b.returnedAmount > 0">
+          <div class="dbd-metric">
             <span class="dbd-metric-value">{{ formatSoles(b.returnedAmount) }}</span>
             <span class="dbd-metric-label">Devuelto</span>
           </div>
@@ -97,9 +97,7 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
             <span class="dbd-metric-label">Peso</span>
           </div>
           <div class="dbd-metric">
-            <span class="dbd-metric-value"
-              >{{ b.items.length - pendingCount() }}/{{ b.items.length }}</span
-            >
+            <span class="dbd-metric-value">{{ pct(b.itemsProgressPercentage) }}%</span>
             <span class="dbd-metric-label">Resueltos</span>
           </div>
           @if (b.settledAt) {
@@ -309,9 +307,6 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
         font-size: 12px;
         color: var(--ink-muted);
       }
-      .dbd-metric-alert .dbd-metric-value {
-        color: var(--accent-ink);
-      }
       .dbd-tabs {
         display: flex;
         gap: 0;
@@ -438,6 +433,10 @@ export class DeliveryBatchDetailPage {
     const filter = this.itemStatusFilter();
     return filter ? items.filter((i) => i.statusCode === filter) : items;
   });
+
+  protected pct(value: number): number {
+    return Math.round(value);
+  }
 
   // Bug real detrás de "el mapa no renderiza": los inputs ligados a la ruta
   // (withComponentInputBinding) todavía no tienen valor en el constructor —

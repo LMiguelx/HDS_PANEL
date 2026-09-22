@@ -4,6 +4,7 @@ import { UiField, UiFieldOption } from '../../../shared/ui/field/field';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { UserAdminService } from '../user-admin';
 import { CompanyAdminService } from '../../company/company-admin';
+import { SALES_CHANNEL_OPTIONS } from '../user-format';
 import { BranchView } from '../../../shared/models/tenant.models';
 import { UserView } from '../../../shared/models/user.models';
 
@@ -35,7 +36,12 @@ export interface UserEditDialogData {
           [options]="branchOptions()"
           [disabled]="loadingBranches()"
         />
-        <ui-field label="Canal de venta (id)" type="number" [(value)]="salesChannelId" />
+        <ui-field
+          label="Canal de venta"
+          type="select"
+          [(value)]="salesChannelId"
+          [options]="salesChannelOptions"
+        />
       </div>
 
       @if (error()) {
@@ -94,12 +100,14 @@ export class UserEditDialog {
   private userSvc = inject(UserAdminService);
   private companySvc = inject(CompanyAdminService);
 
+  protected salesChannelOptions = SALES_CHANNEL_OPTIONS;
+
   protected firstName = signal(this.data.user.firstName);
   protected lastName = signal(this.data.user.lastName ?? '');
   protected email = signal(this.data.user.email ?? '');
   protected phone = signal(this.data.user.phone ?? '');
   protected homeBranchId = signal(String(this.data.user.homeBranchId ?? ''));
-  protected salesChannelId = signal(String(this.data.user.salesChannelId ?? ''));
+  protected salesChannelId = signal(String(this.data.user.salesChannelId ?? '0'));
 
   protected branches = signal<BranchView[]>([]);
   protected loadingBranches = signal(true);
@@ -123,7 +131,7 @@ export class UserEditDialog {
 
   protected submit() {
     const salesChannelId = Number(this.salesChannelId());
-    if (!this.firstName().trim() || !salesChannelId) {
+    if (!this.firstName().trim() || this.salesChannelId() === '') {
       this.error.set('Nombres y canal de venta son obligatorios.');
       return;
     }
