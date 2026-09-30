@@ -45,6 +45,7 @@ export interface TopSalespersonView {
   userId: number;
   fullName: string;
   branchName: string | null; // informativo (sede), no es un filtro
+  salesChannelName: string; // canal del vendedor
   netAmount: number;
 }
 

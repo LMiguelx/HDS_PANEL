@@ -64,6 +64,13 @@ export const NAV: NavItem[] = [
     anyOf: ['order.view_all'],
     group: 'Ventas',
   },
+  {
+    label: 'Reportes de ventas',
+    icon: 'bar_chart',
+    route: '/reportes-ventas',
+    anyOf: ['order.view_all'],
+    group: 'Ventas',
+  },
 
   // Promos — módulo rediseñado, una sola entrada para las 5 pantallas
   {

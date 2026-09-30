@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
 import {
+  AdminOrderSummary,
   GlobalDailyOrderSummaryView,
   OrderDetail,
   OrderListFilters,
@@ -11,9 +12,8 @@ import {
 } from '../../shared/models/order.models';
 
 /**
- * Solo los 4 endpoints GET documentados (consulta/supervisión) — creación,
- * envío a facturación y anulación de pedidos no figuran en el documento de
- * referencia, quedan fuera de alcance hasta que se confirmen.
+ * Creación, envío a facturación y anulación de pedidos no figuran en el
+ * documento de referencia, quedan fuera de alcance hasta que se confirmen.
  */
 @Injectable({ providedIn: 'root' })
 export class OrderAdminService {
@@ -30,9 +30,13 @@ export class OrderAdminService {
     return params;
   }
 
-  /** CU-22 — búsqueda global por cliente y/o vendedor. */
+  /**
+   * Búsqueda global — todo filtro (fecha, cliente, vendedor, estado) se
+   * resuelve en el servidor antes de paginar. Sin from/to, el backend
+   * devuelve solo los pedidos de hoy.
+   */
   list(filters: OrderListFilters = {}) {
-    return this.http.get<PageResponse<OrderSummary>>(this.base, {
+    return this.http.get<PageResponse<AdminOrderSummary>>(this.base, {
       params: this.paramsFrom(filters),
     });
   }

@@ -62,6 +62,15 @@ export const routes: Routes = [
         canActivate: [permissionGuard('order.view_all', 'order.create')],
         loadChildren: () => import('./features/orders/order.routes').then((m) => m.ORDER_ROUTES),
       },
+      // Reportes de ventas — nuevo, separa operación (Pedidos) de análisis
+      {
+        path: 'reportes-ventas',
+        canActivate: [permissionGuard('order.view_all')],
+        loadChildren: () =>
+          import('./features/sales-reports/sales-reports.routes').then(
+            (m) => m.SALES_REPORTS_ROUTES,
+          ),
+      },
 
       // Promociones (módulo 4) — rediseñado
       {

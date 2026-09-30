@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth';
 import { NAV, NavItem } from '../../core/layout/nav.config';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
-import { UiField } from '../../shared/ui/field/field';
+import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { DashboardAdminService } from './dashboard-admin';
 import {
@@ -12,9 +12,17 @@ import {
   DashboardOrdersSummaryView,
   DashboardTodayView,
   TopProductView,
+  TopSalespersonView,
 } from '../../shared/models/dashboard.models';
 import { BATCH_STATUS_COLOR_VAR, BATCH_STATUS_OPTIONS } from '../delivery/delivery-format';
+import { LookupService } from '../promos/lookup';
 import { formatSoles } from '../../shared/pipes/money';
+
+const TOP_LIMIT_OPTIONS: UiFieldOption[] = [
+  { value: '3', label: 'Top 3' },
+  { value: '5', label: 'Top 5' },
+  { value: '7', label: 'Top 7' },
+];
 
 function todayIso(): string {
   const d = new Date();
@@ -197,17 +205,38 @@ const ROLE_AVATAR_COLORS = [
           <!-- 4-5-6 -->
           <div class="home-triple-grid">
             <div class="home-block">
-              <h2 class="home-block-title">Mejores ventas del día</h2>
-              @if (d.topSalespeople.length === 0) {
-                <p class="home-block-empty">Todavía no hay ventas registradas hoy.</p>
+              <div class="home-block-head">
+                <h2 class="home-block-title">Mejores ventas del día</h2>
+                <div class="home-block-controls">
+                  <ui-field
+                    label="Top"
+                    type="select"
+                    [(value)]="topLimitStr"
+                    [options]="topLimitOptions"
+                  />
+                  <ui-field
+                    label="Canal"
+                    type="select"
+                    [(value)]="topChannelIdStr"
+                    [options]="channelOptions()"
+                  />
+                </div>
+              </div>
+              @if (topLoading()) {
+                <div class="home-top-skeleton" role="status" aria-label="Cargando"></div>
+              } @else if (displayedTopSalespeople().length === 0) {
+                <p class="home-block-empty">{{ topEmptyText() }}</p>
               } @else {
                 <ol class="home-rank-list">
-                  @for (s of d.topSalespeople; track s.userId; let i = $index) {
+                  @for (s of displayedTopSalespeople(); track s.userId; let i = $index) {
                     <li class="home-rank-row">
                       <span class="home-rank-num">{{ i + 1 }}</span>
                       <span class="home-rank-body">
                         <span class="home-rank-name">{{ s.fullName }}</span>
-                        <span class="home-rank-meta">{{ s.branchName || '—' }}</span>
+                        <span class="home-rank-meta"
+                          >{{ s.branchName || '—'
+                          }}{{ topChannelIdStr() ? '' : ' · ' + s.salesChannelName }}</span
+                        >
                       </span>
                       <span class="home-rank-amount">{{ formatSoles(s.netAmount) }}</span>
                     </li>
@@ -274,6 +303,16 @@ const ROLE_AVATAR_COLORS = [
           <span class="home-tile-name">Pedidos</span>
           <span class="home-tile-note"
             >Búsqueda global, historial por cliente y bonificaciones pendientes.</span
+          >
+        </a>
+        <a
+          class="home-tile is-ready"
+          routerLink="/reportes-ventas"
+          *hasPermission="'order.view_all'"
+        >
+          <span class="home-tile-name">Reportes de ventas</span>
+          <span class="home-tile-note"
+            >Resumen del día, liquidación de vendedores y ventas por marca.</span
           >
         </a>
         <a class="home-tile is-ready" routerLink="/promociones" *hasPermission="promoPermissions">
@@ -401,6 +440,28 @@ const ROLE_AVATAR_COLORS = [
         font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
         margin: 0 0 16px;
         color: var(--ink);
+      }
+      .home-block-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .home-block-head .home-block-title {
+        margin: 0;
+      }
+      .home-block-controls {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .home-block-controls ui-field {
+        width: 96px;
+      }
+      .home-top-skeleton {
+        height: 140px;
+        background: var(--faint);
       }
       .home-block-empty {
         margin: 0;
@@ -835,6 +896,7 @@ const ROLE_AVATAR_COLORS = [
 export class DashboardPage {
   private auth = inject(AuthService);
   private dashboardSvc = inject(DashboardAdminService);
+  private lookupSvc = inject(LookupService);
 
   readonly user = this.auth.currentUser;
   readonly promoPermissions = ['promo.create', 'promo.approve', 'promo.allocate'];
@@ -847,6 +909,22 @@ export class DashboardPage {
   protected loading = signal(true);
   protected error = signal(false);
 
+  protected topLimitOptions = TOP_LIMIT_OPTIONS;
+  protected channelOptions = signal<UiFieldOption[]>([{ value: '', label: 'Todos' }]);
+  protected topLimitStr = signal('5');
+  protected topChannelIdStr = signal('');
+  protected topSalespeopleOverride = signal<TopSalespersonView[] | null>(null);
+  protected topLoading = signal(false);
+
+  protected displayedTopSalespeople = computed(
+    () => this.topSalespeopleOverride() ?? this.data()?.topSalespeople ?? [],
+  );
+  protected topEmptyText = computed(() =>
+    this.topChannelIdStr()
+      ? 'Sin ventas en este canal para el día.'
+      : 'Todavía no hay ventas registradas hoy.',
+  );
+
   private loadEffect = effect(() => {
     this.date();
     untracked(() => {
@@ -854,17 +932,60 @@ export class DashboardPage {
     });
   });
 
+  /**
+   * Solo se dispara al cambiar el selector de cantidad o canal — nunca
+   * recarga /today. Si vuelve a los valores por defecto (Top 5, Todos) usa
+   * directamente d.topSalespeople, sin llamar al endpoint.
+   */
+  private topSelectorsEffect = effect(() => {
+    const limitStr = this.topLimitStr();
+    const channelStr = this.topChannelIdStr();
+    untracked(() => {
+      if (!this.data()) return;
+      if (limitStr === '5' && channelStr === '') {
+        this.topSalespeopleOverride.set(null);
+        return;
+      }
+      this.loadTopSalespeople(Number(limitStr), channelStr ? Number(channelStr) : undefined);
+    });
+  });
+
+  constructor() {
+    this.lookupSvc.salesChannels().subscribe((items) => {
+      this.channelOptions.set([
+        { value: '', label: 'Todos' },
+        ...items.map((i) => ({ value: String(i.id), label: i.name ?? '' })),
+      ]);
+    });
+  }
+
   load() {
     this.loading.set(true);
     this.error.set(false);
     this.dashboardSvc.today(this.date()).subscribe({
       next: (result) => {
         this.data.set(result);
+        this.topLimitStr.set('5');
+        this.topChannelIdStr.set('');
+        this.topSalespeopleOverride.set(null);
         this.loading.set(false);
       },
       error: () => {
         this.loading.set(false);
         this.error.set(true);
+      },
+    });
+  }
+
+  private loadTopSalespeople(limit: number, salesChannelId?: number) {
+    this.topLoading.set(true);
+    this.dashboardSvc.topSalespeople(this.date(), limit, salesChannelId).subscribe({
+      next: (result) => {
+        this.topSalespeopleOverride.set(result);
+        this.topLoading.set(false);
+      },
+      error: () => {
+        this.topLoading.set(false);
       },
     });
   }

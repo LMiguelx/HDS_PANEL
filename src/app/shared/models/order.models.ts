@@ -17,9 +17,24 @@ export interface OrderSummary {
   deliveryStatusCode: string | null; // IN_ROUTE | DELIVERED | PARTIAL | REJECTED
 }
 
+/**
+ * Fila del listado global (GET /orders) — ver
+ * 27-panel-admin-pedidos-reportes-ventas-dashboard.md, sección 5.3. Mismos
+ * campos que OrderSummary más salespersonId/salespersonName (columna
+ * "Vendedor"). No reemplaza OrderSummary: GET /orders/customer/{id} sigue
+ * devolviendo esa forma, no está documentada en este archivo.
+ */
+export interface AdminOrderSummary extends OrderSummary {
+  salespersonId: number;
+  salespersonName: string;
+}
+
 export interface OrderListFilters {
   customerId?: number;
   salespersonId?: number;
+  from?: string; // yyyy-MM-dd, inclusive
+  to?: string; // yyyy-MM-dd, inclusive
+  statusCode?: string;
   page?: number;
   size?: number;
 }
