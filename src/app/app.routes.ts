@@ -2,9 +2,6 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
 import { permissionGuard } from './core/auth/permission-guard';
 
-const comingSoon = () =>
-  import('./shared/ui/coming-soon/coming-soon').then((m) => m.ComingSoonPage);
-
 export const routes: Routes = [
   {
     path: 'login',
@@ -49,13 +46,6 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/assignments/assignments.routes').then((m) => m.ASSIGNMENT_ROUTES),
       },
-      {
-        path: 'segmentos',
-        canActivate: [permissionGuard('segments.manage')],
-        loadComponent: comingSoon,
-        data: { title: 'Segmentos', icon: 'group_work' },
-      },
-
       // Pedidos (módulo 3) — rediseñado
       {
         path: 'pedidos',
@@ -77,6 +67,13 @@ export const routes: Routes = [
         path: 'promociones',
         canActivate: [permissionGuard('promo.create', 'promo.approve', 'promo.allocate')],
         loadChildren: () => import('./features/promos/promos.routes').then((m) => m.PROMO_ROUTES),
+      },
+      // Segmentos de clientes — nuevo, se usan para el targeting de promociones
+      {
+        path: 'segmentos',
+        canActivate: [permissionGuard('segment.manage')],
+        loadChildren: () =>
+          import('./features/segments/segments.routes').then((m) => m.SEGMENT_ROUTES),
       },
 
       // Reparto (módulo 5) — rediseñado

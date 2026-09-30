@@ -40,15 +40,6 @@ export const NAV: NavItem[] = [
     anyOf: ['customer.assign'],
     group: 'Clientes',
   },
-  {
-    label: 'Segmentos',
-    icon: 'group_work',
-    route: '/segmentos',
-    anyOf: ['segments.manage'],
-    group: 'Clientes',
-    comingSoon: true,
-  },
-
   // Ventas
   {
     label: 'Pedidos',
@@ -78,6 +69,13 @@ export const NAV: NavItem[] = [
     icon: 'local_offer',
     route: '/promociones',
     anyOf: PROMO_ANY_PERMISSION,
+    group: 'Promos',
+  },
+  {
+    label: 'Segmentos',
+    icon: 'group_work',
+    route: '/segmentos',
+    anyOf: ['segment.manage'],
     group: 'Promos',
   },
 

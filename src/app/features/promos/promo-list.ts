@@ -105,7 +105,12 @@ import { vigenciaText } from './promo-format';
                 </td>
                 <td>{{ p.promoTypeName || p.promoType }}</td>
                 <td>{{ p.scopeSummary }}</td>
-                <td class="promo-cell-strong">{{ p.benefitSummary }}</td>
+                <td class="promo-cell-strong">
+                  {{ p.benefitSummary }}
+                  @if (p.repeats) {
+                    <span class="promo-badge-repeats">Se repite</span>
+                  }
+                </td>
                 <td class="promo-cell-muted">{{ vigencia(p) }}</td>
                 <td>{{ p.salesChannelName }}</td>
                 <td><ui-status [label]="p.statusLabel || ''" /></td>
@@ -136,7 +141,12 @@ import { vigenciaText } from './promo-format';
                 <ui-status [label]="p.statusLabel || ''" />
               </div>
               <div class="promo-card-mobile-scope">{{ p.scopeSummary }}</div>
-              <div class="promo-card-mobile-benefit">{{ p.benefitSummary }}</div>
+              <div class="promo-card-mobile-benefit">
+                {{ p.benefitSummary }}
+                @if (p.repeats) {
+                  <span class="promo-badge-repeats">Se repite</span>
+                }
+              </div>
               <div class="promo-card-mobile-vigencia">{{ vigencia(p) }}</div>
             </a>
           }
@@ -191,6 +201,17 @@ import { vigenciaText } from './promo-format';
       }
       .promo-cell-strong {
         font-weight: 800;
+      }
+      .promo-badge-repeats {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border: 1px solid var(--accent);
+        color: var(--accent-ink);
       }
       .promo-cell-muted {
         color: var(--ink-muted);

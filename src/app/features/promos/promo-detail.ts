@@ -1,15 +1,22 @@
 import { Component, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { PromoService } from './promo';
 import { PromoDetail } from './promo.types';
-import { vigenciaText } from './promo-format';
+import {
+  applicationsPerCustomerText,
+  priorityText,
+  repeatsText,
+  vigenciaText,
+} from './promo-format';
 
 @Component({
   selector: 'app-promo-detail',
-  imports: [UiButton, UiStatus, UiEmpty],
+  imports: [RouterLink, UiButton, UiStatus, UiEmpty, HasPermissionDirective],
   template: `
     <section class="promo-detail-page">
       @if (loading()) {
@@ -25,24 +32,79 @@ import { vigenciaText } from './promo-format';
       } @else if (promo(); as p) {
         <div class="promo-detail-head">
           <div>
-            <ui-status [label]="p.active ? 'Vigente' : 'Apagada'" [status]="p.active ? 'vigente' : 'apagada'" />
+            <ui-status
+              [label]="p.active ? 'Vigente' : 'Apagada'"
+              [status]="p.active ? 'vigente' : 'apagada'"
+            />
             <h1>{{ p.name }}</h1>
             <p class="promo-detail-meta">{{ metaLine(p) }}</p>
           </div>
           <div class="promo-detail-actions">
             <button uiButton variant="secondary" (click)="duplicate()">Duplicar</button>
+            @if (!p.active) {
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="'promo.create'"
+                [routerLink]="['/promociones', p.promoId, 'editar']"
+              >
+                Editar
+              </button>
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="'promo.create'"
+                (click)="remove()"
+              >
+                Borrar
+              </button>
+            }
             @if (p.active) {
-              <button uiButton variant="secondary" (click)="deactivate()">Desactivar</button>
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="'promo.approve'"
+                (click)="deactivate()"
+              >
+                Apagar
+              </button>
             } @else {
-              <button uiButton variant="secondary" (click)="activate()">Activar</button>
+              <button
+                uiButton
+                variant="primary"
+                *hasPermission="'promo.approve'"
+                (click)="activate()"
+              >
+                Encender
+              </button>
             }
           </div>
         </div>
+
+        @if (deleteError()) {
+          <div class="promo-detail-error">{{ deleteError() }}</div>
+        }
 
         @if (p.description) {
           <div class="promo-detail-prose">{{ p.description }}</div>
         }
         <hr class="promo-detail-rule" />
+
+        <div class="promo-detail-facts">
+          <div>
+            <span>Se combina</span><span>{{ p.stackable ? 'Sí' : 'No' }}</span>
+          </div>
+          <div>
+            <span>Se repite</span><span>{{ repeatsText(p.repeats, p.maxRepeatsPerOrder) }}</span>
+          </div>
+          <div>
+            <span>Veces por cliente</span>
+            <span>{{ applicationsPerCustomerText(p.maxApplicationsPerCustomer) }}</span>
+          </div>
+          <div>
+            <span>Prioridad</span><span>{{ priorityText(p.priority) }}</span>
+          </div>
+        </div>
 
         <div class="promo-tiers">
           @for (tier of p.tiers; track tier.tier) {
@@ -73,7 +135,9 @@ import { vigenciaText } from './promo-format';
                 }
               </div>
             } @else {
-              <div class="promo-detail-muted">Cualquier compra que llegue al total mínimo del tramo.</div>
+              <div class="promo-detail-muted">
+                Cualquier compra que llegue al total mínimo del tramo.
+              </div>
             }
           </div>
           <div>
@@ -115,6 +179,28 @@ import { vigenciaText } from './promo-format';
       .promo-detail-actions {
         display: flex;
         gap: 8px;
+        flex-wrap: wrap;
+      }
+      .promo-detail-error {
+        margin-top: 14px;
+        color: var(--accent-ink);
+        font-size: 13px;
+      }
+      .promo-detail-facts {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+        font-size: 14px;
+      }
+      .promo-detail-facts div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .promo-detail-facts span:first-child {
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .promo-detail-prose {
         border-left: 3px solid var(--accent);
@@ -202,10 +288,16 @@ export class PromoDetailPage {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private promoSvc = inject(PromoService);
+  private dialog = inject(UiDialogService);
+
+  protected priorityText = priorityText;
+  protected repeatsText = repeatsText;
+  protected applicationsPerCustomerText = applicationsPerCustomerText;
 
   protected promo = signal<PromoDetail | null>(null);
   protected loading = signal(true);
   protected error = signal(false);
+  protected deleteError = signal('');
 
   constructor() {
     this.load();
@@ -229,18 +321,11 @@ export class PromoDetailPage {
 
   protected metaLine(p: PromoDetail): string {
     const parts = [
+      p.promoTypeName || p.promoType,
       p.salesChannelName,
       vigenciaText(p.startDate, p.endDate),
-      p.priority ? `prioridad ${this.priorityText(p.priority)}` : '',
-      p.stackable ? 'se combina con otras' : 'no se combina',
     ].filter(Boolean);
     return parts.join(' · ');
-  }
-
-  private priorityText(priority: number): string {
-    if (priority <= 1) return 'alta';
-    if (priority <= 5) return 'media';
-    return 'baja';
   }
 
   protected tierFallback(tier: { fromQuantity?: number; fromAmount?: number }): string {
@@ -297,5 +382,30 @@ export class PromoDetailPage {
     const id = this.promo()?.promoId;
     if (!id) return;
     this.promoSvc.deactivate(id).subscribe(() => this.load());
+  }
+
+  protected remove() {
+    const id = this.promo()?.promoId;
+    if (!id) return;
+    this.dialog
+      .confirm({
+        title: 'Borrar promoción',
+        message: '¿Borrar esta promoción? Esta acción no se puede deshacer.',
+        confirmLabel: 'Borrar',
+        destructive: true,
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.deleteError.set('');
+        this.promoSvc.remove(id).subscribe({
+          next: () => this.router.navigate(['/promociones']),
+          error: (err) => {
+            const detalle = err?.error?.detail ?? err?.error?.message;
+            this.deleteError.set(
+              detalle || 'No pudimos borrar la promoción: ya se aplicó en algún pedido.',
+            );
+          },
+        });
+      });
   }
 }

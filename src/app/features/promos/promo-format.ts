@@ -19,3 +19,28 @@ export function waitingText(createdAt: string): string {
   if (days <= 0) return 'Hoy';
   return days === 1 ? 'Espera 1 día' : `Espera ${days} días`;
 }
+
+/** Valores fijos del selector de prioridad — sección 3.8 del doc 28. */
+export const PRIORITY_OPTIONS = [
+  { value: '50', label: 'Alta' },
+  { value: '100', label: 'Media' },
+  { value: '200', label: 'Baja' },
+];
+
+/** "Alta" / "Media" / "Baja" · el número tal cual si no es uno de los fijos. */
+export function priorityText(priority?: number | null): string {
+  if (priority == null) return '—';
+  const match = PRIORITY_OPTIONS.find((o) => Number(o.value) === priority);
+  return match ? match.label : String(priority);
+}
+
+/** "Sí (tope 3 por pedido)" / "No". */
+export function repeatsText(repeats?: boolean | null, maxRepeatsPerOrder?: number | null): string {
+  if (!repeats) return 'No';
+  return maxRepeatsPerOrder != null ? `Sí (tope ${maxRepeatsPerOrder} por pedido)` : 'Sí';
+}
+
+/** "N" / "Ilimitado". */
+export function applicationsPerCustomerText(value?: number | null): string {
+  return value != null ? String(value) : 'Ilimitado';
+}
