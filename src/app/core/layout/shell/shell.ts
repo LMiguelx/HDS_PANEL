@@ -32,6 +32,10 @@ export class ShellComponent {
   );
 
   readonly themeLabel = computed(() => (this.theme.resolved() === 'dark' ? 'Claro' : 'Oscuro'));
+  readonly userInitial = computed(() => {
+    const name = this.user()?.fullName || this.user()?.username || '';
+    return name.charAt(0).toUpperCase() || '?';
+  });
 
   constructor() {
     if (this.auth.hasAny(...PROMO_ANY_PERMISSION)) {

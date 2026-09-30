@@ -10,7 +10,7 @@
           aria-label="Abrir menú"
           (click)="drawerOpen.set(!drawerOpen())"
         >
-          ☰
+          <span class="material-icons" aria-hidden="true">menu</span>
         </button>
       }
       <span class="brand">HDSAPP</span>
@@ -20,12 +20,15 @@
 
     <div class="topbar-actions">
       @if (!isHandset()) {
-        <span class="user-name">{{ user()?.fullName || user()?.username }}</span>
+        <div class="user-chip">
+          <span class="user-avatar">{{ userInitial() }}</span>
+          <span class="user-name">{{ user()?.fullName || user()?.username }}</span>
+        </div>
       }
-      <button uiButton variant="secondary" sizes="sm" type="button" (click)="theme.toggle()">
+      <button uiButton variant="secondary" size="sm" type="button" (click)="theme.toggle()">
         {{ themeLabel() }}
       </button>
-      <button uiButton variant="ghost" sizes="sm" type="button" (click)="logout()">Salir</button>
+      <button uiButton variant="ghost" size="sm" type="button" (click)="logout()">Salir</button>
     </div>
   </header>
 
@@ -41,7 +44,10 @@
             [class.is-coming-soon]="item.comingSoon"
             (click)="closeDrawer()"
           >
-            <span class="nav-label">{{ item.label }}</span>
+            <span class="nav-main">
+              <span class="nav-icon material-icons" aria-hidden="true">{{ item.icon }}</span>
+              <span class="nav-label">{{ item.label }}</span>
+            </span>
             @if (item.comingSoon) {
               <span class="nav-tag">Próximamente</span>
             } @else if (item.route === '/promociones' && pendingCount.count()) {
