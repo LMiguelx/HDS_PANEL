@@ -79,7 +79,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 <td><ui-status [label]="statusName(b.statusCode)" /></td>
                 <td class="db-muted">{{ formatSoles(b.returnedAmount) }}</td>
                 <td class="db-net">{{ formatSoles(b.netAmount) }}</td>
-                <td class="db-muted">{{ pct(b.itemsProgressPercentage) }}%</td>
+                <td class="db-muted">{{ pct(b) }}%</td>
                 <td class="db-row-action">
                   <button uiButton variant="ghost" size="sm" [routerLink]="['/reparto', b.batchId]">
                     Ver detalle
@@ -100,9 +100,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               <div class="db-muted">
                 {{ dateText(b.batchDate) }} · {{ b.vehiclePlate || 'Sin asignar' }}
               </div>
-              <div class="db-muted">
-                Neto {{ formatSoles(b.netAmount) }} · {{ pct(b.itemsProgressPercentage) }}% ítems
-              </div>
+              <div class="db-muted">Neto {{ formatSoles(b.netAmount) }} · {{ pct(b) }}% ítems</div>
               @if (b.returnedAmount > 0) {
                 <div class="db-muted">Devuelto {{ formatSoles(b.returnedAmount) }}</div>
               }
@@ -275,8 +273,16 @@ export class DeliveryBatchesPage {
     return n === 1 ? '1 planilla' : `${n} planillas`;
   }
 
-  protected pct(value: number): number {
-    return Math.round(value);
+  /**
+   * El backend a veces no manda itemsProgressPercentage (queda undefined);
+   * en ese caso se calcula acá desde statusCounts — items que ya no están
+   * pendientes sobre el total.
+   */
+  protected pct(b: BatchSummary): number {
+    if (Number.isFinite(b.itemsProgressPercentage)) return Math.round(b.itemsProgressPercentage);
+    if (!b.totalItems) return 0;
+    const resolved = b.totalItems - b.statusCounts.pending;
+    return Math.round((resolved / b.totalItems) * 100);
   }
 
   protected prevPage() {

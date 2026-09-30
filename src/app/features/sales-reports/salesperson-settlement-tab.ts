@@ -93,10 +93,7 @@ function todayIso(): string {
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="2" class="sst-cell-strong">Sumas</td>
-                @if (isSingleDay()) {
-                  <td></td>
-                }
+                <td [attr.colspan]="isSingleDay() ? 3 : 4" class="sst-cell-strong">Sumas</td>
                 <td class="sst-cell-strong">{{ r.totalOrders }}</td>
                 <td class="sst-cell-strong">{{ weightText(r.totalWeightKg) }}</td>
                 <td class="sst-cell-strong">{{ formatSoles(r.totalNetAmount) }}</td>

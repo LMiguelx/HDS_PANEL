@@ -97,7 +97,7 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
             <span class="dbd-metric-label">Peso</span>
           </div>
           <div class="dbd-metric">
-            <span class="dbd-metric-value">{{ pct(b.itemsProgressPercentage) }}%</span>
+            <span class="dbd-metric-value">{{ pct(b) }}%</span>
             <span class="dbd-metric-label">Resueltos</span>
           </div>
           @if (b.settledAt) {
@@ -434,8 +434,16 @@ export class DeliveryBatchDetailPage {
     return filter ? items.filter((i) => i.statusCode === filter) : items;
   });
 
-  protected pct(value: number): number {
-    return Math.round(value);
+  /**
+   * El backend a veces no manda itemsProgressPercentage (queda undefined);
+   * en ese caso se calcula acá desde los comprobantes — los que ya no están
+   * pendientes sobre el total.
+   */
+  protected pct(b: BatchDetail): number {
+    if (Number.isFinite(b.itemsProgressPercentage)) return Math.round(b.itemsProgressPercentage);
+    if (!b.items.length) return 0;
+    const resolved = b.items.length - this.pendingCount();
+    return Math.round((resolved / b.items.length) * 100);
   }
 
   // Bug real detrás de "el mapa no renderiza": los inputs ligados a la ruta

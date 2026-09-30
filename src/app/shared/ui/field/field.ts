@@ -48,7 +48,9 @@ let nextId = 0;
                  sin esto el navegador pinta la primera opción aunque el
                  valor esté vacío, y el formulario parece lleno sin estarlo. -->
             @for (opt of options(); track opt.value) {
-              <option [value]="opt.value" [selected]="opt.value === value()">{{ opt.label }}</option>
+              <option [value]="opt.value" [selected]="opt.value === value()">
+                {{ opt.label }}
+              </option>
             }
           </select>
         }
@@ -119,6 +121,13 @@ let nextId = 0;
       }
       .ui-input:read-only {
         background: transparent;
+      }
+      /* El popup nativo del <select> no siempre hereda color-scheme del
+         documento (varía por navegador); sin esto el texto queda claro
+         sobre fondo claro del sistema al usar el tema oscuro de la app. */
+      select.ui-input option {
+        background-color: var(--surface-sunk);
+        color: var(--ink);
       }
       .ui-field-error .ui-input {
         border-color: var(--st-vencida, #d13b3b);
