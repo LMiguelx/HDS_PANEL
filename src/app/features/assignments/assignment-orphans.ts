@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiTable } from '../../shared/ui/table/table';
 import { UiEmpty } from '../../shared/ui/empty/empty';
@@ -23,15 +24,18 @@ import { dateTimeText } from './assignment-format';
           <h1>Clientes sin vendedor</h1>
           <p class="orp-sub">{{ countText() }}</p>
         </div>
-        <button
-          uiButton
-          variant="primary"
-          [loading]="autoAssigning()"
-          [disabled]="orphans().length === 0"
-          (click)="runAutoAssign()"
-        >
-          Reparto automático
-        </button>
+        <div class="orp-head-actions">
+          <button uiButton variant="secondary" (click)="viewOnMap()">Ver en mapa</button>
+          <button
+            uiButton
+            variant="primary"
+            [loading]="autoAssigning()"
+            [disabled]="orphans().length === 0"
+            (click)="runAutoAssign()"
+          >
+            Reparto automático
+          </button>
+        </div>
       </div>
 
       <ui-table
@@ -137,6 +141,10 @@ import { dateTimeText } from './assignment-format';
         color: var(--ink-muted);
         font-size: 14px;
       }
+      .orp-head-actions {
+        display: flex;
+        gap: 10px;
+      }
       .orp-cell-strong {
         font-weight: 800;
       }
@@ -198,6 +206,7 @@ export class AssignmentOrphansPage {
   private alerts = inject(AssignmentAlertStore);
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
+  private router = inject(Router);
 
   protected dateTimeText = dateTimeText;
 
@@ -229,6 +238,10 @@ export class AssignmentOrphansPage {
         this.error.set(true);
       },
     });
+  }
+
+  protected viewOnMap() {
+    this.router.navigate(['/asignaciones/mapa'], { queryParams: { orphansOnly: 'true' } });
   }
 
   protected assign(customer: OrphanCustomerView) {

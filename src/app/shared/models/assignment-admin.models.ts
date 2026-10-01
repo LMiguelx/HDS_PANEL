@@ -1,8 +1,8 @@
 // Contratos del panel de administración de asignaciones (/api/admin/assignments).
 // Escritos a mano porque el endpoint es nuevo y `api.ts` (generado por
 // openapi-typescript) todavía no lo incluye — mismo criterio ya usado en
-// assignment.models.ts / customer.models.ts. Reemplazar por alias a `api.ts`
-// cuando el backend regenere el esquema con este módulo incluido.
+// sales-report.models.ts / segment.models.ts. Ver
+// 29-panel-admin-asignaciones-mapa-coberturas.md.
 
 export interface AssignmentView {
   assignmentId: number;
@@ -16,12 +16,20 @@ export interface AssignmentView {
   weeksOfCycle: number[]; // 1..4, puede venir incompleto (ver hasGap)
 }
 
+/** Fila del listado (GET /) — mismos campos de AssignmentView + nombres. */
+export interface AssignmentAdminView extends AssignmentView {
+  customerCode: string;
+  customerName: string;
+  userName: string; // vendedor
+}
+
 export interface AssignmentListFilters {
   userId?: number;
   customerId?: number;
   hasGap?: boolean;
   page?: number;
   size?: number;
+  sort?: string;
 }
 
 export interface OrphanCustomerView {
@@ -44,39 +52,80 @@ export interface VendorOnRouteView {
   startLongitude: number | null;
 }
 
+/** Un punto del mapa — cada cliente de la cartera visible esa fecha. */
 export interface MapCustomerView {
   customerId: number;
   code: string;
   customerName: string;
-  latitude: number;
-  longitude: number;
-  /** null si el cliente es huérfano. */
-  userId: number | null;
-  userName: string | null;
-  /** null si no hay visita registrada hoy (aunque haya tenido una ayer). */
-  visitStatusCode: string | null;
-  /** true si según weekday + semana del ciclo, hoy le toca visita. */
-  scheduledToday: boolean;
+  latitude: number | null; // null = cliente sin coordenadas (no se dibuja)
+  longitude: number | null;
+  routeSequence: number | null; // orden de visita planificado
+  ownerUserId: number | null; // dueño de la cartera en la fecha; null = huérfano
+  ownerUserName: string | null;
+  coveringUserId: number | null; // quién lo cubre esa fecha; null = sin cobertura
+  coveringUserName: string | null;
+  visitingUserId: number | null; // covering ?? owner — color del borde
+  scheduled: boolean; // le toca visita esa fecha; cubierto = siempre true
+  visitStatusCode: string; // última visita del día; PENDING si no hubo
+  visitStatusName: string;
+  visitReasonName: string | null;
+  lastVisitAt: string | null; // ISO datetime
+  orderId: number | null;
+  orderNetAmount: number | null;
+  orderStatusCode: string | null;
+  orderStatusName: string | null;
+}
+
+/** Una visita del día (recorrido + bitácora) — GET /map. */
+export interface MapVisitView {
+  visitId: number;
+  visitedAt: string; // ISO datetime
+  userId: number; // vendedor que visitó (dueño de la ruta)
+  userName: string;
+  customerId: number;
+  customerCode: string;
+  customerName: string;
+  visitStatusCode: string;
+  visitStatusName: string;
+  visitReasonName: string | null;
+  orderId: number | null;
+  orderNetAmount: number | null;
+  orderStatusCode: string | null;
+  orderStatusName: string | null;
+  latitude: number | null; // GPS del vendedor al marcar
+  longitude: number | null;
+}
+
+/** Inicio/fin de ruta de un vendedor esa fecha — GET /map. */
+export interface MapRouteView {
+  userId: number;
+  userName: string;
+  routeId: number;
+  startTime: string; // ISO datetime
+  endTime: string | null; // null = la ruta sigue abierta
+  startLatitude: number | null;
+  startLongitude: number | null;
+  endLatitude: number | null;
+  endLongitude: number | null;
 }
 
 export interface MapQuery {
   userIds?: number[];
   orphansOnly?: boolean;
+  date?: string; // yyyy-MM-dd; vacío = hoy
 }
 
-/**
- * `vendorStarts` sale vacío si solo se filtró por `orphansOnly`, sin
- * `userIds` — no hay vendedor cuya ruta mostrar.
- */
 export interface MapResponse {
+  date: string; // yyyy-MM-dd resuelta (hoy si no se envió)
   customers: MapCustomerView[];
-  vendorStarts: VendorOnRouteView[];
+  visits: MapVisitView[]; // vacía si solo huérfanos o fecha futura
+  routes: MapRouteView[]; // vacía si solo huérfanos o fecha futura
 }
 
+/** Nace siempre hoy: no se envía effectiveFrom (sección 5.2 del doc). */
 export interface CreateAssignmentCommand {
   customerId: number;
   userId: number;
-  effectiveFrom: string; // yyyy-MM-dd
   weekdays?: number[]; // opcional al crear — vacío/omitido = horario incompleto
   weeksOfCycle?: number[];
 }
@@ -88,20 +137,23 @@ export interface UpdateScheduleCommand {
   weeksOfCycle?: number[];
 }
 
+export type CoverageSelection = 'SCHEDULED' | 'ALL_PORTFOLIO' | 'CUSTOMER_IDS';
+
 export interface CreateCoverageCommand {
   absentUserId: number;
   coveringUserId: number;
-  coverageDate: string; // yyyy-MM-dd
-  customerIds: number[];
+  coverageDate: string; // yyyy-MM-dd, hoy o futura
+  selection: CoverageSelection;
+  customerIds: number[]; // solo con CUSTOMER_IDS (al menos uno); vacío en las otras
   reason?: string; // máx 255
 }
 
 export interface CoverageView {
   coverageId: number;
+  customerId: number;
   absentUserId: number;
   coveringUserId: number;
   coverageDate: string;
-  customerId: number;
   reason: string | null;
 }
 
@@ -128,17 +180,40 @@ export interface CoverageListFilters {
 
 /**
  * Cartera real del vendedor ausente en la fecha dada — GET /coverage-candidates.
- * `existingCoveringUserId`/`existingCoveringUserName` son null si nadie cubre
- * ese cliente ese día; si vienen, el front avisa antes de confirmar (el
- * backend reasigna la cobertura, no rechaza).
+ * Llegan con los programados primero y luego por nombre.
  */
 export interface CoverageCandidateView {
   customerId: number;
   code: string;
   businessName: string;
-  rating: number | null; // 1 a 5
+  rating: number | null; // 1 a 5; null = sin calificar
+  scheduledOnDate: boolean; // el ausente lo tenía programado esa fecha
   existingCoveringUserId: number | null;
   existingCoveringUserName: string | null;
+}
+
+export interface ImportCoverageParams {
+  absentUserId: number;
+  coveringUserId: number;
+  coverageDate: string; // yyyy-MM-dd, hoy o futura
+  reason?: string;
+}
+
+export interface ImportCoverageResult {
+  totalRows: number;
+  invalidRows: number;
+  duplicatesInFile: number;
+  matched: number;
+  notInPortfolio: number;
+  inactive: number;
+  notFound: number;
+  alreadyCovered: number;
+  toReassign: number;
+  toCreate: number;
+  applied: boolean;
+  notFoundSample: string[];
+  notInPortfolioSample: string[];
+  invalidSample: string[];
 }
 
 /**
@@ -156,8 +231,10 @@ export interface AutoAssignmentResult {
 export interface IncompleteScheduleView {
   assignmentId: number;
   customerId: number;
+  customerCode: string;
   customerName: string;
   userId: number;
+  userName: string;
   hasWeekdays: boolean;
   hasWeeksOfCycle: boolean;
 }

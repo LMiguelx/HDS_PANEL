@@ -12,8 +12,8 @@ import { AssignmentModuleTabs } from './ui/module-tabs';
 import { CreateAssignmentDialog } from './ui/create-assignment-dialog';
 import { ScheduleDialog } from './ui/schedule-dialog';
 import { AssignmentAdminService } from './assignment-admin';
-import { AssignmentView } from '../../shared/models/assignment-admin.models';
-import { dateText, resolveNames, weekdaysText, weeksOfCycleText } from './assignment-format';
+import { AssignmentAdminView } from '../../shared/models/assignment-admin.models';
+import { dateText, weekdaysText, weeksOfCycleText } from './assignment-format';
 
 const HAS_GAP_OPTIONS: UiFieldOption[] = [
   { value: '', label: 'Todos los horarios' },
@@ -90,8 +90,11 @@ const HAS_GAP_OPTIONS: UiFieldOption[] = [
           <tbody>
             @for (a of rows(); track a.assignmentId) {
               <tr>
-                <td class="asl-cell-strong">{{ customerName(a.customerId) }}</td>
-                <td>{{ vendorName(a.userId) }}</td>
+                <td class="asl-cell-strong">
+                  {{ a.customerName }}
+                  <div class="asl-muted">{{ a.customerCode }}</div>
+                </td>
+                <td>{{ a.userName }}</td>
                 <td class="asl-muted">
                   {{ dateText(a.effectiveFrom) }} –
                   {{ a.effectiveTo ? dateText(a.effectiveTo) : 'vigente' }}
@@ -100,7 +103,7 @@ const HAS_GAP_OPTIONS: UiFieldOption[] = [
                 <td class="asl-muted">{{ weeksOfCycleText(a.weeksOfCycle) }}</td>
                 <td>
                   @if (isIncomplete(a)) {
-                    <span class="asl-badge">Incompleto</span>
+                    <span class="asl-badge">Horario incompleto</span>
                   } @else {
                     <span class="asl-muted">Completo</span>
                   }
@@ -120,12 +123,12 @@ const HAS_GAP_OPTIONS: UiFieldOption[] = [
           @for (a of rows(); track a.assignmentId) {
             <div class="asl-card-mobile">
               <div class="asl-card-mobile-head">
-                <span class="asl-card-mobile-name">{{ customerName(a.customerId) }}</span>
+                <span class="asl-card-mobile-name">{{ a.customerName }}</span>
                 @if (isIncomplete(a)) {
-                  <span class="asl-badge">Incompleto</span>
+                  <span class="asl-badge">Horario incompleto</span>
                 }
               </div>
-              <div class="asl-muted">Vendedor: {{ vendorName(a.userId) }}</div>
+              <div class="asl-muted">{{ a.customerCode }} · Vendedor: {{ a.userName }}</div>
               <div class="asl-muted">
                 {{ dateText(a.effectiveFrom) }} –
                 {{ a.effectiveTo ? dateText(a.effectiveTo) : 'vigente' }}
@@ -287,7 +290,7 @@ export class AssignmentListPage {
   protected customerFilter = signal<UiLookupItem | null>(null);
   protected hasGap = signal('');
 
-  protected rows = signal<AssignmentView[]>([]);
+  protected rows = signal<AssignmentAdminView[]>([]);
   protected totalElements = signal(0);
   protected totalPages = signal(0);
   protected page = signal(0);
@@ -295,14 +298,8 @@ export class AssignmentListPage {
   protected loading = signal(true);
   protected error = signal(false);
 
-  // Decisión tomada para el "pendiente de UX" del documento (GET / solo trae
-  // IDs): se resuelven nombres reutilizando GET /map con los vendedores de
-  // la página actual — ver resolveNames() en assignment-format.ts.
-  private customerNames = signal<Map<number, string>>(new Map());
-  private vendorNames = signal<Map<number, string>>(new Map());
-
   protected userSearch = (q: string) =>
-    this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
+    this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
   protected customerSearch = (q: string) =>
     this.lookupSvc.customers(q).pipe(map((items) => toUiLookup(items)));
 
@@ -331,15 +328,8 @@ export class AssignmentListPage {
     this.hasGap.set('');
   }
 
-  protected isIncomplete(a: AssignmentView): boolean {
+  protected isIncomplete(a: AssignmentAdminView): boolean {
     return (a.weekdays?.length ?? 0) === 0 || (a.weeksOfCycle?.length ?? 0) === 0;
-  }
-
-  protected customerName(id: number): string {
-    return this.customerNames().get(id) ?? `Cliente #${id}`;
-  }
-  protected vendorName(id: number): string {
-    return this.vendorNames().get(id) ?? `Vendedor #${id}`;
   }
 
   protected prevPage() {
@@ -370,22 +360,12 @@ export class AssignmentListPage {
           this.totalElements.set(result.totalElements ?? 0);
           this.totalPages.set(result.totalPages ?? 0);
           this.loading.set(false);
-          this.enrichNames(result.content ?? []);
         },
         error: () => {
           this.loading.set(false);
           this.error.set(true);
         },
       });
-  }
-
-  private enrichNames(rows: AssignmentView[]) {
-    const userIds = rows.map((r) => r.userId);
-    if (userIds.length === 0) return;
-    resolveNames(this.assignmentSvc, userIds).subscribe(({ customers, vendors }) => {
-      this.customerNames.set(customers);
-      this.vendorNames.set(vendors);
-    });
   }
 
   protected openCreate() {
@@ -395,12 +375,12 @@ export class AssignmentListPage {
       .subscribe((created) => created && this.load());
   }
 
-  protected editSchedule(a: AssignmentView) {
+  protected editSchedule(a: AssignmentAdminView) {
     this.dialog
       .open(ScheduleDialog, {
         data: {
           assignmentId: a.assignmentId,
-          customerName: this.customerName(a.customerId),
+          customerName: a.customerName,
           weekdays: a.weekdays ?? [],
           weeksOfCycle: a.weeksOfCycle ?? [],
         },
@@ -410,11 +390,11 @@ export class AssignmentListPage {
       .subscribe((saved) => saved && this.load());
   }
 
-  protected end(a: AssignmentView) {
+  protected end(a: AssignmentAdminView) {
     this.dialog
       .confirm({
         title: 'Finalizar asignación',
-        message: `¿Finalizar la asignación de ${this.customerName(a.customerId)} con ${this.vendorName(a.userId)}? Queda vigente hasta hoy.`,
+        message: `El cliente ${a.customerName} dejará de estar en la cartera de ${a.userName} desde ahora y quedará sin vendedor. ¿Finalizar?`,
         confirmLabel: 'Finalizar',
         destructive: true,
       })

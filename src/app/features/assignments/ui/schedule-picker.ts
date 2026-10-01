@@ -51,6 +51,9 @@ const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
             Semana {{ week }}
           </button>
         }
+        <button type="button" class="sched-chip sched-chip-all" (click)="selectAllWeeks()">
+          Todas
+        </button>
       </div>
       <span class="sched-hint">Sin semanas marcadas = aplica todas las semanas del ciclo.</span>
     </div>
@@ -95,6 +98,10 @@ const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
         border-color: var(--accent);
         color: var(--on-accent);
       }
+      .sched-chip-all {
+        color: var(--ink-muted);
+        border-style: dashed;
+      }
       .sched-hint {
         font-size: 12px;
         color: var(--ink-muted);
@@ -125,5 +132,9 @@ export class SchedulePicker {
         ? current.filter((w) => w !== value)
         : [...current, value].sort((a, b) => a - b),
     );
+  }
+
+  protected selectAllWeeks() {
+    this.weeksOfCycleValue.set([...this.cycleWeeks]);
   }
 }

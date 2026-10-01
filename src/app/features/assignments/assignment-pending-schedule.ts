@@ -7,7 +7,6 @@ import { AssignmentModuleTabs } from './ui/module-tabs';
 import { ScheduleDialog } from './ui/schedule-dialog';
 import { AssignmentAdminService } from './assignment-admin';
 import { IncompleteScheduleView } from '../../shared/models/assignment-admin.models';
-import { resolveNames } from './assignment-format';
 
 /**
  * Asignaciones vigentes con weekdays y/o weeksOfCycle sin completar — el
@@ -26,6 +25,9 @@ import { resolveNames } from './assignment-format';
         <h1>Horario incompleto</h1>
         <p class="aps-sub">{{ countText() }}</p>
       </div>
+      <p class="aps-banner">
+        Estos clientes no aparecen en la ruta de ningún vendedor hasta que completes su horario.
+      </p>
 
       <ui-table
         [loading]="loading()"
@@ -55,9 +57,19 @@ import { resolveNames } from './assignment-format';
           <tbody>
             @for (item of items(); track item.assignmentId) {
               <tr>
-                <td class="aps-cell-strong">{{ item.customerName }}</td>
-                <td>{{ vendorName(item.userId) }}</td>
-                <td class="aps-muted">{{ missingText(item) }}</td>
+                <td class="aps-cell-strong">
+                  {{ item.customerName }}
+                  <div class="aps-muted">{{ item.customerCode }}</div>
+                </td>
+                <td>{{ item.userName }}</td>
+                <td class="aps-muted">
+                  @if (!item.hasWeekdays) {
+                    <span class="aps-badge">Faltan días</span>
+                  }
+                  @if (!item.hasWeeksOfCycle) {
+                    <span class="aps-badge">Faltan semanas</span>
+                  }
+                </td>
                 <td class="aps-row-action">
                   <button uiButton variant="secondary" size="sm" (click)="complete(item)">
                     Completar horario
@@ -72,7 +84,7 @@ import { resolveNames } from './assignment-format';
           @for (item of items(); track item.assignmentId) {
             <div class="aps-card-mobile">
               <div class="aps-card-mobile-name">{{ item.customerName }}</div>
-              <div class="aps-muted">Vendedor: {{ vendorName(item.userId) }}</div>
+              <div class="aps-muted">{{ item.customerCode }} · Vendedor: {{ item.userName }}</div>
               <div class="aps-muted">Le falta: {{ missingText(item) }}</div>
               <button
                 uiButton
@@ -129,6 +141,22 @@ import { resolveNames } from './assignment-format';
         margin: 0;
         color: var(--ink-muted);
         font-size: 14px;
+      }
+      .aps-banner {
+        margin: 16px 0 0;
+        padding: 12px 16px;
+        border: 1px solid var(--hairline);
+        background: var(--faint);
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+      .aps-badge {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--st-pendiente);
+        white-space: nowrap;
+        margin-right: 8px;
       }
       .aps-cell-strong {
         font-weight: 800;
@@ -194,7 +222,6 @@ export class AssignmentPendingSchedulePage {
   protected hasNext = signal(false);
   protected loading = signal(true);
   protected error = signal(false);
-  private vendorNames = signal<Map<number, string>>(new Map());
 
   constructor() {
     this.load();
@@ -206,10 +233,6 @@ export class AssignmentPendingSchedulePage {
     return n === 1
       ? '1 asignación con horario incompleto'
       : `${n} asignaciones con horario incompleto`;
-  }
-
-  protected vendorName(id: number): string {
-    return this.vendorNames().get(id) ?? `Vendedor #${id}`;
   }
 
   protected missingText(item: IncompleteScheduleView): string {
@@ -238,14 +261,6 @@ export class AssignmentPendingSchedulePage {
         this.items.set(result.content ?? []);
         this.hasNext.set(result.hasNext);
         this.loading.set(false);
-        // El DTO no trae userName (solo customerName) — se resuelve con el
-        // mismo truco de GET /map que usa el listado general.
-        const userIds = (result.content ?? []).map((i) => i.userId);
-        if (userIds.length > 0) {
-          resolveNames(this.assignmentSvc, userIds).subscribe(({ vendors }) =>
-            this.vendorNames.set(vendors),
-          );
-        }
       },
       error: () => {
         this.loading.set(false);

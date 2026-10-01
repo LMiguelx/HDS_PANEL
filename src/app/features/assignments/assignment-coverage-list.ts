@@ -1,8 +1,10 @@
 import { Component, effect, inject, signal, untracked } from '@angular/core';
+import { Router } from '@angular/router';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiTable } from '../../shared/ui/table/table';
+import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { LookupService, toUiLookup } from '../promos/lookup';
 import { AssignmentModuleTabs } from './ui/module-tabs';
@@ -10,13 +12,17 @@ import { AssignmentAdminService } from './assignment-admin';
 import { CoverageAdminView } from '../../shared/models/assignment-admin.models';
 import { dateText, dateTimeText } from './assignment-format';
 
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /**
  * Coberturas ya realizadas (GET /coverage) — para que el supervisor
  * confirme que una cobertura puntual no siga apareciendo al día siguiente.
  */
 @Component({
   selector: 'app-assignment-coverage-list',
-  imports: [UiButton, UiTypeahead, UiTable, UiEmpty, AssignmentModuleTabs],
+  imports: [UiButton, UiTypeahead, UiTable, UiStatus, UiEmpty, AssignmentModuleTabs],
   template: `
     <app-assignment-module-tabs />
     <section class="cvl-page">
@@ -72,6 +78,7 @@ import { dateText, dateTimeText } from './assignment-format';
               <th>Fecha</th>
               <th>Motivo</th>
               <th>Creado</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -80,9 +87,21 @@ import { dateText, dateTimeText } from './assignment-format';
                 <td class="cvl-cell-strong">{{ c.customerName }}</td>
                 <td>{{ c.absentUserName }}</td>
                 <td>{{ c.coveringUserName }}</td>
-                <td class="cvl-muted">{{ dateText(c.coverageDate) }}</td>
+                <td class="cvl-muted">
+                  {{ dateText(c.coverageDate) }}
+                  @if (c.coverageDate === today) {
+                    <ui-status label="Hoy" />
+                  } @else if (c.coverageDate > today) {
+                    <ui-status label="Programada" />
+                  }
+                </td>
                 <td class="cvl-muted">{{ c.reason || '—' }}</td>
                 <td class="cvl-muted">{{ dateTimeText(c.createdAt) }}</td>
+                <td class="cvl-row-action">
+                  <button uiButton variant="ghost" size="sm" (click)="viewOnMap(c)">
+                    Ver en mapa
+                  </button>
+                </td>
               </tr>
             }
           </tbody>
@@ -97,6 +116,7 @@ import { dateText, dateTimeText } from './assignment-format';
               @if (c.reason) {
                 <div class="cvl-muted">{{ c.reason }}</div>
               }
+              <button uiButton variant="ghost" size="sm" (click)="viewOnMap(c)">Ver en mapa</button>
             </div>
           }
         </div>
@@ -159,6 +179,9 @@ import { dateText, dateTimeText } from './assignment-format';
         color: var(--ink-muted);
         font-size: 13px;
       }
+      .cvl-row-action {
+        text-align: right;
+      }
       .cvl-pager {
         display: flex;
         align-items: center;
@@ -206,9 +229,11 @@ import { dateText, dateTimeText } from './assignment-format';
 export class AssignmentCoverageListPage {
   private assignmentSvc = inject(AssignmentAdminService);
   private lookupSvc = inject(LookupService);
+  private router = inject(Router);
 
   protected dateText = dateText;
   protected dateTimeText = dateTimeText;
+  protected today = todayIso();
 
   protected absentFilter = signal<UiLookupItem | null>(null);
   protected coveringFilter = signal<UiLookupItem | null>(null);
@@ -222,7 +247,7 @@ export class AssignmentCoverageListPage {
   protected error = signal(false);
 
   protected userSearch = (q: string) =>
-    this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
+    this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
 
   private filtersEffect = effect(() => {
     this.absentFilter();
@@ -245,6 +270,15 @@ export class AssignmentCoverageListPage {
   protected clearFilters() {
     this.absentFilter.set(null);
     this.coveringFilter.set(null);
+  }
+
+  protected viewOnMap(c: CoverageAdminView) {
+    this.router.navigate(['/asignaciones/mapa'], {
+      queryParams: {
+        userIds: `${c.absentUserId},${c.coveringUserId}`,
+        date: c.coverageDate,
+      },
+    });
   }
 
   protected prevPage() {

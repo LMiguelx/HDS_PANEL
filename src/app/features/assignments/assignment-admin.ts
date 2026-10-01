@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { PageResponse, SliceResponse } from '../../shared/models/api.models';
 import {
+  AssignmentAdminView,
   AssignmentListFilters,
   AssignmentView,
   AutoAssignmentResult,
@@ -12,6 +13,8 @@ import {
   CreateAssignmentCommand,
   CreateCoverageCommand,
   IncompleteScheduleView,
+  ImportCoverageParams,
+  ImportCoverageResult,
   MapQuery,
   MapResponse,
   OrphanCustomerView,
@@ -33,7 +36,7 @@ export class AssignmentAdminService {
         params = params.set(key, String(value));
       }
     }
-    return this.http.get<PageResponse<AssignmentView>>(this.base, { params });
+    return this.http.get<PageResponse<AssignmentAdminView>>(this.base, { params });
   }
 
   orphans() {
@@ -57,6 +60,9 @@ export class AssignmentAdminService {
     if (query.orphansOnly) {
       params = params.set('orphansOnly', 'true');
     }
+    if (query.date) {
+      params = params.set('date', query.date);
+    }
     return this.http.get<MapResponse>(`${this.base}/map`, { params });
   }
 
@@ -74,6 +80,21 @@ export class AssignmentAdminService {
 
   coverage(cmd: CreateCoverageCommand) {
     return this.http.post<CoverageView[]>(`${this.base}/coverage`, cmd);
+  }
+
+  /** dryRun=true (default) solo simula; dryRun=false aplica los cambios. */
+  importCoverage(params: ImportCoverageParams, file: File, dryRun: boolean) {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    let httpParams = new HttpParams()
+      .set('absentUserId', params.absentUserId)
+      .set('coveringUserId', params.coveringUserId)
+      .set('coverageDate', params.coverageDate)
+      .set('dryRun', String(dryRun));
+    if (params.reason) httpParams = httpParams.set('reason', params.reason);
+    return this.http.post<ImportCoverageResult>(`${this.base}/coverage/import`, form, {
+      params: httpParams,
+    });
   }
 
   /** Cartera real del vendedor ausente en la fecha dada, para el checklist del modal. */

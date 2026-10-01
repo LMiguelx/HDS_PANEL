@@ -1,7 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../../shared/ui/button/button';
-import { UiField } from '../../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../../shared/ui/typeahead/typeahead';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { LookupService, toUiLookup } from '../../promos/lookup';
@@ -13,17 +12,15 @@ export interface CreateAssignmentDialogData {
   fixedCustomer?: { id: number; name: string; code?: string | null };
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /**
  * Asignación manual de un cliente a un vendedor (`POST /api/admin/assignments`).
  * Se abre desde el listado (cliente libre) o desde Huérfanos (cliente fijo).
+ * Siempre empieza hoy — no se elige fecha (sección 5.2 del doc): si el
+ * cliente ya tenía vendedor, esa asignación se cierra sola con fecha de ayer.
  */
 @Component({
   selector: 'app-create-assignment-dialog',
-  imports: [UiButton, UiField, UiTypeahead, SchedulePicker],
+  imports: [UiButton, UiTypeahead, SchedulePicker],
   template: `
     <div class="cad">
       <h2 class="cad-title">Asignar cliente a vendedor</h2>
@@ -56,7 +53,9 @@ function todayIso(): string {
         (picked)="vendor.set($event)"
       />
 
-      <ui-field label="Vigente desde" type="date" [(value)]="effectiveFrom" />
+      <p class="cad-hint">
+        El cliente pasa a este vendedor desde hoy. Si tenía otro, deja de estar en su cartera.
+      </p>
 
       <app-schedule-picker [(weekdaysValue)]="weekdays" [(weeksOfCycleValue)]="weeksOfCycle" />
 
@@ -108,6 +107,11 @@ function todayIso(): string {
         font-weight: 400;
         color: var(--ink-muted);
       }
+      .cad-hint {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
       .cad-error {
         color: var(--accent-ink);
         font-size: 13px;
@@ -128,22 +132,29 @@ export class CreateAssignmentDialog {
 
   protected customer = signal<UiLookupItem | null>(null);
   protected vendor = signal<UiLookupItem | null>(null);
-  protected effectiveFrom = signal(todayIso());
   protected weekdays = signal<number[]>([]);
   protected weeksOfCycle = signal<number[]>([]);
   protected saving = signal(false);
   protected error = signal('');
+  private warnedGap = signal(false);
 
   protected customerSearch = (q: string) =>
     this.lookupSvc.customers(q).pipe(map((items) => toUiLookup(items)));
   protected userSearch = (q: string) =>
-    this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
+    this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
 
   protected submit() {
     const customerId = this.data.fixedCustomer?.id ?? this.customer()?.id;
     const userId = this.vendor()?.id;
-    if (!customerId || !userId || !this.effectiveFrom()) {
-      this.error.set('Completa cliente, vendedor y fecha de vigencia.');
+    if (!customerId || !userId) {
+      this.error.set('Completa cliente y vendedor.');
+      return;
+    }
+    if ((this.weekdays().length === 0 || this.weeksOfCycle().length === 0) && !this.warnedGap()) {
+      this.warnedGap.set(true);
+      this.error.set(
+        'Sin días o sin semanas, el cliente no aparecerá en ningún plan hasta que completes el horario. Presiona "Guardar asignación" de nuevo para confirmar.',
+      );
       return;
     }
     this.saving.set(true);
@@ -152,7 +163,6 @@ export class CreateAssignmentDialog {
       .create({
         customerId,
         userId,
-        effectiveFrom: this.effectiveFrom(),
         weekdays: this.weekdays(),
         weeksOfCycle: this.weeksOfCycle(),
       })
