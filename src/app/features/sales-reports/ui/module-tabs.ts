@@ -14,6 +14,9 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       <a routerLink="/reportes-ventas/marcas-productos" routerLinkActive="active"
         >Marcas y productos</a
       >
+      <a routerLink="/reportes-ventas/ventas-con-stock" routerLinkActive="active"
+        >Ventas con stock</a
+      >
     </nav>
   `,
   styles: [

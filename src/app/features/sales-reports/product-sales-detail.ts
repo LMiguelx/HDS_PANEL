@@ -34,13 +34,23 @@ import { formatSoles } from '../../shared/pipes/money';
           <div>
             <p class="psd-eyebrow">{{ r.productCode }} · {{ r.brandName }}</p>
             <h1>{{ r.productName }}</h1>
-            <p class="psd-meta">{{ r.from }} — {{ r.to }}</p>
+            <p class="psd-meta">
+              {{ r.from }} — {{ r.to }}
+              @if (r.salespersonName) {
+                · vendido por {{ r.salespersonName }}
+              }
+            </p>
           </div>
           <button
             uiButton
             variant="secondary"
             [routerLink]="['/reportes-ventas/marcas-productos']"
-            [queryParams]="{ brandId: brandIdParam(), from: r.from, to: r.to }"
+            [queryParams]="{
+              brandId: brandIdParam(),
+              from: r.from,
+              to: r.to,
+              salespersonId: salespersonIdParam() || undefined,
+            }"
           >
             Volver a la marca
           </button>
@@ -242,6 +252,7 @@ export class ProductSalesDetailPage {
   fromParam = input('', { alias: 'from' });
   toParam = input('', { alias: 'to' });
   brandIdParam = input('', { alias: 'brandId' });
+  salespersonIdParam = input('', { alias: 'salespersonId' });
 
   protected orderStatusName = orderStatusName;
   protected dateTimeText = dateTimeText;
@@ -262,8 +273,9 @@ export class ProductSalesDetailPage {
     if (!productId || !this.fromParam() || !this.toParam()) return;
     this.loading.set(true);
     this.error.set(false);
+    const salespersonId = this.salespersonIdParam() ? Number(this.salespersonIdParam()) : undefined;
     this.reportSvc
-      .productSales(productId, this.fromParam(), this.toParam(), this.page())
+      .productSales(productId, this.fromParam(), this.toParam(), this.page(), 20, salespersonId)
       .subscribe({
         next: (result) => {
           this.report.set(result);

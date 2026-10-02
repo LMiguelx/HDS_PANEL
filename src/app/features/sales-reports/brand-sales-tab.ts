@@ -1,10 +1,13 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
+import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { SalesReportModuleTabs } from './ui/module-tabs';
 import { SalesReportAdminService } from './sales-report-admin';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
+import { LookupService, toUiLookup } from '../promos/lookup';
+import { map } from 'rxjs/operators';
 import { BrandView } from '../../shared/models/catalog.models';
 import { BrandSalesReport, ProductSalesRow } from '../../shared/models/sales-report.models';
 import { quantityText } from './sales-report-format';
@@ -28,7 +31,7 @@ const TOP_PRODUCTS = 10;
  */
 @Component({
   selector: 'app-brand-sales-tab',
-  imports: [UiField, UiEmpty, SalesReportModuleTabs],
+  imports: [UiField, UiTypeahead, UiEmpty, SalesReportModuleTabs],
   template: `
     <app-sales-report-module-tabs />
     <section class="bst-page">
@@ -42,6 +45,13 @@ const TOP_PRODUCTS = 10;
         />
         <ui-field label="Desde" type="date" [(value)]="from" />
         <ui-field label="Hasta" type="date" [(value)]="to" />
+        <ui-typeahead
+          label="Vendedor"
+          placeholder="Todos los vendedores"
+          [search]="searchSalespeople"
+          [(selected)]="salespersonSelected"
+          class="bst-toolbar-ta"
+        />
       </div>
 
       @if (!brandId()) {
@@ -57,6 +67,12 @@ const TOP_PRODUCTS = 10;
           (action)="load()"
         />
       } @else if (report(); as r) {
+        <h2 class="bst-brand-title">
+          {{ r.brandName }}
+          @if (r.salespersonName) {
+            — vendido por {{ r.salespersonName }}
+          }
+        </h2>
         <div class="bst-kpi-row">
           <div class="bst-kpi">
             <span class="bst-kpi-value">{{ r.orderCount }}</span>
@@ -152,6 +168,14 @@ const TOP_PRODUCTS = 10;
       }
       .bst-toolbar ui-field {
         width: 220px;
+      }
+      .bst-toolbar-ta {
+        width: 240px;
+      }
+      .bst-brand-title {
+        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
+        margin: 0 0 16px;
+        color: var(--ink);
       }
       .bst-skeleton {
         height: 240px;
@@ -250,12 +274,14 @@ const TOP_PRODUCTS = 10;
 export class BrandSalesTab {
   private reportSvc = inject(SalesReportAdminService);
   private catalogSvc = inject(CatalogLookupService);
+  private lookupSvc = inject(LookupService);
   private router = inject(Router);
 
   /** Query params opcionales para volver con la marca y el rango ya elegidos (desde el detalle de producto). */
   brandIdParam = input('', { alias: 'brandId' });
   fromParam = input('', { alias: 'from' });
   toParam = input('', { alias: 'to' });
+  salespersonIdParam = input('', { alias: 'salespersonId' });
 
   protected formatSoles = formatSoles;
   protected quantityText = quantityText;
@@ -265,15 +291,24 @@ export class BrandSalesTab {
   protected brandId = signal('');
   protected from = signal(firstOfMonthIso());
   protected to = signal(todayIso());
+  protected salespersonSelected = signal<UiLookupItem | null>(null);
+
+  /** Sin `role`: supervisores también venden desde mostrador — doc 30, sección 11.2. */
+  protected searchSalespeople = (q: string) =>
+    this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
 
   private seedQueryParamsEffect = effect(() => {
     const brandId = this.brandIdParam();
     const from = this.fromParam();
     const to = this.toParam();
+    const salespersonId = this.salespersonIdParam();
     untracked(() => {
       if (brandId) this.brandId.set(brandId);
       if (from) this.from.set(from);
       if (to) this.to.set(to);
+      if (salespersonId) {
+        this.salespersonSelected.set({ id: Number(salespersonId), name: '' });
+      }
     });
   });
 
@@ -290,6 +325,7 @@ export class BrandSalesTab {
     this.brandId();
     this.from();
     this.to();
+    this.salespersonSelected();
     untracked(() => {
       if (this.brandId()) this.load();
     });
@@ -332,22 +368,29 @@ export class BrandSalesTab {
     if (!brandId) return;
     this.loading.set(true);
     this.error.set('');
-    this.reportSvc.brandSales(brandId, this.from(), this.to()).subscribe({
-      next: (result) => {
-        this.report.set(result);
-        this.loading.set(false);
-      },
-      error: (err) => {
-        this.loading.set(false);
-        const detalle = err?.error?.detail ?? err?.error?.message;
-        this.error.set(detalle || 'No pudimos cargar el reporte de la marca.');
-      },
-    });
+    this.reportSvc
+      .brandSales(brandId, this.from(), this.to(), this.salespersonSelected()?.id)
+      .subscribe({
+        next: (result) => {
+          this.report.set(result);
+          this.loading.set(false);
+        },
+        error: (err) => {
+          this.loading.set(false);
+          const detalle = err?.error?.detail ?? err?.error?.message;
+          this.error.set(detalle || 'No pudimos cargar el reporte de la marca.');
+        },
+      });
   }
 
   protected openProduct(p: ProductSalesRow) {
     this.router.navigate(['/reportes-ventas/marcas-productos/producto', p.productId], {
-      queryParams: { from: this.from(), to: this.to(), brandId: this.brandId() },
+      queryParams: {
+        from: this.from(),
+        to: this.to(),
+        brandId: this.brandId(),
+        salespersonId: this.salespersonSelected()?.id || undefined,
+      },
     });
   }
 }

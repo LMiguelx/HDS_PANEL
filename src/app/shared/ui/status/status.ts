@@ -26,6 +26,7 @@ const NORMALIZED_MAP: Record<string, string> = {
   // partial/rejected ya definidos arriba (mismos tokens de color).
   abierto: 'open',
   'enviado a facturación': 'sent-to-billing',
+  'entregado en mostrador': 'counter-delivered',
   anulado: 'cancelled',
 };
 

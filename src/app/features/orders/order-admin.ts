@@ -9,11 +9,14 @@ import {
   OrderListFilters,
   OrderSummary,
   PendingBonusOrderView,
+  UpdateOrderCommand,
 } from '../../shared/models/order.models';
 
 /**
- * Creación, envío a facturación y anulación de pedidos no figuran en el
- * documento de referencia, quedan fuera de alcance hasta que se confirmen.
+ * OrderController, /api/orders. Consulta, edición y las acciones del
+ * supervisor sobre un pedido (editar · entregar en mostrador · enviar a
+ * facturación · anular) — ver doc 30, sección 8. El registro del pedido de
+ * mostrador vive en CounterOrderAdminService (POST /orders/counter).
  */
 @Injectable({ providedIn: 'root' })
 export class OrderAdminService {
@@ -49,6 +52,26 @@ export class OrderAdminService {
 
   detail(orderId: number) {
     return this.http.get<OrderDetail>(`${this.base}/${orderId}`);
+  }
+
+  /** Solo pedidos OPEN. Se envían solo los productos que cambian. */
+  updateItems(orderId: number, cmd: UpdateOrderCommand) {
+    return this.http.patch<OrderDetail>(`${this.base}/${orderId}/items`, cmd);
+  }
+
+  /** Pasa un pedido de mostrador de OPEN a COUNTER_DELIVERED. No se puede deshacer. */
+  deliverAtCounter(orderId: number) {
+    return this.http.post<void>(`${this.base}/${orderId}/deliver-at-counter`, {});
+  }
+
+  /** Pasa de OPEN a SENT_TO_BILLING. Desde ahí es inmutable. */
+  sendToBilling(orderId: number) {
+    return this.http.post<void>(`${this.base}/${orderId}/send-to-billing`, {});
+  }
+
+  /** Solo pedidos OPEN. Devuelve el stock y revierte las promociones. */
+  cancel(orderId: number) {
+    return this.http.post<void>(`${this.base}/${orderId}/cancel`, {});
   }
 
   /** Pedidos OPEN con bonificaciones sin stock respaldado. */

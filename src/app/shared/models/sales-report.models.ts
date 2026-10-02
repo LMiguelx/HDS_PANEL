@@ -10,8 +10,12 @@ export interface SalespersonSettlementRow {
   orderCount: number;
   weightKg: number; // 1 decimal
   netAmount: number;
-  firstOrderAt: string; // "Hora Inicio"
-  lastOrderAt: string; // "Hora Fin"
+  firstOrderAt: string | null; // "Hora Inicio" — null si ese día solo tuvo mostrador
+  lastOrderAt: string | null; // "Hora Fin"
+  fieldOrderCount: number;
+  fieldNetAmount: number;
+  counterOrderCount: number;
+  counterNetAmount: number;
 }
 
 export interface SalespersonSettlementReport {
@@ -22,6 +26,11 @@ export interface SalespersonSettlementReport {
   totalNetAmount: number;
   lastOrderAt: string | null; // último pedido del período; null si no hubo pedidos
   rows: SalespersonSettlementRow[];
+  originCode: string | null; // el filtro aplicado; null = ambos
+  totalFieldOrders: number;
+  totalFieldNetAmount: number;
+  totalCounterOrders: number;
+  totalCounterNetAmount: number;
 }
 
 export interface ProductSalesRow {
@@ -50,6 +59,8 @@ export interface BrandSalesReport {
   discountAmount: number;
   netAmount: number;
   products: ProductSalesRow[];
+  salespersonId: number | null; // null si no se filtró
+  salespersonName: string | null;
 }
 
 /** Un pedido donde se vendió el producto — montos solo de ESE producto dentro del pedido. */
@@ -80,4 +91,32 @@ export interface ProductSalesReport {
   discountAmount: number;
   netAmount: number;
   orders: PageResponse<ProductOrderRow>;
+  salespersonId: number | null; // null si no se filtró
+  salespersonName: string | null;
+}
+
+/** Ventas con stock ("negativos") — GET /orders/reports/sales-stock, nuevo en doc 30. */
+export interface SalesStockRow {
+  productId: number;
+  productCode: string;
+  productName: string;
+  unitOfMeasure: string;
+  soldQuantity: number; // venta + bonificación, sin anulados
+  pendingQuantity: number; // de lo vendido, lo que NO se pudo descontar del stock
+  systemStock: number; // ya descontado lo vendido
+  expectedErpStock: number; // systemStock + soldQuantity - pendingQuantity
+  erpStock: number | null; // null hasta que exista la conexión
+  difference: number | null; // erpStock - expectedErpStock
+}
+
+export interface SalesStockReport {
+  from: string;
+  to: string;
+  warehouseId: number;
+  warehouseName: string;
+  onlyIssues: boolean;
+  erpStockAvailable: boolean;
+  productCount: number;
+  productsWithPending: number;
+  rows: SalesStockRow[];
 }

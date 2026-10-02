@@ -1,18 +1,31 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { UiButton } from '../../shared/ui/button/button';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { AuthService } from '../../core/auth/auth';
+import { ToastService } from '../../core/ui/toast';
 import { OrderAdminService } from './order-admin';
-import { OrderDetail, ReturnedLineView } from '../../shared/models/order.models';
-import { orderStatusName, deliveryStatusName } from './order-format';
+import { PromoService } from '../promos/promo';
+import { CatalogLookupService } from '../catalog/catalog-lookup';
+import {
+  OrderDetail,
+  PendingBonusOrderView,
+  ReturnedLineView,
+} from '../../shared/models/order.models';
+import { ApplicationView, ChoiceOptionView, PendingChoiceView } from '../promos/promo.types';
+import { deliveryStatusName, orderStatusName, originName } from './order-format';
 import { dateTimeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 
-/** Detalle de un pedido con sus líneas (GET /orders/{id}). */
+/** Detalle de un pedido con sus líneas (GET /orders/{id}) y sus acciones (doc 30, sección 8). */
 @Component({
   selector: 'app-order-detail',
-  imports: [RouterLink, UiStatus, UiEmpty],
+  imports: [RouterLink, UiButton, UiStatus, UiEmpty, HasPermissionDirective],
   template: `
     <section class="od-page">
       @if (loading()) {
@@ -28,7 +41,12 @@ import { formatSoles } from '../../shared/pipes/money';
       } @else if (order(); as o) {
         <div class="od-head">
           <div>
-            <ui-status [label]="statusName(o.statusCode)" />
+            <div class="od-badges">
+              <ui-status [label]="statusName(o.statusCode)" />
+              @if (o.originCode === 'COUNTER') {
+                <span class="od-origin-tag">Mostrador</span>
+              }
+            </div>
             <h1>Pedido #{{ o.orderId }}</h1>
             <p class="od-meta">
               @if (canViewCustomer()) {
@@ -38,8 +56,63 @@ import { formatSoles } from '../../shared/pipes/money';
               } @else {
                 {{ o.customerName }}
               }
-              · {{ dateTimeText(o.orderDate) }}
+              · {{ dateTimeText(o.orderDate) }} · Vendedor: {{ o.salespersonName }}
+              @if (o.createdByName !== o.salespersonName) {
+                · Registró: {{ o.createdByName }}
+              }
+              @if (o.salesChannelName) {
+                · Canal: {{ o.salesChannelName }}
+              }
             </p>
+          </div>
+          <div class="od-actions">
+            @if (canEdit(o)) {
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="['order.edit', 'order.manage']"
+                [routerLink]="['/pedidos/editar', o.orderId]"
+              >
+                Editar
+              </button>
+            }
+            @if (canDeliver(o)) {
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="'order.manage'"
+                [disabled]="blockedForClosing()"
+                [title]="blockedForClosing() ? 'Resuelve lo pendiente antes de entregar' : ''"
+                [loading]="delivering()"
+                (click)="deliverAtCounter(o)"
+              >
+                Entregar en mostrador
+              </button>
+            }
+            @if (canSendToBilling(o)) {
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="'order.send_to_billing'"
+                [disabled]="blockedForClosing()"
+                [title]="blockedForClosing() ? 'Resuelve lo pendiente antes de enviarlo' : ''"
+                [loading]="sendingToBilling()"
+                (click)="sendToBilling(o)"
+              >
+                Enviar a facturación
+              </button>
+            }
+            @if (canCancel(o)) {
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="'order.cancel'"
+                [loading]="cancelling()"
+                (click)="cancelOrder(o)"
+              >
+                Anular
+              </button>
+            }
           </div>
         </div>
 
@@ -47,14 +120,48 @@ import { formatSoles } from '../../shared/pipes/money';
           <div class="od-note">{{ o.note }}</div>
         }
 
+        @if (o.statusCode === 'OPEN' && pendingChoices().length > 0) {
+          <div class="od-alert od-alert-warn">
+            <strong>Falta elegir un premio</strong> de una promoción antes de poder entregar o
+            facturar este pedido.
+            @for (item of pendingChoices(); track item.promoApplicationId) {
+              <div class="od-choice-card">
+                <div class="od-choice-label">
+                  {{ item.promoName }} — {{ item.groupLabel || 'Elige tu premio' }}
+                </div>
+                <div class="od-choice-options">
+                  @for (opt of item.options; track opt.optionId) {
+                    <button
+                      type="button"
+                      uiButton
+                      variant="secondary"
+                      size="sm"
+                      [disabled]="!optionAvailable(opt) || resolvingChoice()"
+                      (click)="resolveChoice(item, opt)"
+                    >
+                      {{ opt.displayText || opt.label }}
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+        @if (o.statusCode === 'OPEN' && pendingBonus(); as pb) {
+          <div class="od-alert od-alert-warn">
+            <strong>Hay una bonificación sin stock.</strong> Edita el pedido para que se reevalúe
+            cuando haya stock del producto de regalo.
+          </div>
+        }
+
         <div class="od-grid">
           <div class="od-field">
             <span class="od-label">Vendedor</span>
-            <span class="od-value">Usuario #{{ o.salespersonId }}</span>
+            <span class="od-value">{{ o.salespersonName }}</span>
           </div>
           <div class="od-field">
             <span class="od-label">Condición de pago</span>
-            <span class="od-value">#{{ o.paymentConditionId }}</span>
+            <span class="od-value">{{ paymentConditionName(o.paymentConditionId) }}</span>
           </div>
           <div class="od-field">
             <span class="od-label">Total</span>
@@ -90,14 +197,16 @@ import { formatSoles } from '../../shared/pipes/money';
           </thead>
           <tbody>
             @for (item of o.items; track item.lineNumber) {
-              <tr>
+              <tr [class.od-row-pending]="isPendingLine(item.lineNumber)">
                 <td class="od-muted">{{ item.lineNumber }}</td>
                 <td>{{ item.productName }}</td>
                 <td class="od-muted">{{ item.quantity }}</td>
                 <td class="od-muted">{{ formatSoles(item.unitPrice) }}</td>
                 <td class="od-muted">{{ formatSoles(item.subtotal) }}</td>
                 <td>
-                  @if (item.bonus) {
+                  @if (isPendingLine(item.lineNumber)) {
+                    <span class="od-badge od-badge-warn">Sin stock</span>
+                  } @else if (item.bonus) {
                     <span class="od-badge">Bonificado</span>
                   }
                 </td>
@@ -111,7 +220,9 @@ import { formatSoles } from '../../shared/pipes/money';
             <div class="od-card-mobile">
               <div class="od-card-mobile-head">
                 <span class="od-card-mobile-name">{{ item.productName }}</span>
-                @if (item.bonus) {
+                @if (isPendingLine(item.lineNumber)) {
+                  <span class="od-badge od-badge-warn">Sin stock</span>
+                } @else if (item.bonus) {
                   <span class="od-badge">Bonificado</span>
                 }
               </div>
@@ -122,6 +233,24 @@ import { formatSoles } from '../../shared/pipes/money';
             </div>
           }
         </div>
+
+        @if (applications().length > 0) {
+          <h2 class="od-section-title">Promociones aplicadas</h2>
+          <div class="od-promo-list">
+            @for (a of applications(); track a.promoApplicationId) {
+              <div class="od-promo-row">
+                <span class="od-promo-name">{{ a.promoName }}</span>
+                <span class="od-muted">
+                  @if (a.productName) {
+                    {{ a.quantity }} × {{ a.productName }}
+                  } @else if (a.discountAmount) {
+                    {{ formatSoles(a.discountAmount) }} de descuento
+                  }
+                </span>
+              </div>
+            }
+          </div>
+        }
 
         <h2 class="od-section-title">Reparto</h2>
         @if (!o.deliveryStatus) {
@@ -172,6 +301,22 @@ import { formatSoles } from '../../shared/pipes/money';
         gap: 24px;
         flex-wrap: wrap;
       }
+      .od-badges {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .od-origin-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--st-counter-delivered);
+        border: 1px solid var(--st-counter-delivered);
+        padding: 1px 6px;
+        white-space: nowrap;
+      }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
         margin: 6px 0 4px;
@@ -190,6 +335,11 @@ import { formatSoles } from '../../shared/pipes/money';
       .od-customer-link:hover {
         text-decoration: underline;
       }
+      .od-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
       .od-note {
         margin-top: 14px;
         border-left: 3px solid var(--accent);
@@ -197,6 +347,31 @@ import { formatSoles } from '../../shared/pipes/money';
         font-size: 13px;
         color: var(--ink-muted);
         background: var(--faint);
+      }
+      .od-alert {
+        margin-top: 16px;
+        padding: 12px 16px;
+        border: 1px solid var(--st-no-purchase);
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .od-alert-warn {
+        background: color-mix(in srgb, var(--st-no-purchase) 10%, transparent);
+      }
+      .od-choice-card {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--hairline);
+      }
+      .od-choice-label {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .od-choice-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
       }
       .od-grid {
         display: grid;
@@ -235,10 +410,33 @@ import { formatSoles } from '../../shared/pipes/money';
       .od-badge {
         font-size: 11px;
         font-weight: 800;
-        color: var(--st-vigente);
+        color: var(--st-vigente, var(--accent-ink));
+      }
+      .od-badge-warn {
+        color: var(--st-no-purchase);
+      }
+      .od-row-pending {
+        background: color-mix(in srgb, var(--st-no-purchase) 8%, transparent);
       }
       .od-cards-mobile {
         display: none;
+      }
+      .od-promo-list {
+        display: grid;
+        gap: 1px;
+        background: var(--hairline);
+        border: 1px solid var(--hairline);
+      }
+      .od-promo-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        background: var(--bg);
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      .od-promo-name {
+        font-weight: 600;
       }
       .od-delivery {
         display: grid;
@@ -294,11 +492,17 @@ import { formatSoles } from '../../shared/pipes/money';
 })
 export class OrderDetailPage {
   private orderSvc = inject(OrderAdminService);
+  private promoSvc = inject(PromoService);
+  private catalogSvc = inject(CatalogLookupService);
   private auth = inject(AuthService);
+  private dialog = inject(UiDialogService);
+  private toast = inject(ToastService);
+  private router = inject(Router);
 
-  orderId = input('', { alias: 'orderId' });
+  orderId = input<string>('');
 
   protected statusName = orderStatusName;
+  protected originName = originName;
   protected deliveryName = deliveryStatusName;
   protected dateTimeText = dateTimeText;
   protected formatSoles = formatSoles;
@@ -307,11 +511,34 @@ export class OrderDetailPage {
   protected loading = signal(true);
   protected error = signal(false);
 
+  protected pendingChoices = signal<PendingChoiceView[]>([]);
+  protected pendingBonus = signal<PendingBonusOrderView | null>(null);
+  protected applications = signal<ApplicationView[]>([]);
+  protected resolvingChoice = signal(false);
+  protected delivering = signal(false);
+  protected sendingToBilling = signal(false);
+  protected cancelling = signal(false);
+
+  private paymentConditionNames = signal<Map<number, string>>(new Map());
+
   protected canViewCustomer = computed(() => this.auth.hasAny('customer.view'));
+  protected blockedForClosing = computed(
+    () => this.pendingChoices().length > 0 || !!this.pendingBonus(),
+  );
 
   private loadEffect = effect(() => {
     if (this.orderId()) this.load();
   });
+
+  constructor() {
+    this.catalogSvc.paymentConditions().subscribe((list) => {
+      this.paymentConditionNames.set(new Map(list.map((p) => [p.paymentConditionId, p.name])));
+    });
+  }
+
+  protected paymentConditionName(id: number): string {
+    return this.paymentConditionNames().get(id) ?? `#${id}`;
+  }
 
   load() {
     const id = Number(this.orderId());
@@ -322,6 +549,11 @@ export class OrderDetailPage {
       next: (detail) => {
         this.order.set(detail);
         this.loading.set(false);
+        this.loadAlerts(detail);
+        this.promoSvc
+          .applicationsByOrder(id)
+          .pipe(catchError(() => of([])))
+          .subscribe((list) => this.applications.set(list));
       },
       error: () => {
         this.loading.set(false);
@@ -330,10 +562,136 @@ export class OrderDetailPage {
     });
   }
 
+  private loadAlerts(detail: OrderDetail) {
+    if (detail.statusCode !== 'OPEN') {
+      this.pendingChoices.set([]);
+      this.pendingBonus.set(null);
+      return;
+    }
+    forkJoin({
+      choices: this.promoSvc.pendingChoices().pipe(catchError(() => of([]))),
+      bonuses: this.orderSvc.pendingBonuses().pipe(catchError(() => of([]))),
+    }).subscribe(({ choices, bonuses }) => {
+      this.pendingChoices.set(choices.filter((c) => c.orderId === detail.orderId));
+      this.pendingBonus.set(bonuses.find((b) => b.orderId === detail.orderId) ?? null);
+    });
+  }
+
+  protected isPendingLine(lineNumber: number): boolean {
+    return !!this.pendingBonus()?.pendingLines.some((l) => l.lineNumber === lineNumber);
+  }
+
+  protected optionAvailable(opt: ChoiceOptionView): boolean {
+    return opt.availableStock == null || opt.availableStock > 0;
+  }
+
+  protected resolveChoice(item: PendingChoiceView, opt: ChoiceOptionView) {
+    if (!this.optionAvailable(opt) || !opt.optionId) return;
+    this.resolvingChoice.set(true);
+    this.promoSvc
+      .resolveChoice(item.promoApplicationId!, { chosenOptionIds: [opt.optionId] })
+      .subscribe({
+        next: () => {
+          this.resolvingChoice.set(false);
+          this.toast.success('Premio elegido.');
+          this.load();
+        },
+        error: (err) => {
+          this.resolvingChoice.set(false);
+          const detalle = err?.error?.detail ?? err?.error?.message;
+          this.toast.error(detalle || 'No pudimos registrar la elección.');
+        },
+      });
+  }
+
   protected productName(line: ReturnedLineView): string {
     return (
       this.order()?.items.find((i) => i.productId === line.productId)?.productName ??
       `Producto #${line.productId}`
     );
+  }
+
+  protected canEdit(o: OrderDetail): boolean {
+    return o.statusCode === 'OPEN';
+  }
+
+  protected canDeliver(o: OrderDetail): boolean {
+    return o.statusCode === 'OPEN' && o.originCode === 'COUNTER';
+  }
+
+  protected canSendToBilling(o: OrderDetail): boolean {
+    return o.statusCode === 'OPEN';
+  }
+
+  protected canCancel(o: OrderDetail): boolean {
+    return o.statusCode === 'OPEN';
+  }
+
+  protected deliverAtCounter(o: OrderDetail) {
+    this.dialog
+      .confirm({
+        title: 'Entregar en mostrador',
+        message:
+          '¿Confirmas que el cliente se lleva el pedido ahora? No pasará a facturación ni a reparto desde el panel.',
+        confirmLabel: 'Entregar',
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.delivering.set(true);
+        this.orderSvc.deliverAtCounter(o.orderId).subscribe({
+          next: () => {
+            this.delivering.set(false);
+            this.toast.success('Pedido entregado en mostrador.');
+            this.load();
+          },
+          error: (err) => {
+            this.delivering.set(false);
+            const detalle = err?.error?.detail ?? err?.error?.message;
+            this.toast.error(detalle || 'No pudimos entregar el pedido.');
+          },
+        });
+      });
+  }
+
+  protected sendToBilling(o: OrderDetail) {
+    this.sendingToBilling.set(true);
+    this.orderSvc.sendToBilling(o.orderId).subscribe({
+      next: () => {
+        this.sendingToBilling.set(false);
+        this.toast.success('Pedido enviado a facturación.');
+        this.load();
+      },
+      error: (err) => {
+        this.sendingToBilling.set(false);
+        const detalle = err?.error?.detail ?? err?.error?.message;
+        this.toast.error(detalle || 'No pudimos enviar el pedido a facturación.');
+      },
+    });
+  }
+
+  protected cancelOrder(o: OrderDetail) {
+    this.dialog
+      .confirm({
+        title: 'Anular pedido',
+        message: '¿Anular este pedido? Se devolverá el stock y se revertirán las promociones.',
+        confirmLabel: 'Anular',
+        destructive: true,
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.cancelling.set(true);
+        this.orderSvc.cancel(o.orderId).subscribe({
+          next: () => {
+            this.cancelling.set(false);
+            this.toast.success('Pedido anulado.');
+            this.load();
+          },
+          error: (err) => {
+            this.cancelling.set(false);
+            const detalle = err?.error?.detail ?? err?.error?.message;
+            this.toast.error(detalle || 'No pudimos anular el pedido.');
+          },
+        });
+      });
   }
 }

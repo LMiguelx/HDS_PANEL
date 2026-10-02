@@ -40,6 +40,15 @@ import {
             <p class="promo-detail-meta">{{ metaLine(p) }}</p>
           </div>
           <div class="promo-detail-actions">
+            <button
+              uiButton
+              variant="secondary"
+              *hasPermission="'order.manage'"
+              [routerLink]="['/promociones/simular']"
+              [queryParams]="{ channelId: p.salesChannelId || undefined }"
+            >
+              Simular
+            </button>
             <button uiButton variant="secondary" (click)="duplicate()">Duplicar</button>
             @if (!p.active) {
               <button

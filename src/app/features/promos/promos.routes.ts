@@ -19,6 +19,11 @@ export const PROMO_ROUTES: Routes = [
     loadComponent: () => import('./promo-pending').then((m) => m.PromoPendingPage),
   },
   {
+    path: 'simular',
+    canActivate: [permissionGuard('order.manage')],
+    loadComponent: () => import('./simulate-order-page').then((m) => m.SimulateOrderPage),
+  },
+  {
     path: 'dotaciones',
     canActivate: [permissionGuard('promo.allocate')],
     loadComponent: () => import('./allocations-admin').then((m) => m.AllocationsAdminPage),

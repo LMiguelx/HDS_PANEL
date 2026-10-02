@@ -7,7 +7,14 @@ export interface StatusOption {
 export const ORDER_STATUS_OPTIONS: StatusOption[] = [
   { code: 'OPEN', name: 'Abierto' },
   { code: 'SENT_TO_BILLING', name: 'Enviado a facturación' },
+  { code: 'COUNTER_DELIVERED', name: 'Entregado en mostrador' },
   { code: 'CANCELLED', name: 'Anulado' },
+];
+
+/** order_origin — doc 30, sección 3.2. */
+export const ORDER_ORIGIN_OPTIONS: StatusOption[] = [
+  { code: 'FIELD', name: 'Campo' },
+  { code: 'COUNTER', name: 'Mostrador' },
 ];
 
 /** delivery_status — mismo catálogo que ya usa el módulo de Reparto para
@@ -24,6 +31,7 @@ export const DELIVERY_STATUS_OPTIONS: StatusOption[] = [
 export const ORDER_STATUS_COLOR_VAR: Record<string, string> = {
   OPEN: '--st-open',
   SENT_TO_BILLING: '--st-sent-to-billing',
+  COUNTER_DELIVERED: '--st-counter-delivered',
   CANCELLED: '--st-cancelled',
 };
 
@@ -42,6 +50,20 @@ export function orderStatusName(code: string | null | undefined): string {
   return nameFor(ORDER_STATUS_OPTIONS, code);
 }
 
+export function originName(code: string | null | undefined): string {
+  return code ? nameFor(ORDER_ORIGIN_OPTIONS, code) : '';
+}
+
 export function deliveryStatusName(code: string | null | undefined): string {
   return code ? nameFor(DELIVERY_STATUS_OPTIONS, code) : 'Sin reparto';
+}
+
+/** Columna "Reparto" del listado — doc 30, sección 3.4: un COUNTER_DELIVERED
+ * nunca tiene deliveryStatusCode, pero no es "sin reparto": ya se entregó. */
+export function deliveryColumnText(
+  statusCode: string | null | undefined,
+  deliveryStatusCode: string | null | undefined,
+): string {
+  if (deliveryStatusCode) return deliveryStatusName(deliveryStatusCode);
+  return statusCode === 'COUNTER_DELIVERED' ? 'Entregado en mostrador' : '—';
 }

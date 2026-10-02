@@ -62,6 +62,27 @@
   align-items: center;
   gap: var(--sp-2);
 }
+.jornada-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  padding: 4px 10px;
+  border: 1px solid var(--divider);
+  white-space: nowrap;
+}
+.jornada-open {
+  color: var(--st-sent-to-billing);
+  border-color: var(--st-sent-to-billing);
+}
+.jornada-icon {
+  font-size: 14px;
+}
+.jornada-loading {
+  opacity: 0.6;
+}
 .user-chip {
   display: flex;
   align-items: center;
@@ -196,6 +217,9 @@
   .topbar {
     padding: 0 var(--sp-4);
     gap: var(--sp-2);
+  }
+  .jornada-text {
+    display: none;
   }
   .body {
     grid-template-columns: 1fr;

@@ -1,5 +1,5 @@
 import { Component, effect, inject, input, signal, untracked } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
@@ -7,17 +7,29 @@ import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiTable } from '../../shared/ui/table/table';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { LookupService, toUiLookup } from '../promos/lookup';
 import { OrderModuleTabs } from './ui/module-tabs';
 import { OrderAdminService } from './order-admin';
 import { AdminOrderSummary } from '../../shared/models/order.models';
-import { ORDER_STATUS_OPTIONS, deliveryStatusName, orderStatusName } from './order-format';
+import {
+  ORDER_ORIGIN_OPTIONS,
+  ORDER_STATUS_OPTIONS,
+  deliveryColumnText,
+  orderStatusName,
+  originName,
+} from './order-format';
 import { dateTimeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 
 const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
   { value: '', label: 'Todos los estados' },
   ...ORDER_STATUS_OPTIONS.map((o) => ({ value: o.code, label: o.name })),
+];
+
+const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
+  { value: '', label: 'Todos los orígenes' },
+  ...ORDER_ORIGIN_OPTIONS.map((o) => ({ value: o.code, label: o.name })),
 ];
 
 function todayIso(): string {
@@ -49,6 +61,7 @@ function lastDayOfMonth(month: string): string {
     UiTable,
     UiStatus,
     UiEmpty,
+    HasPermissionDirective,
     OrderModuleTabs,
   ],
   template: `
@@ -59,6 +72,14 @@ function lastDayOfMonth(month: string): string {
           <h1>Pedidos</h1>
           <p class="ord-sub">{{ countText() }}</p>
         </div>
+        <button
+          uiButton
+          variant="primary"
+          *hasPermission="'order.manage'"
+          routerLink="/pedidos/nuevo"
+        >
+          Nuevo pedido
+        </button>
       </div>
 
       <div class="ord-filters">
@@ -75,6 +96,7 @@ function lastDayOfMonth(month: string): string {
           [(selected)]="salespersonFilter"
         />
         <ui-field label="Estado" type="select" [(value)]="statusFilter" [options]="statusOptions" />
+        <ui-field label="Origen" type="select" [(value)]="originFilter" [options]="originOptions" />
         <ui-field label="Día" type="date" [(value)]="dayFilter" />
         <div class="ord-month-field">
           <label for="ord-month">Mes</label>
@@ -109,6 +131,7 @@ function lastDayOfMonth(month: string): string {
             <tr>
               <th>Cliente</th>
               <th>Vendedor</th>
+              <th>Origen</th>
               <th>Fecha</th>
               <th>Estado</th>
               <th>Reparto</th>
@@ -121,15 +144,21 @@ function lastDayOfMonth(month: string): string {
             @for (o of rows(); track o.orderId) {
               <tr>
                 <td class="ord-cell-strong">{{ o.customerName }}</td>
-                <td class="ord-muted">{{ o.salespersonName }}</td>
+                <td class="ord-muted">
+                  {{ o.salespersonName }}
+                  @if (o.createdByName !== o.salespersonName) {
+                    <div class="ord-registered-by">Registró: {{ o.createdByName }}</div>
+                  }
+                </td>
+                <td>
+                  @if (o.originCode === 'COUNTER') {
+                    <span class="ord-origin-tag">{{ originName(o.originCode) }}</span>
+                  }
+                </td>
                 <td class="ord-muted">{{ dateTimeText(o.orderDate) }}</td>
                 <td><ui-status [label]="statusName(o.statusCode)" /></td>
-                <td>
-                  @if (o.deliveryStatusCode) {
-                    <ui-status [label]="deliveryName(o.deliveryStatusCode)" />
-                  } @else {
-                    <span class="ord-muted">—</span>
-                  }
+                <td class="ord-muted">
+                  {{ deliveryColumnText(o.statusCode, o.deliveryStatusCode) }}
                 </td>
                 <td class="ord-muted">
                   {{ formatSoles(o.netAmount) }}
@@ -160,12 +189,15 @@ function lastDayOfMonth(month: string): string {
                 <span class="ord-card-mobile-name">{{ o.customerName }}</span>
                 <ui-status [label]="statusName(o.statusCode)" />
               </div>
-              <div class="ord-muted">{{ o.salespersonName }} · {{ dateTimeText(o.orderDate) }}</div>
               <div class="ord-muted">
-                {{ formatSoles(o.netAmount) }}
-                @if (o.deliveryStatusCode) {
-                  · {{ deliveryName(o.deliveryStatusCode) }}
+                {{ o.salespersonName }} · {{ dateTimeText(o.orderDate) }}
+                @if (o.originCode === 'COUNTER') {
+                  · <span class="ord-origin-tag">{{ originName(o.originCode) }}</span>
                 }
+              </div>
+              <div class="ord-muted">
+                {{ formatSoles(o.netAmount) }} ·
+                {{ deliveryColumnText(o.statusCode, o.deliveryStatusCode) }}
               </div>
             </a>
           }
@@ -271,6 +303,21 @@ function lastDayOfMonth(month: string): string {
         font-size: 11px;
         color: var(--accent-ink);
       }
+      .ord-registered-by {
+        font-size: 11px;
+        margin-top: 2px;
+      }
+      .ord-origin-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--st-counter-delivered);
+        border: 1px solid var(--st-counter-delivered);
+        padding: 1px 6px;
+        white-space: nowrap;
+      }
       .ord-row-action {
         text-align: right;
       }
@@ -334,16 +381,20 @@ export class OrderListPage {
   salespersonNameParam = input('', { alias: 'salespersonName' });
   fromParam = input('', { alias: 'from' });
   statusCodeParam = input('', { alias: 'statusCode' });
+  originCodeParam = input('', { alias: 'originCode' });
 
   protected dateTimeText = dateTimeText;
   protected formatSoles = formatSoles;
   protected statusName = orderStatusName;
-  protected deliveryName = deliveryStatusName;
+  protected originName = originName;
+  protected deliveryColumnText = deliveryColumnText;
   protected statusOptions = STATUS_FILTER_OPTIONS;
+  protected originOptions = ORIGIN_FILTER_OPTIONS;
 
   protected customerFilter = signal<UiLookupItem | null>(null);
   protected salespersonFilter = signal<UiLookupItem | null>(null);
   protected statusFilter = signal('');
+  protected originFilter = signal('');
   protected dayFilter = signal(todayIso());
   protected monthFilter = signal('');
 
@@ -364,6 +415,7 @@ export class OrderListPage {
     this.customerFilter();
     this.salespersonFilter();
     this.statusFilter();
+    this.originFilter();
     this.dayFilter();
     this.monthFilter();
     untracked(() => {
@@ -377,6 +429,7 @@ export class OrderListPage {
     const salespersonName = this.salespersonNameParam();
     const from = this.fromParam();
     const statusCode = this.statusCodeParam();
+    const originCode = this.originCodeParam();
     untracked(() => {
       if (salespersonId && salespersonName) {
         this.salespersonFilter.set({ id: Number(salespersonId), name: salespersonName });
@@ -386,6 +439,7 @@ export class OrderListPage {
         this.dayFilter.set(from);
       }
       if (statusCode) this.statusFilter.set(statusCode);
+      if (originCode) this.originFilter.set(originCode);
     });
   });
 
@@ -398,6 +452,7 @@ export class OrderListPage {
     this.customerFilter.set(null);
     this.salespersonFilter.set(null);
     this.statusFilter.set('');
+    this.originFilter.set('');
     this.monthFilter.set('');
     this.dayFilter.set(todayIso());
   }
@@ -429,6 +484,7 @@ export class OrderListPage {
         customerId: this.customerFilter()?.id,
         salespersonId: this.salespersonFilter()?.id,
         statusCode: this.statusFilter() || undefined,
+        originCode: this.originFilter() || undefined,
         page: this.page(),
         size: this.size(),
       })

@@ -19,4 +19,8 @@ export const SALES_REPORTS_ROUTES: Routes = [
     path: 'marcas-productos/producto/:productId',
     loadComponent: () => import('./product-sales-detail').then((m) => m.ProductSalesDetailPage),
   },
+  {
+    path: 'ventas-con-stock',
+    loadComponent: () => import('./sales-stock-tab').then((m) => m.SalesStockTab),
+  },
 ];

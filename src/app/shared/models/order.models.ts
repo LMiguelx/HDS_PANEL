@@ -1,7 +1,5 @@
-// Contratos de Pedidos (/orders). Ver documentacion-endpoints-pedidos.md.
-// Solo los 4 endpoints GET documentados (consulta/supervisión) — creación,
-// envío a facturación y anulación no están en este documento, quedan fuera
-// de alcance de este panel hasta que se confirmen.
+// Contratos de Pedidos (/orders). Ver doc 27 (listado/detalle/reportes) y
+// doc 30 (pedido de mostrador, origen, editar/entregar/facturar/anular).
 
 export interface OrderSummary {
   orderId: number;
@@ -23,10 +21,14 @@ export interface OrderSummary {
  * campos que OrderSummary más salespersonId/salespersonName (columna
  * "Vendedor"). No reemplaza OrderSummary: GET /orders/customer/{id} sigue
  * devolviendo esa forma, no está documentada en este archivo.
+ * originCode/createdById/createdByName — ver doc 30, sección 9.1.
  */
 export interface AdminOrderSummary extends OrderSummary {
   salespersonId: number;
   salespersonName: string;
+  originCode: string; // FIELD | COUNTER
+  createdById: number;
+  createdByName: string;
 }
 
 export interface OrderListFilters {
@@ -35,6 +37,7 @@ export interface OrderListFilters {
   from?: string; // yyyy-MM-dd, inclusive
   to?: string; // yyyy-MM-dd, inclusive
   statusCode?: string;
+  originCode?: string; // FIELD | COUNTER — doc 30, sección 9.1
   page?: number;
   size?: number;
 }
@@ -61,13 +64,17 @@ export interface DeliveryStatusView {
   returnedLines: ReturnedLineView[];
 }
 
+/**
+ * GET /orders/{orderId} — doc 30, sección 9.2 agrega salespersonName,
+ * originCode, createdById/createdByName y salesChannelId/Name.
+ */
 export interface OrderDetail {
   orderId: number;
   customerId: number;
   customerName: string;
   salespersonId: number;
   paymentConditionId: number;
-  statusCode: string;
+  statusCode: string; // OPEN | SENT_TO_BILLING | COUNTER_DELIVERED | CANCELLED
   orderDate: string;
   note: string | null;
   totalAmount: number;
@@ -76,6 +83,24 @@ export interface OrderDetail {
   sentToBillingAt: string | null;
   items: OrderItemView[];
   deliveryStatus: DeliveryStatusView | null;
+  salespersonName: string;
+  originCode: string; // FIELD | COUNTER
+  createdById: number;
+  createdByName: string;
+  salesChannelId: number | null;
+  salesChannelName: string | null;
+}
+
+/** PATCH /orders/{orderId}/items — doc 30, sección 8.2. Solo pedidos OPEN. */
+export interface OrderItemEditCommand {
+  productId: number;
+  newQuantity: number; // cantidad FINAL; 0 = quitar la línea
+}
+
+export interface UpdateOrderCommand {
+  paymentConditionId?: number | null; // null/omitido = no cambia
+  catalogItems: OrderItemEditCommand[];
+  predictedItems: OrderItemEditCommand[];
 }
 
 export interface PendingBonusLineView {

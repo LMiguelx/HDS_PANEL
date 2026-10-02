@@ -49,6 +49,13 @@ export const NAV: NavItem[] = [
     group: 'Ventas',
   },
   {
+    label: 'Nuevo pedido',
+    icon: 'add_shopping_cart',
+    route: '/pedidos/nuevo',
+    anyOf: ['order.manage'],
+    group: 'Ventas',
+  },
+  {
     label: 'Bonificaciones pendientes',
     icon: 'production_quantity_limits',
     route: '/pedidos/bonificaciones-pendientes',
@@ -69,6 +76,13 @@ export const NAV: NavItem[] = [
     icon: 'local_offer',
     route: '/promociones',
     anyOf: PROMO_ANY_PERMISSION,
+    group: 'Promos',
+  },
+  {
+    label: 'Simular pedido',
+    icon: 'science',
+    route: '/promociones/simular',
+    anyOf: ['order.manage'],
     group: 'Promos',
   },
   {

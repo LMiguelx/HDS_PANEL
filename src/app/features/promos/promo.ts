@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
+  ApplicationView,
   CreatePromoCommand,
   PendingChoiceView,
   PendingCountView,
@@ -90,5 +91,10 @@ export class PromoService {
 
   resolveChoice(promoApplicationId: number, cmd: ResolveChoiceCommand) {
     return this.http.post<void>(`${this.base}/pending-choices/${promoApplicationId}/resolve`, cmd);
+  }
+
+  /** Qué promociones se aplicaron a un pedido — doc 30, sección 9.2. `order.view_all`. */
+  applicationsByOrder(orderId: number) {
+    return this.http.get<ApplicationView[]>(`${this.base}/applications/by-order/${orderId}`);
   }
 }

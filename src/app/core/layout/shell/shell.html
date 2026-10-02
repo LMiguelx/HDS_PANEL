@@ -19,6 +19,31 @@
     </div>
 
     <div class="topbar-actions">
+      @if (showJornada()) {
+        @if (routeStore.loading()) {
+          <span class="jornada-chip jornada-loading">Jornada…</span>
+        } @else if (routeStore.route()) {
+          <div class="jornada-chip jornada-open">
+            <span class="material-icons jornada-icon" aria-hidden="true">radio_button_checked</span>
+            <span class="jornada-text">{{ jornadaLabel() }}</span>
+            <ui-menu label="Opciones de jornada">
+              <button type="button" [disabled]="routeStore.ending()" (click)="closeJornada()">
+                Cerrar jornada
+              </button>
+            </ui-menu>
+          </div>
+        } @else {
+          <button
+            uiButton
+            variant="secondary"
+            size="sm"
+            [loading]="routeStore.starting()"
+            (click)="openJornada()"
+          >
+            Abrir jornada
+          </button>
+        }
+      }
       @if (!isHandset()) {
         <div class="user-chip">
           <span class="user-avatar">{{ userInitial() }}</span>
