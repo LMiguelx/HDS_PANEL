@@ -999,10 +999,10 @@ export class AssignmentMapPage {
       attribution: '&copy; OpenStreetMap',
       maxZoom: 19,
     }).addTo(this.leafletMap);
-    this.markersLayer = L.markerClusterGroup({
-      maxClusterRadius: 50,
-      disableClusteringAtZoom: 17,
-    });
+    this.markersLayer = (window as any).L.markerClusterGroup({
+    maxClusterRadius: 50,
+    disableClusteringAtZoom: 17,
+    }) as L.MarkerClusterGroup;
     this.leafletMap.addLayer(this.markersLayer);
     setTimeout(() => this.leafletMap?.invalidateSize(), 0);
   }
