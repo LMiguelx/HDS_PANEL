@@ -29,6 +29,12 @@ export const ITEM_STATUS_OPTIONS: StatusOption[] = [
   { code: 'REJECTED', name: 'Rechazado por el cliente' },
 ];
 
+/** role_in_team — pestaña Equipo (doc 31, sección 3.3). `null` = ya no está en el equipo. */
+export const ROLE_IN_TEAM_OPTIONS: StatusOption[] = [
+  { code: 'DRIVER', name: 'Conductor' },
+  { code: 'HELPER', name: 'Ayudante' },
+];
+
 function nameFor(options: StatusOption[], code: string | null | undefined): string {
   return options.find((o) => o.code === code)?.name ?? code ?? '—';
 }
@@ -39,4 +45,8 @@ export function batchStatusName(code: string | null | undefined): string {
 
 export function itemStatusName(code: string | null | undefined): string {
   return nameFor(ITEM_STATUS_OPTIONS, code);
+}
+
+export function roleInTeamName(code: string | null | undefined): string {
+  return code ? nameFor(ROLE_IN_TEAM_OPTIONS, code) : 'Ya no está en el equipo';
 }

@@ -1,9 +1,15 @@
 // Contratos de Solicitudes de cliente (admin). Ver
 // 13-panel-admin-clientes-solicitudes-cobertura-mapa.md — reemplaza el shape
 // anterior (CreationRequest/FieldChangeRequest/ClosureRequest), que no
-// coincidía con lo que expone el backend.
+// coincidía con lo que expone el backend. Doc 31 agrega el registro del ERP
+// a la creación (customerCode/routeSequence/erpRegistered/erpRegisteredAt).
 
-/** Fila de creación o de cierre — mismo shape, distinto `type`. */
+/**
+ * Fila de creación o de cierre — mismo shape, distinto `type`. En creación
+ * `fieldName`/`newValue`/`reason` siempre llegan vacíos — no se leen ahí.
+ * `customerCode`/`routeSequence`/`erpRegisteredAt` son null hasta que el ERP
+ * registra al cliente (ver `erpRegistered`, doc 31 sección 3.1).
+ */
 export interface RequestView {
   requestId: number;
   type: string; // 'CREATION' | 'CLOSURE'
@@ -17,6 +23,10 @@ export interface RequestView {
   requestedByName: string;
   createdAt: string; // ISO datetime
   resolvedAt: string | null;
+  customerCode: string | null;
+  routeSequence: number | null;
+  erpRegistered: boolean;
+  erpRegisteredAt: string | null;
 }
 
 export interface FieldChangeView {
@@ -44,7 +54,7 @@ export interface CreationRequestDetail {
   businessName: string;
   documentTypeId: number; // ver catálogo DOCUMENT_TYPE_OPTIONS
   documentNumber: string;
-  customerTypeId: number; // ver catálogo CUSTOMER_TYPE_OPTIONS
+  customerTypeId: number | null; // ver catálogo CUSTOMER_TYPE_OPTIONS; null = "Sin tipo"
   address: string | null;
   businessActivity: string | null;
   phone: string | null;
@@ -55,12 +65,20 @@ export interface CreationRequestDetail {
   requestedByName: string;
   createdAt: string;
   resolvedAt: string | null;
+  customerCode: string | null; // código que asignó el ERP; null si aún no la registró
+  routeSequence: number | null; // secuencia de ruta que asignó el ERP; null si aún no la registró
+  erpRegistered: boolean; // true = ya se puede aprobar (sección 3.1)
+  erpRegisteredAt: string | null; // null si el ERP aún no la registró
 }
 
+/**
+ * El código de cliente ya no se escribe acá: lo asigna el ERP y se lee de
+ * CreationRequestDetail.customerCode (doc 31, sección 7.1). El body es
+ * obligatorio aunque vaya vacío ({}).
+ */
 export interface ApproveCreationCommand {
-  customerCode: string; // obligatorio, máx 10 caracteres
-  userId?: number;
-  weekdays?: number[]; // ISO 1..7
+  userId?: number | null; // null u omitido = el vendedor que hizo la solicitud
+  weekdays?: number[]; // opcional — días de visita, valores 1 a 7
 }
 
 export interface RequestListFilters {

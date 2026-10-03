@@ -33,6 +33,11 @@ export interface BatchListFilters {
   size?: number;
 }
 
+/**
+ * `registeredBy*` — doc 31, sección 8.1/10: quién registró el último estado
+ * del comprobante (la entrega o la última devolución). null mientras el
+ * comprobante siga PENDING — nadie lo atendió todavía.
+ */
 export interface BatchItemView {
   lineNumber: number;
   invoiceId: string;
@@ -41,6 +46,25 @@ export interface BatchItemView {
   returnedAmount: number;
   netAmount: number;
   statusCode: string; // PENDING | DELIVERED | PARTIAL | REJECTED
+  registeredByUserId: number | null;
+  registeredByName: string | null;
+  registeredAt: string | null; // ISO datetime
+}
+
+/**
+ * Montos por integrante del equipo — pestaña "Equipo" (doc 31, sección 9).
+ * `roleInTeam` null = atendió comprobantes de la planilla pero ya no figura
+ * en el equipo actual (p. ej. un ayudante reemplazado); sus montos igual
+ * se muestran.
+ */
+export interface MemberTotals {
+  userId: number;
+  fullName: string;
+  roleInTeam: string | null; // DRIVER | HELPER | null
+  invoices: number;
+  amount: number;
+  returnedAmount: number;
+  netAmount: number; // lo que le corresponde rendir
 }
 
 export interface BatchDetail {
@@ -61,6 +85,8 @@ export interface BatchDetail {
   itemsProgressPercentage: number;
   settledAt: string | null; // ISO datetime
   items: BatchItemView[];
+  pendingAmount: number; // monto de los comprobantes que nadie atendió todavía
+  memberTotals: MemberTotals[];
 }
 
 export interface BatchCustomerView {

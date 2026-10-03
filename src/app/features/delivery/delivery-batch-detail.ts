@@ -13,15 +13,22 @@ import { DeliveryAdminService } from './delivery-admin';
 import { AssignTeamDialog } from './ui/assign-team-dialog';
 import { ReturnsDialog } from './ui/returns-dialog';
 import { BatchMap } from './ui/batch-map';
-import { BatchCustomerView, BatchDetail } from '../../shared/models/delivery.models';
-import { ITEM_STATUS_OPTIONS, batchStatusName, itemStatusName } from './delivery-format';
-import { dateText, dateTimeText } from '../assignments/assignment-format';
+import { BatchCustomerView, BatchDetail, MemberTotals } from '../../shared/models/delivery.models';
+import {
+  ITEM_STATUS_OPTIONS,
+  batchStatusName,
+  itemStatusName,
+  roleInTeamName,
+} from './delivery-format';
+import { dateText, dateTimeText, timeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 
 const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
   { value: '', label: 'Todos los estados' },
   ...ITEM_STATUS_OPTIONS.map((o) => ({ value: o.code, label: o.name })),
 ];
+
+const UNATTENDED_FILTER_VALUE = '__none__';
 
 /** Detalle de una planilla: comprobantes + mapa de entregas. */
 @Component({
@@ -131,6 +138,14 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
           <button
             type="button"
             class="dbd-tab"
+            [class.on]="view() === 'team'"
+            (click)="view.set('team')"
+          >
+            Equipo
+          </button>
+          <button
+            type="button"
+            class="dbd-tab"
             [class.on]="view() === 'map'"
             (click)="view.set('map')"
           >
@@ -146,6 +161,12 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               [(value)]="itemStatusFilter"
               [options]="itemStatusOptions"
             />
+            <ui-field
+              label="Atendido por"
+              type="select"
+              [(value)]="attendedByFilter"
+              [options]="attendedByOptions()"
+            />
           </div>
 
           <table class="ui-table-grid dbd-table-desktop">
@@ -156,6 +177,7 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 <th>Cliente</th>
                 <th>Monto</th>
                 <th>Estado</th>
+                <th>Atendido por</th>
                 <th></th>
               </tr>
             </thead>
@@ -182,6 +204,14 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                     }
                   </td>
                   <td><ui-status [label]="itemStatusText(item.statusCode)" /></td>
+                  <td class="dbd-muted">
+                    @if (item.registeredByName) {
+                      {{ item.registeredByName }}
+                      <div class="dbd-attended-time">{{ timeText(item.registeredAt) }}</div>
+                    } @else {
+                      —
+                    }
+                  </td>
                   <td class="dbd-row-action">
                     <button
                       uiButton
@@ -220,6 +250,14 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                     {{ formatSoles(item.amount) }}
                   }
                 </div>
+                <div class="dbd-muted">
+                  Atendido por:
+                  @if (item.registeredByName) {
+                    {{ item.registeredByName }} · {{ timeText(item.registeredAt) }}
+                  } @else {
+                    —
+                  }
+                </div>
                 <button
                   uiButton
                   variant="ghost"
@@ -233,6 +271,91 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               </div>
             }
           </div>
+        } @else if (view() === 'team') {
+          @if (!b.deliveryTeamId && b.memberTotals.length === 0) {
+            <ui-empty
+              title="Esta planilla aún no tiene equipo asignado"
+              body="Asigna un conductor y sus ayudantes para repartir los comprobantes."
+              [actionLabel]="canAssignTeam() ? 'Asignar equipo' : ''"
+              (action)="openAssignTeam(b)"
+            />
+          } @else {
+            <table class="ui-table-grid dbd-table-desktop">
+              <thead>
+                <tr>
+                  <th>Integrante</th>
+                  <th>Rol</th>
+                  <th>Comprob.</th>
+                  <th>Monto</th>
+                  <th>Devuelto</th>
+                  <th>Neto a rendir</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (m of b.memberTotals; track m.userId) {
+                  <tr class="dbd-team-row" (click)="openMember(m)">
+                    <td class="dbd-cell-strong">{{ m.fullName }}</td>
+                    <td [class.dbd-muted]="!m.roleInTeam">{{ roleInTeamName(m.roleInTeam) }}</td>
+                    <td class="dbd-muted">{{ m.invoices }}</td>
+                    <td class="dbd-muted">{{ formatSoles(m.amount) }}</td>
+                    <td class="dbd-muted">{{ formatSoles(m.returnedAmount) }}</td>
+                    <td class="dbd-cell-strong">{{ formatSoles(m.netAmount) }}</td>
+                  </tr>
+                }
+                @if (b.pendingAmount > 0) {
+                  <tr class="dbd-team-row dbd-team-row-dim" (click)="openUnattended()">
+                    <td class="dbd-cell-strong" colspan="2">Sin atender</td>
+                    <td class="dbd-muted">{{ unattendedCount() }}</td>
+                    <td class="dbd-muted">{{ formatSoles(b.pendingAmount) }}</td>
+                    <td class="dbd-muted">—</td>
+                    <td class="dbd-cell-strong">{{ formatSoles(b.pendingAmount) }}</td>
+                  </tr>
+                }
+                <tr class="dbd-team-row-total">
+                  <td class="dbd-cell-strong" colspan="2">Total</td>
+                  <td class="dbd-cell-strong">{{ b.items.length }}</td>
+                  <td class="dbd-cell-strong">{{ formatSoles(b.totalAmount) }}</td>
+                  <td class="dbd-cell-strong">{{ formatSoles(b.returnedAmount) }}</td>
+                  <td class="dbd-cell-strong">{{ formatSoles(b.netAmount) }}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="dbd-cards-mobile">
+              @for (m of b.memberTotals; track m.userId) {
+                <div class="dbd-card-mobile dbd-card-mobile-click" (click)="openMember(m)">
+                  <div class="dbd-card-mobile-head">
+                    <span class="dbd-card-mobile-name">{{ m.fullName }}</span>
+                    <span [class.dbd-muted]="!m.roleInTeam">{{
+                      roleInTeamName(m.roleInTeam)
+                    }}</span>
+                  </div>
+                  <div class="dbd-muted">
+                    {{ m.invoices }} comprob. · {{ formatSoles(m.amount) }} · devuelto
+                    {{ formatSoles(m.returnedAmount) }}
+                  </div>
+                  <div class="dbd-cell-strong">Neto a rendir: {{ formatSoles(m.netAmount) }}</div>
+                </div>
+              }
+              @if (b.pendingAmount > 0) {
+                <div
+                  class="dbd-card-mobile dbd-card-mobile-click dbd-team-row-dim"
+                  (click)="openUnattended()"
+                >
+                  <div class="dbd-card-mobile-head">
+                    <span class="dbd-card-mobile-name">Sin atender</span>
+                  </div>
+                  <div class="dbd-cell-strong">Neto: {{ formatSoles(b.pendingAmount) }}</div>
+                </div>
+              }
+              <div class="dbd-card-mobile">
+                <div class="dbd-card-mobile-head">
+                  <span class="dbd-card-mobile-name">Total</span>
+                </div>
+                <div class="dbd-cell-strong">{{ formatSoles(b.netAmount) }}</div>
+              </div>
+            </div>
+          }
         } @else {
           @if (loadingCustomers()) {
             <div class="dbd-skeleton" role="status" aria-label="Cargando mapa"></div>
@@ -330,10 +453,13 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
         border-bottom-color: var(--accent);
       }
       .dbd-filters {
-        display: grid;
-        grid-template-columns: 220px;
+        display: flex;
+        flex-wrap: wrap;
         gap: 12px;
         margin: 16px 0;
+      }
+      .dbd-filters ui-field {
+        width: 220px;
       }
       .dbd-cell-strong {
         font-weight: 800;
@@ -350,6 +476,10 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
         color: var(--ink-muted);
         font-size: 13px;
       }
+      .dbd-attended-time {
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
       .dbd-item-struck {
         text-decoration: line-through;
         text-decoration-color: var(--accent-ink);
@@ -357,6 +487,25 @@ const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
       }
       .dbd-row-action {
         text-align: right;
+      }
+      .dbd-team-row {
+        cursor: pointer;
+      }
+      .dbd-team-row:hover {
+        background: var(--faint);
+      }
+      .dbd-team-row-dim {
+        opacity: 0.65;
+      }
+      .dbd-team-row-total td {
+        font-weight: 800;
+        border-top: var(--border-rule);
+      }
+      .dbd-card-mobile-click {
+        cursor: pointer;
+      }
+      .dbd-card-mobile-click:hover {
+        background: var(--faint);
       }
       .dbd-cards-mobile {
         display: none;
@@ -407,12 +556,15 @@ export class DeliveryBatchDetailPage {
   id = input('');
 
   protected canViewInvoice = computed(() => this.auth.hasAny('customer.view', 'invoice.reconcile'));
+  protected canAssignTeam = computed(() => this.auth.hasAny('delivery.settle'));
 
   protected dateText = dateText;
   protected dateTimeText = dateTimeText;
+  protected timeText = timeText;
   protected formatSoles = formatSoles;
   protected statusName = batchStatusName;
   protected itemStatusText = itemStatusName;
+  protected roleInTeamName = roleInTeamName;
   protected itemStatusOptions = ITEM_STATUS_FILTER_OPTIONS;
 
   protected batch = signal<BatchDetail | null>(null);
@@ -421,17 +573,44 @@ export class DeliveryBatchDetailPage {
   protected loadingCustomers = signal(true);
   protected error = signal(false);
   protected settling = signal(false);
-  protected view = signal<'items' | 'map'>('items');
+  protected view = signal<'items' | 'team' | 'map'>('items');
   protected itemStatusFilter = signal('');
+  /** '' = todos, UNATTENDED_FILTER_VALUE = sin atender, o el registeredByUserId como texto. */
+  protected attendedByFilter = signal('');
 
   protected pendingCount = computed(
     () => this.batch()?.items.filter((i) => i.statusCode === 'PENDING').length ?? 0,
   );
 
+  /** Cantidad de comprobantes pendientes — lo mismo que `pendingCount`, con el nombre que usa la pestaña Equipo. */
+  protected unattendedCount = this.pendingCount;
+
+  /** Se resuelve en el panel sobre los items ya cargados — sección 10.2. */
+  protected attendedByOptions = computed<UiFieldOption[]>(() => {
+    const items = this.batch()?.items ?? [];
+    const byId = new Map<number, string>();
+    for (const i of items) {
+      if (i.registeredByUserId != null && i.registeredByName) {
+        byId.set(i.registeredByUserId, i.registeredByName);
+      }
+    }
+    return [
+      { value: '', label: 'Todos' },
+      ...Array.from(byId, ([id, name]) => ({ value: String(id), label: name })),
+      { value: UNATTENDED_FILTER_VALUE, label: 'Sin atender' },
+    ];
+  });
+
   protected filteredItems = computed(() => {
     const items = this.batch()?.items ?? [];
-    const filter = this.itemStatusFilter();
-    return filter ? items.filter((i) => i.statusCode === filter) : items;
+    const statusFilter = this.itemStatusFilter();
+    const attendedFilter = this.attendedByFilter();
+    return items.filter((i) => {
+      if (statusFilter && i.statusCode !== statusFilter) return false;
+      if (attendedFilter === UNATTENDED_FILTER_VALUE) return i.registeredByUserId == null;
+      if (attendedFilter && String(i.registeredByUserId) !== attendedFilter) return false;
+      return true;
+    });
   });
 
   /**
@@ -521,5 +700,19 @@ export class DeliveryBatchDetailPage {
       data: { invoiceId: item.invoiceId, customerName: item.customerName },
       width: '480px',
     });
+  }
+
+  /** Clic en un integrante de Equipo → Comprobantes filtrado por esa persona — sección 9.4. */
+  protected openMember(m: MemberTotals) {
+    this.itemStatusFilter.set('');
+    this.attendedByFilter.set(String(m.userId));
+    this.view.set('items');
+  }
+
+  /** Clic en "Sin atender" → Comprobantes filtrado por estado Pendiente — sección 9.4. */
+  protected openUnattended() {
+    this.attendedByFilter.set('');
+    this.itemStatusFilter.set('PENDING');
+    this.view.set('items');
   }
 }
