@@ -55,18 +55,26 @@ let nextId = 0;
           </select>
         }
         @default {
-          <input
-            [id]="id"
-            class="ui-input"
-            [type]="type()"
-            [placeholder]="placeholder()"
-            [disabled]="disabled()"
-            [readOnly]="readonly()"
-            [attr.aria-invalid]="!!error()"
-            [attr.aria-describedby]="hint() || error() ? id + '-hint' : null"
-            [value]="value()"
-            (input)="onInput($event)"
-          />
+          <div class="ui-field-input-wrap">
+            @if (icon()) {
+              <span class="material-icons ui-field-icon" aria-hidden="true">{{ icon() }}</span>
+            }
+            <input
+              [id]="id"
+              class="ui-input"
+              [class.ui-input-icon]="!!icon()"
+              [class.ui-input-suffix]="hasSuffix()"
+              [type]="type()"
+              [placeholder]="placeholder()"
+              [disabled]="disabled()"
+              [readOnly]="readonly()"
+              [attr.aria-invalid]="!!error()"
+              [attr.aria-describedby]="hint() || error() ? id + '-hint' : null"
+              [value]="value()"
+              (input)="onInput($event)"
+            />
+            <ng-content select="[fieldSuffix]"></ng-content>
+          </div>
         }
       }
 
@@ -89,6 +97,18 @@ let nextId = 0;
         font-weight: 600;
         color: var(--ink);
       }
+      .ui-field-input-wrap {
+        position: relative;
+      }
+      .ui-field-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 20px;
+        color: var(--ink-muted);
+        pointer-events: none;
+      }
       .ui-input {
         font-family: var(--font-sans);
         font-size: 15px;
@@ -100,6 +120,12 @@ let nextId = 0;
         padding: 0 12px;
         width: 100%;
         box-sizing: border-box;
+      }
+      .ui-input-icon {
+        padding-left: 40px;
+      }
+      .ui-input-suffix {
+        padding-right: 40px;
       }
       textarea.ui-input {
         padding: 10px 12px;
@@ -152,6 +178,10 @@ export class UiField {
   readonly = input(false);
   rows = input(3);
   options = input<UiFieldOption[]>([]);
+  /** Ícono (ligadura de Material Icons) a la izquierda del input. Opcional. */
+  icon = input('');
+  /** Reserva espacio a la derecha para contenido proyectado con `fieldSuffix` (p. ej. el botón de mostrar/ocultar contraseña). */
+  hasSuffix = input(false);
 
   value = model<string>('');
 
