@@ -6,14 +6,21 @@ import { AuthService } from '../../core/auth/auth';
 
 const RUC_KEY = 'hds.ruc';
 
+/**
+ * Login — logo y franja de color de la empresa (public/brand/logo.jpg),
+ * acento rojo institucional reservado para los controles interactivos (ver
+ * _tokens.scss: "una sola familia; rojo institucional"). Al entrar navega a
+ * /splash en vez de directo a /dashboard.
+ */
 @Component({
   selector: 'app-login',
   imports: [UiButton, UiField],
   template: `
     <div class="login-wrap">
       <div class="login-card">
+        <div class="login-brand-bar" aria-hidden="true"></div>
         <div class="login-head">
-          <div class="login-brand">HDSAPP</div>
+          <img class="login-logo" src="/brand/logo.jpg" alt="Hispánica Distribuciones" />
           <div class="login-sub">Panel de control</div>
         </div>
 
@@ -26,14 +33,14 @@ const RUC_KEY = 'hds.ruc';
           />
           <ui-field label="Usuario" [(value)]="username" [error]="userError()" />
 
-          <div class="login-pass">
+          <div class="login-pass-field">
             <ui-field
               label="Contraseña"
               [type]="hidePass() ? 'password' : 'text'"
               [(value)]="password"
               [error]="passError()"
             />
-            <button uiButton variant="ghost" size="sm" type="button" (click)="hidePass.set(!hidePass())">
+            <button type="button" class="login-pass-toggle" (click)="hidePass.set(!hidePass())">
               {{ hidePass() ? 'Mostrar contraseña' : 'Ocultar contraseña' }}
             </button>
           </div>
@@ -42,7 +49,13 @@ const RUC_KEY = 'hds.ruc';
             <p class="login-error">{{ error() }}</p>
           }
 
-          <button uiButton variant="primary" type="submit" class="login-submit" [loading]="loading()">
+          <button
+            uiButton
+            variant="primary"
+            type="submit"
+            class="login-submit"
+            [loading]="loading()"
+          >
             Iniciar sesión
           </button>
         </form>
@@ -58,42 +71,78 @@ const RUC_KEY = 'hds.ruc';
         min-height: 100vh;
         display: grid;
         place-items: center;
-        padding: var(--sp-4);
+        padding: var(--sp-5);
         background: var(--bg);
         color: var(--ink);
       }
       .login-card {
         width: 100%;
-        max-width: 380px;
+        max-width: 400px;
         border: 2px solid var(--divider);
         background: var(--bg);
-        padding: 28px 24px 24px;
+        overflow: hidden;
+        animation: login-card-in 0.42s var(--ease-standard);
+      }
+      @keyframes login-card-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .login-card {
+          animation: none;
+        }
+      }
+      .login-brand-bar {
+        height: 6px;
+        background: linear-gradient(90deg, #c9166e, #e8832b, #e3d23f, #2fae5c, #1aa6a6, #4a3a9e);
       }
       .login-head {
+        display: grid;
+        justify-items: center;
+        gap: 10px;
+        padding: var(--sp-8) var(--sp-6) var(--sp-5);
         border-bottom: var(--border-rule);
-        padding-bottom: 14px;
-        margin-bottom: 22px;
       }
-      .login-brand {
-        font-weight: 800;
-        font-size: 20px;
-        letter-spacing: -0.01em;
+      .login-logo {
+        width: 180px;
+        max-width: 72%;
+        height: auto;
       }
       .login-sub {
         font-size: var(--fs-label);
         letter-spacing: var(--ls-label);
         text-transform: uppercase;
         color: var(--ink-muted);
-        margin-top: 2px;
       }
       form {
         display: grid;
-        gap: 16px;
+        gap: 18px;
+        padding: var(--sp-6);
       }
-      .login-pass {
+      .login-pass-field {
         display: grid;
-        gap: 4px;
-        justify-items: start;
+        gap: 6px;
+        justify-items: end;
+      }
+      .login-pass-toggle {
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--accent-ink);
+        background: transparent;
+        border: 0;
+        padding: 4px 2px;
+        cursor: pointer;
+        min-height: 32px;
+      }
+      .login-pass-toggle:hover {
+        text-decoration: underline;
       }
       .login-error {
         margin: 0;
@@ -106,6 +155,15 @@ const RUC_KEY = 'hds.ruc';
       .login-submit {
         width: 100%;
         margin-top: 4px;
+      }
+
+      @media (max-width: 480px) {
+        .login-head {
+          padding: var(--sp-6) var(--sp-4) var(--sp-4);
+        }
+        form {
+          padding: var(--sp-4);
+        }
       }
     `,
   ],
@@ -149,7 +207,7 @@ export class LoginPage {
     this.auth.login(ruc, this.username().trim(), this.password()).subscribe({
       next: (res) => {
         this.auth.handleTokens(res);
-        void this.router.navigateByUrl('/dashboard');
+        void this.router.navigateByUrl('/splash');
       },
       error: (err) => {
         this.loading.set(false);

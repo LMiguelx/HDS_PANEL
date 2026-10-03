@@ -8,6 +8,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login').then((m) => m.LoginPage),
   },
   {
+    path: 'splash',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/auth/splash').then((m) => m.SplashPage),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./core/layout/shell/shell').then((m) => m.ShellComponent),

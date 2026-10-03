@@ -132,16 +132,16 @@ function newIdempotencyKey(): string {
                 <div class="cof-attribution-options">
                   <button
                     type="button"
-                    uiButton
-                    [variant]="attributeTo() === 'salesperson' ? 'secondary' : 'ghost'"
+                    class="cof-attr-btn"
+                    [class.selected]="attributeTo() === 'salesperson'"
                     (click)="attributeTo.set('salesperson')"
                   >
                     {{ ctx.salesAssignment.salespersonName }}
                   </button>
                   <button
                     type="button"
-                    uiButton
-                    [variant]="attributeTo() === 'counter' ? 'secondary' : 'ghost'"
+                    class="cof-attr-btn"
+                    [class.selected]="attributeTo() === 'counter'"
                     (click)="attributeTo.set('counter')"
                   >
                     Mostrador (yo)
@@ -176,6 +176,39 @@ function newIdempotencyKey(): string {
         @if (canEditCart()) {
           <div class="cof-grid">
             <div class="cof-left">
+              <div class="cof-cart">
+                <h3 class="cof-cart-title">
+                  Carrito
+                  @if (lines().length > 0) {
+                    <span class="cof-cart-count">{{ lines().length }}</span>
+                  }
+                </h3>
+                @if (lines().length === 0) {
+                  <p class="cof-muted">
+                    Todavía no agregaste productos. Búscalos en Catálogo o Sugerido.
+                  </p>
+                } @else {
+                  <div class="cof-lines">
+                    @for (line of lines(); track line.productId) {
+                      <div class="cof-line-row">
+                        <span class="cof-line-name">{{ line.productName }}</span>
+                        <input
+                          class="cof-line-qty"
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          [value]="line.quantity"
+                          (change)="updateQuantity(line, $event)"
+                        />
+                        <button uiButton variant="icon" title="Quitar" (click)="removeLine(line)">
+                          ✕
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+
               <div class="cof-tabs">
                 <button
                   type="button"
@@ -205,92 +238,68 @@ function newIdempotencyKey(): string {
                 }
               </div>
 
-              @switch (activeTab()) {
-                @case ('catalogo') {
-                  <ui-typeahead
-                    label="Agregar producto"
-                    placeholder="Busca por nombre"
-                    [clearOnPick]="true"
-                    [search]="searchProducts"
-                    (picked)="addProduct($event)"
-                  />
-                }
-                @case ('sugerido') {
-                  @if (suggestedLoading()) {
-                    <p class="cof-muted">Cargando sugeridos…</p>
-                  } @else if (suggested().length === 0) {
-                    <ui-empty
-                      title="Sin sugeridos"
-                      body="Este cliente todavía no tiene historial suficiente."
+              <div class="cof-tab-content">
+                @switch (activeTab()) {
+                  @case ('catalogo') {
+                    <ui-typeahead
+                      label="Agregar producto"
+                      placeholder="Busca por nombre"
+                      [clearOnPick]="true"
+                      [search]="searchProducts"
+                      (picked)="addProduct($event)"
                     />
-                  } @else {
-                    <div class="cof-suggested-list">
-                      @for (item of suggested(); track item.productId) {
-                        <div class="cof-suggested-row">
-                          <div>
-                            <div class="cof-suggested-name">{{ item.productName }}</div>
-                            <div class="cof-muted">
-                              Comprado {{ item.purchaseCount }}
-                              {{ item.purchaseCount === 1 ? 'vez' : 'veces' }}
-                            </div>
-                          </div>
-                          <button
-                            uiButton
-                            variant="secondary"
-                            size="sm"
-                            [disabled]="hasLine(item.productId)"
-                            (click)="addSuggested(item)"
-                          >
-                            {{ hasLine(item.productId) ? 'Agregado' : 'Agregar' }}
-                          </button>
-                        </div>
-                      }
-                    </div>
                   }
-                }
-                @case ('promociones') {
-                  @if (availablePromos().length === 0) {
-                    <ui-empty
-                      title="Sin promociones"
-                      body="No hay promociones vigentes para este cliente y canal."
-                    />
-                  } @else {
-                    <div class="cof-promo-list">
-                      @for (p of availablePromos(); track p.promoId) {
-                        <div class="cof-promo-card">
-                          <div class="cof-promo-name">{{ p.name }}</div>
-                          <div class="cof-muted">{{ p.requirementText }}</div>
-                          <div class="cof-muted">{{ p.rewardText }}</div>
-                          <div class="cof-promo-valid">{{ p.validUntilText }}</div>
-                        </div>
-                      }
-                    </div>
-                  }
-                }
-              }
-
-              <div class="cof-lines">
-                @if (lines().length === 0) {
-                  <ui-empty
-                    title="Sin productos"
-                    body="Agrega productos desde Catálogo o Sugerido."
-                  />
-                } @else {
-                  @for (line of lines(); track line.productId) {
-                    <div class="cof-line-row">
-                      <span class="cof-line-name">{{ line.productName }}</span>
-                      <input
-                        class="cof-line-qty"
-                        type="number"
-                        min="0.001"
-                        step="0.001"
-                        [value]="line.quantity"
-                        (change)="updateQuantity(line, $event)"
+                  @case ('sugerido') {
+                    @if (suggestedLoading()) {
+                      <p class="cof-muted">Cargando sugeridos…</p>
+                    } @else if (suggested().length === 0) {
+                      <ui-empty
+                        title="Sin sugeridos"
+                        body="Este cliente todavía no tiene historial suficiente."
                       />
-                      <button uiButton variant="icon" title="Quitar" (click)="removeLine(line)">
-                        ✕
-                      </button>
-                    </div>
+                    } @else {
+                      <div class="cof-suggested-list cof-scroll-list">
+                        @for (item of suggested(); track item.productId) {
+                          <div class="cof-suggested-row">
+                            <div>
+                              <div class="cof-suggested-name">{{ item.productName }}</div>
+                              <div class="cof-muted">
+                                Comprado {{ item.purchaseCount }}
+                                {{ item.purchaseCount === 1 ? 'vez' : 'veces' }}
+                              </div>
+                            </div>
+                            <button
+                              uiButton
+                              variant="secondary"
+                              size="sm"
+                              [disabled]="hasLine(item.productId)"
+                              (click)="addSuggested(item)"
+                            >
+                              {{ hasLine(item.productId) ? 'Agregado' : 'Agregar' }}
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    }
+                  }
+                  @case ('promociones') {
+                    @if (availablePromos().length === 0) {
+                      <ui-empty
+                        title="Sin promociones"
+                        body="No hay promociones vigentes para este cliente y canal."
+                      />
+                    } @else {
+                      <div class="cof-promo-list cof-scroll-list">
+                        @for (p of availablePromos(); track p.promoId) {
+                          <div class="cof-promo-card">
+                            <div class="cof-promo-name">{{ p.name }}</div>
+                            <div class="cof-muted">{{ p.requirementText }}</div>
+                            <div class="cof-muted">{{ p.rewardText }}</div>
+                            <div class="cof-promo-valid">{{ p.validUntilText }}</div>
+                          </div>
+                        }
+                      </div>
+                    }
                   }
                 }
               </div>
@@ -448,14 +457,56 @@ function newIdempotencyKey(): string {
       }
       .cof-attribution-options {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         flex-wrap: wrap;
+      }
+      .cof-attr-btn {
+        font-family: var(--font-sans);
+        font-size: 14px;
+        font-weight: 700;
+        min-height: var(--touch-min);
+        padding: 0 16px;
+        border: 1px solid var(--divider);
+        background: var(--bg);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .cof-attr-btn:hover {
+        background: var(--faint);
+      }
+      .cof-attr-btn.selected {
+        border: 2px solid var(--accent);
+        background: var(--accent-wash);
+        color: var(--accent-ink);
+        font-weight: 800;
+        padding: 0 15px;
       }
       .cof-grid {
         display: grid;
         grid-template-columns: 1.6fr 1fr;
         gap: 28px;
         align-items: start;
+      }
+      .cof-cart {
+        border: 2px solid var(--divider);
+        padding: 16px;
+        margin-bottom: 20px;
+      }
+      .cof-cart-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
+        margin: 0 0 10px;
+        color: var(--ink);
+      }
+      .cof-cart-count {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--on-accent);
+        background: var(--accent);
+        padding: 1px 8px;
+        line-height: 1.6;
       }
       .cof-tabs {
         display: flex;
@@ -482,13 +533,20 @@ function newIdempotencyKey(): string {
         color: var(--ink);
         border-bottom-color: var(--accent);
       }
+      .cof-tab-content {
+        display: grid;
+        gap: 12px;
+      }
+      .cof-scroll-list {
+        max-height: 360px;
+        overflow-y: auto;
+      }
       .cof-suggested-list,
       .cof-promo-list {
         display: grid;
         gap: 1px;
         background: var(--hairline);
         border: 1px solid var(--hairline);
-        margin-bottom: 16px;
       }
       .cof-suggested-row {
         display: flex;
@@ -522,7 +580,6 @@ function newIdempotencyKey(): string {
         gap: 1px;
         background: var(--hairline);
         border: 1px solid var(--hairline);
-        margin-top: 16px;
       }
       .cof-line-row {
         display: flex;

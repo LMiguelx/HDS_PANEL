@@ -133,7 +133,7 @@ function todayIso(): string {
       }
       .sks-toolbar {
         display: flex;
-        align-items: flex-end;
+        align-items: flex-start;
         gap: 16px;
         flex-wrap: wrap;
         margin-bottom: 20px;
