@@ -85,6 +85,21 @@
   --accent-wash: light-dark(#fff2ef, rgba(236, 48, 19, 0.16));
   --on-accent: light-dark(#f3f2f2, #1a1918);
 
+  /* — Marca (pantallas de entrada: login y splash) — mismo rojo
+     institucional que --accent, con un tono oscuro de acompañamiento.
+     Fijo (no light-dark()): es un fondo decorativo, no lee datos, y se
+     mantiene igual sin importar el tema. Único lugar donde se definen
+     estos tonos — toda pantalla de marca reutiliza var(--brand-gradient). */
+  --brand-start: #f0511f;
+  --brand-mid: #ae1800;
+  --brand-end: #1a1918;
+  --brand-gradient: linear-gradient(
+    160deg,
+    var(--brand-start) 0%,
+    var(--brand-mid) 55%,
+    var(--brand-end) 100%
+  );
+
   /* — Estados de promoción (nuevos; mismo patrón que --st-*) — */
   --st-vigente: light-dark(#0d6b3f, #54d19a);
   --st-programada: light-dark(#1d4ed8, #92b6ff);

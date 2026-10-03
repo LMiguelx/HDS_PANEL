@@ -7,10 +7,11 @@ import { AuthService } from '../../core/auth/auth';
 const RUC_KEY = 'hds.ruc';
 
 /**
- * Login — logo y franja de color de la empresa (public/brand/logo.jpg),
- * acento rojo institucional reservado para los controles interactivos (ver
- * _tokens.scss: "una sola familia; rojo institucional"). Al entrar navega a
- * /splash en vez de directo a /dashboard.
+ * Login — una sola tarjeta (sin franjas ni bordes internos) sobre el
+ * degradado de marca (`--brand-gradient`, definido junto al resto de
+ * tokens en _tokens.scss). La imagen usa una ruta relativa a propósito:
+ * esta app también se empaqueta como .exe con Electron y se carga con
+ * `file://` — una ruta que empieza con "/" no resuelve ahí.
  */
 @Component({
   selector: 'app-login',
@@ -18,11 +19,7 @@ const RUC_KEY = 'hds.ruc';
   template: `
     <div class="login-wrap">
       <div class="login-card">
-        <div class="login-brand-bar" aria-hidden="true"></div>
-        <div class="login-head">
-          <img class="login-logo" src="/brand/logo.jpg" alt="Hispánica Distribuciones" />
-          <div class="login-sub">Panel de control</div>
-        </div>
+        <img class="login-logo" src="hispanica.png" alt="Hispánica Distribuciones" />
 
         <form (submit)="submit($event)">
           <ui-field
@@ -71,16 +68,20 @@ const RUC_KEY = 'hds.ruc';
         min-height: 100vh;
         display: grid;
         place-items: center;
-        padding: var(--sp-5);
-        background: var(--bg);
-        color: var(--ink);
+        padding: var(--sp-6);
+        background: var(--brand-gradient);
+        box-sizing: border-box;
       }
       .login-card {
         width: 100%;
-        max-width: 400px;
-        border: 2px solid var(--divider);
+        max-width: 420px;
+        box-sizing: border-box;
         background: var(--bg);
-        overflow: hidden;
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-card);
+        padding: var(--sp-10) var(--sp-8) var(--sp-8);
+        display: grid;
+        gap: var(--sp-6);
         animation: login-card-in 0.42s var(--ease-standard);
       }
       @keyframes login-card-in {
@@ -98,32 +99,20 @@ const RUC_KEY = 'hds.ruc';
           animation: none;
         }
       }
-      .login-brand-bar {
-        height: 6px;
-        background: linear-gradient(90deg, #c9166e, #e8832b, #e3d23f, #2fae5c, #1aa6a6, #4a3a9e);
-      }
-      .login-head {
-        display: grid;
-        justify-items: center;
-        gap: 10px;
-        padding: var(--sp-8) var(--sp-6) var(--sp-5);
-        border-bottom: var(--border-rule);
-      }
       .login-logo {
-        width: 180px;
-        max-width: 72%;
+        display: block;
+        width: 150px;
+        max-width: 60%;
         height: auto;
-      }
-      .login-sub {
-        font-size: var(--fs-label);
-        letter-spacing: var(--ls-label);
-        text-transform: uppercase;
-        color: var(--ink-muted);
+        margin: 0 auto;
       }
       form {
         display: grid;
         gap: 18px;
-        padding: var(--sp-6);
+      }
+      form > ui-field,
+      .login-pass-field {
+        width: 100%;
       }
       .login-pass-field {
         display: grid;
@@ -146,23 +135,28 @@ const RUC_KEY = 'hds.ruc';
       }
       .login-error {
         margin: 0;
-        padding: 10px 12px;
+        padding: 10px 14px;
         background: var(--accent-wash);
         color: var(--accent-ink);
+        border-radius: var(--radius-sm);
         font-size: 13px;
         line-height: 1.45;
       }
       .login-submit {
         width: 100%;
         margin-top: 4px;
+        border-radius: var(--radius-sm);
+      }
+      /* ui-field es compartido por todo el panel (radio 0 a propósito); acá
+         se redondea solo dentro de esta tarjeta, sin tocar el componente. */
+      :host ::ng-deep .login-card .ui-input {
+        border-radius: var(--radius-sm);
       }
 
       @media (max-width: 480px) {
-        .login-head {
-          padding: var(--sp-6) var(--sp-4) var(--sp-4);
-        }
-        form {
-          padding: var(--sp-4);
+        .login-card {
+          padding: var(--sp-8) var(--sp-5) var(--sp-6);
+          border-radius: var(--radius-md);
         }
       }
     `,
