@@ -109,7 +109,8 @@ const HAS_GAP_OPTIONS: UiFieldOption[] = [
                   }
                 </td>
                 <td class="asl-row-menu-cell">
-                  <ui-menu label="Editar horario, finalizar">
+                  <ui-menu label="Cambiar vendedor, editar horario, finalizar">
+                    <button type="button" (click)="changeVendor(a)">Cambiar vendedor</button>
                     <button type="button" (click)="editSchedule(a)">Editar horario</button>
                     <button type="button" (click)="end(a)">Finalizar</button>
                   </ui-menu>
@@ -137,6 +138,9 @@ const HAS_GAP_OPTIONS: UiFieldOption[] = [
                 {{ weekdaysText(a.weekdays) }} · Semanas {{ weeksOfCycleText(a.weeksOfCycle) }}
               </div>
               <div class="asl-card-mobile-actions">
+                <button uiButton variant="secondary" size="sm" (click)="changeVendor(a)">
+                  Cambiar vendedor
+                </button>
                 <button uiButton variant="secondary" size="sm" (click)="editSchedule(a)">
                   Editar horario
                 </button>
@@ -381,10 +385,21 @@ export class AssignmentListPage {
         data: {
           assignmentId: a.assignmentId,
           customerName: a.customerName,
+          vendorLabel: a.userName,
           weekdays: a.weekdays ?? [],
           weeksOfCycle: a.weeksOfCycle ?? [],
         },
         width: '480px',
+      })
+      .afterClosed()
+      .subscribe((saved) => saved && this.load());
+  }
+
+  protected changeVendor(a: AssignmentAdminView) {
+    this.dialog
+      .open(CreateAssignmentDialog, {
+        data: { fixedCustomer: { id: a.customerId, name: a.customerName, code: a.customerCode } },
+        width: '520px',
       })
       .afterClosed()
       .subscribe((saved) => saved && this.load());

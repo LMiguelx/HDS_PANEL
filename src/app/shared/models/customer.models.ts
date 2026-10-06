@@ -23,6 +23,21 @@ export interface PurchaseMetrics {
   avgDaysBetweenOrders: number | null;
 }
 
+/**
+ * El vendedor del cliente hoy y cuándo lo visita — doc 33, sección 5.3.
+ * `assignmentId` lo usan "Editar horario"/"Completar horario". `weekdays`/
+ * `weeksOfCycle` pueden venir vacíos (horario incompleto, sección 3.4).
+ */
+export interface CustomerSalesAssignment {
+  assignmentId: number;
+  salespersonId: number;
+  salespersonCode: string;
+  salespersonName: string;
+  effectiveFrom: string; // yyyy-MM-dd
+  weekdays: number[]; // 1-7, ordenados
+  weeksOfCycle: number[]; // 1-4, ordenados
+}
+
 export interface CustomerDetail {
   customerId: number;
   code: string;
@@ -39,8 +54,11 @@ export interface CustomerDetail {
   creditUsed: number;
   rating: number | null; // 1-5, null = sin calificar
   isActive: boolean;
+  hasOrderInCycle: boolean; // ya compró en la semana del ciclo en curso
   /** null si el cliente nunca compró. */
   metrics: PurchaseMetrics | null;
+  /** NUEVO (doc 33) — null si el cliente no tiene vendedor asignado. */
+  salesAssignment: CustomerSalesAssignment | null;
 }
 
 export interface CustomerInvoiceSummary {

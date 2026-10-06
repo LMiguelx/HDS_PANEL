@@ -1,4 +1,4 @@
-import { Component, model } from '@angular/core';
+import { Component, input, model } from '@angular/core';
 
 const WEEKDAYS: { value: number; label: string }[] = [
   { value: 1, label: 'Lun' },
@@ -14,9 +14,9 @@ const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
 
 /**
  * Selector de días de la semana (ISO 1-7) y semanas del ciclo (1-4) como
- * chips, para crear/completar el horario de una asignación. Ambos son
- * opcionales: dejarlos vacíos es una asignación con horario incompleto
- * (aparece en hasGap / pending-schedule) — el control lo permite a propósito.
+ * chips, para el horario de una asignación. Días y semanas son obligatorios
+ * (doc 33, sección 0): el llamador decide cuándo mostrar `weekdaysError`/
+ * `weeksError` (p. ej. al intentar guardar sin marcar ninguno).
  */
 @Component({
   selector: 'app-schedule-picker',
@@ -35,7 +35,9 @@ const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
           </button>
         }
       </div>
-      <span class="sched-hint">Sin días marcados = horario incompleto por ahora.</span>
+      @if (weekdaysError()) {
+        <span class="sched-error">{{ weekdaysError() }}</span>
+      }
     </div>
 
     <div class="sched-group">
@@ -55,7 +57,9 @@ const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
           Todas
         </button>
       </div>
-      <span class="sched-hint">Sin semanas marcadas = aplica todas las semanas del ciclo.</span>
+      @if (weeksError()) {
+        <span class="sched-error">{{ weeksError() }}</span>
+      }
     </div>
   `,
   styles: [
@@ -102,9 +106,10 @@ const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
         color: var(--ink-muted);
         border-style: dashed;
       }
-      .sched-hint {
+      .sched-error {
         font-size: 12px;
-        color: var(--ink-muted);
+        font-weight: 600;
+        color: var(--st-vencida, #d13b3b);
       }
     `,
   ],
@@ -115,6 +120,8 @@ export class SchedulePicker {
 
   weekdaysValue = model<number[]>([]);
   weeksOfCycleValue = model<number[]>([]);
+  weekdaysError = input('');
+  weeksError = input('');
 
   protected toggleWeekday(value: number) {
     const current = this.weekdaysValue();

@@ -1,22 +1,33 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiTypeahead, UiLookupItem } from '../../../shared/ui/typeahead/typeahead';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
+import { ToastService } from '../../../core/ui/toast';
 import { LookupService, toUiLookup } from '../../promos/lookup';
+import { CustomerService } from '../../customers/customer';
 import { AssignmentAdminService } from '../assignment-admin';
 import { SchedulePicker } from './schedule-picker';
+import { CustomerSalesAssignment } from '../../../shared/models/customer.models';
+import {
+  dateText,
+  scheduleSummaryText,
+  weekdaysText,
+  weeksOfCycleText,
+} from '../assignment-format';
 
 export interface CreateAssignmentDialogData {
-  /** Cuando viene de un huérfano ya elegido, el cliente queda fijo (no editable). */
+  /** Cuando viene de una fila/ficha ya elegida, el cliente queda fijo (no editable). */
   fixedCustomer?: { id: number; name: string; code?: string | null };
 }
 
+type AssignCase = 'assign' | 'replace' | 'same';
+
 /**
- * Asignación manual de un cliente a un vendedor (`POST /api/admin/assignments`).
- * Se abre desde el listado (cliente libre) o desde Huérfanos (cliente fijo).
- * Siempre empieza hoy — no se elige fecha (sección 5.2 del doc): si el
- * cliente ya tenía vendedor, esa asignación se cierra sola con fecha de ayer.
+ * Asignación manual de un cliente a un vendedor (`POST /api/admin/assignments`)
+ * — doc 33, sección 6. Se abre desde el listado (cliente libre), desde
+ * "Cambiar vendedor" de una fila o desde la ficha del cliente (cliente fijo
+ * en ambos casos). Siempre empieza hoy — no se elige fecha.
  */
 @Component({
   selector: 'app-create-assignment-dialog',
@@ -45,19 +56,53 @@ export interface CreateAssignmentDialogData {
         />
       }
 
+      @if (effectiveCustomerId()) {
+        <div class="cad-situation">
+          <span class="cad-situation-label">Situación actual</span>
+          @if (situationLoading()) {
+            <span class="cad-muted">Cargando…</span>
+          } @else if (currentAssignment(); as ca) {
+            <span class="cad-situation-value"
+              >{{ ca.salespersonCode }} {{ ca.salespersonName }} · desde
+              {{ dateText(ca.effectiveFrom) }}</span
+            >
+            <span class="cad-muted">
+              @if (!ca.weekdays.length || !ca.weeksOfCycle.length) {
+                {{ weekdaysText(ca.weekdays) }} · {{ weeksOfCycleText(ca.weeksOfCycle) }} ·
+                <span class="cad-warn">horario incompleto</span>
+              } @else {
+                {{ scheduleSummaryText(ca.weekdays, ca.weeksOfCycle) }}
+              }
+            </span>
+          } @else {
+            <span class="cad-muted">Sin vendedor asignado</span>
+          }
+        </div>
+      }
+
       <ui-typeahead
-        label="Vendedor — busca por nombre"
+        label="Vendedor nuevo"
         [clearOnPick]="false"
         [search]="userSearch"
         [selected]="vendor()"
         (picked)="vendor.set($event)"
       />
 
-      <p class="cad-hint">
-        El cliente pasa a este vendedor desde hoy. Si tenía otro, deja de estar en su cartera.
-      </p>
+      <app-schedule-picker
+        [(weekdaysValue)]="weekdays"
+        [(weeksOfCycleValue)]="weeksOfCycle"
+        [weekdaysError]="weekdaysError()"
+        [weeksError]="weeksError()"
+      />
 
-      <app-schedule-picker [(weekdaysValue)]="weekdays" [(weeksOfCycleValue)]="weeksOfCycle" />
+      @if (assignCase() === 'replace' && currentAssignment(); as ca) {
+        <div class="cad-banner cad-banner-warn">
+          Desde hoy este cliente deja la cartera de {{ ca.salespersonName }} y pasa a
+          {{ vendor()?.name }}.
+        </div>
+      } @else if (assignCase() === 'same') {
+        <div class="cad-banner">Ya es su vendedor: solo se actualizará el horario.</div>
+      }
 
       @if (error()) {
         <div class="cad-error">{{ error() }}</div>
@@ -65,8 +110,14 @@ export interface CreateAssignmentDialogData {
 
       <div class="cad-actions">
         <button uiButton variant="secondary" (click)="ref.close(false)">Cancelar</button>
-        <button uiButton variant="primary" [loading]="saving()" (click)="submit()">
-          Guardar asignación
+        <button
+          uiButton
+          variant="primary"
+          [disabled]="!canSubmit()"
+          [loading]="saving()"
+          (click)="submit()"
+        >
+          {{ submitLabel() }}
         </button>
       </div>
     </div>
@@ -107,10 +158,41 @@ export interface CreateAssignmentDialogData {
         font-weight: 400;
         color: var(--ink-muted);
       }
-      .cad-hint {
-        margin: 0;
+      .cad-situation {
+        display: grid;
+        gap: 4px;
+        border: 1px solid var(--hairline);
+        padding: 12px 14px;
+      }
+      .cad-situation-label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: var(--ls-label);
+        color: var(--ink-muted);
+      }
+      .cad-situation-value {
+        font-weight: 700;
+        color: var(--ink);
+        font-size: 14px;
+      }
+      .cad-muted {
         font-size: 12px;
         color: var(--ink-muted);
+      }
+      .cad-warn {
+        color: var(--st-pendiente);
+        font-weight: 700;
+      }
+      .cad-banner {
+        padding: 10px 14px;
+        font-size: 13px;
+        border: 1px solid var(--hairline);
+        background: var(--faint);
+        color: var(--ink);
+      }
+      .cad-banner-warn {
+        border-color: var(--st-pendiente);
+        background: color-mix(in srgb, var(--st-pendiente) 10%, transparent);
       }
       .cad-error {
         color: var(--accent-ink);
@@ -128,7 +210,14 @@ export class CreateAssignmentDialog {
   protected data = inject<CreateAssignmentDialogData>(UI_DIALOG_DATA);
   protected ref = inject(UiDialogRef<boolean>);
   private lookupSvc = inject(LookupService);
+  private customerSvc = inject(CustomerService);
   private assignmentSvc = inject(AssignmentAdminService);
+  private toast = inject(ToastService);
+
+  protected dateText = dateText;
+  protected weekdaysText = weekdaysText;
+  protected weeksOfCycleText = weeksOfCycleText;
+  protected scheduleSummaryText = scheduleSummaryText;
 
   protected customer = signal<UiLookupItem | null>(null);
   protected vendor = signal<UiLookupItem | null>(null);
@@ -136,27 +225,88 @@ export class CreateAssignmentDialog {
   protected weeksOfCycle = signal<number[]>([]);
   protected saving = signal(false);
   protected error = signal('');
-  private warnedGap = signal(false);
+  protected weekdaysError = signal('');
+  protected weeksError = signal('');
+
+  protected currentAssignment = signal<CustomerSalesAssignment | null>(null);
+  protected situationLoading = signal(false);
 
   protected customerSearch = (q: string) =>
     this.lookupSvc.customers(q).pipe(map((items) => toUiLookup(items)));
   protected userSearch = (q: string) =>
     this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
 
+  protected effectiveCustomerId = computed(
+    () => this.data.fixedCustomer?.id ?? this.customer()?.id,
+  );
+
+  protected assignCase = computed<AssignCase>(() => {
+    const vendorId = this.vendor()?.id;
+    const currentId = this.currentAssignment()?.salespersonId;
+    if (currentId == null) return 'assign';
+    return vendorId != null && vendorId === currentId ? 'same' : 'replace';
+  });
+
+  protected submitLabel = computed(() => {
+    switch (this.assignCase()) {
+      case 'same':
+        return 'Guardar horario';
+      case 'replace':
+        return 'Reemplazar vendedor';
+      default:
+        return 'Asignar';
+    }
+  });
+
+  protected canSubmit = computed(
+    () =>
+      !this.saving() &&
+      !!this.effectiveCustomerId() &&
+      !!this.vendor() &&
+      this.weekdays().length > 0 &&
+      this.weeksOfCycle().length > 0,
+  );
+
+  private loadSituationEffect = effect(() => {
+    const customerId = this.effectiveCustomerId();
+    untracked(() => this.loadSituation(customerId));
+  });
+
+  private loadSituation(customerId: number | undefined) {
+    this.currentAssignment.set(null);
+    if (!customerId) return;
+    this.situationLoading.set(true);
+    this.customerSvc.detail(customerId).subscribe({
+      next: (detail) => {
+        this.situationLoading.set(false);
+        this.currentAssignment.set(detail.salesAssignment);
+        if (detail.salesAssignment) {
+          this.weekdays.set([...detail.salesAssignment.weekdays]);
+          this.weeksOfCycle.set([...detail.salesAssignment.weeksOfCycle]);
+        }
+      },
+      error: () => this.situationLoading.set(false),
+    });
+  }
+
   protected submit() {
-    const customerId = this.data.fixedCustomer?.id ?? this.customer()?.id;
+    const customerId = this.effectiveCustomerId();
     const userId = this.vendor()?.id;
-    if (!customerId || !userId) {
-      this.error.set('Completa cliente y vendedor.');
+    this.weekdaysError.set(this.weekdays().length === 0 ? 'Elige al menos un día de visita' : '');
+    this.weeksError.set(
+      this.weeksOfCycle().length === 0 ? 'Elige al menos una semana del ciclo' : '',
+    );
+    if (
+      !customerId ||
+      !userId ||
+      this.weekdays().length === 0 ||
+      this.weeksOfCycle().length === 0
+    ) {
       return;
     }
-    if ((this.weekdays().length === 0 || this.weeksOfCycle().length === 0) && !this.warnedGap()) {
-      this.warnedGap.set(true);
-      this.error.set(
-        'Sin días o sin semanas, el cliente no aparecerá en ningún plan hasta que completes el horario. Presiona "Guardar asignación" de nuevo para confirmar.',
-      );
-      return;
-    }
+    const assignCase = this.assignCase();
+    const vendorName = this.vendor()?.name ?? '';
+    const previousName = this.currentAssignment()?.salespersonName ?? '';
     this.saving.set(true);
     this.error.set('');
     this.assignmentSvc
@@ -169,14 +319,22 @@ export class CreateAssignmentDialog {
       .subscribe({
         next: () => {
           this.saving.set(false);
+          if (assignCase === 'same') {
+            this.toast.success('Horario actualizado');
+          } else if (assignCase === 'replace') {
+            this.toast.success(`El cliente pasó de ${previousName} a ${vendorName}`);
+          } else {
+            this.toast.success(`Cliente asignado a ${vendorName}`);
+          }
           this.ref.close(true);
         },
         error: (err) => {
           this.saving.set(false);
+          const fieldErrors = err?.error?.errors;
+          if (fieldErrors?.weekdays) this.weekdaysError.set(fieldErrors.weekdays);
+          if (fieldErrors?.weeksOfCycle) this.weeksError.set(fieldErrors.weeksOfCycle);
           const detalle = err?.error?.detail ?? err?.error?.message;
-          this.error.set(
-            detalle ? `No pudimos guardar: ${detalle}` : 'No pudimos guardar la asignación.',
-          );
+          this.error.set(detalle || 'No pudimos guardar la asignación.');
         },
       });
   }

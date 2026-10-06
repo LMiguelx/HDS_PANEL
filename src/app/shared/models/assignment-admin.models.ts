@@ -122,17 +122,22 @@ export interface MapResponse {
   routes: MapRouteView[]; // vacía si solo huérfanos o fecha futura
 }
 
-/** Nace siempre hoy: no se envía effectiveFrom (sección 5.2 del doc). */
+/**
+ * Nace siempre hoy: no se envía effectiveFrom (doc 33, sección 6.4).
+ * weekdays/weeksOfCycle son obligatorios desde doc 33 — al menos un valor
+ * cada uno; una asignación manual ya no puede nacer con horario incompleto.
+ */
 export interface CreateAssignmentCommand {
   customerId: number;
   userId: number;
-  weekdays?: number[]; // opcional al crear — vacío/omitido = horario incompleto
-  weeksOfCycle?: number[];
+  weekdays: number[];
+  weeksOfCycle: number[];
 }
 
 export interface UpdateScheduleCommand {
-  // PATCH parcial: solo se reemplaza lo enviado. `undefined` = no tocar;
-  // una lista (incluso []) sí reemplaza el campo.
+  // PATCH parcial: solo se reemplaza lo enviado. `undefined` = no tocar.
+  // Doc 33, sección 7.3: ya no se admite una lista vacía — si se envía,
+  // debe traer al menos un valor.
   weekdays?: number[];
   weeksOfCycle?: number[];
 }
