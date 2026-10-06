@@ -26,6 +26,7 @@ import { dateTimeText } from './assignment-format';
         </div>
         <div class="orp-head-actions">
           <button uiButton variant="secondary" (click)="viewOnMap()">Ver en mapa</button>
+          <button uiButton variant="primary" (click)="openCreate()">Asignación manual</button>
           <button
             uiButton
             variant="primary"
@@ -242,6 +243,18 @@ export class AssignmentOrphansPage {
 
   protected viewOnMap() {
     this.router.navigate(['/asignaciones/mapa'], { queryParams: { orphansOnly: 'true' } });
+  }
+
+  protected openCreate() {
+    this.dialog
+      .open(CreateAssignmentDialog, { width: '520px' })
+      .afterClosed()
+      .subscribe((created) => {
+        if (created) {
+          this.load();
+          this.alerts.refresh();
+        }
+      });
   }
 
   protected assign(customer: OrphanCustomerView) {

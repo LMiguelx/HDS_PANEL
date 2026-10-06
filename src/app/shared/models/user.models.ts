@@ -15,6 +15,7 @@ export interface UserView {
   fullName: string;
   homeBranchId: number | null;
   salesChannelId: number | null;
+  active: boolean;
   roles: Role[];
 }
 

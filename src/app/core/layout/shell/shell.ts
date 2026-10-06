@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
@@ -8,6 +8,7 @@ import { UiMenu } from '../../../shared/ui/menu/menu';
 import { UiDialogService } from '../../../shared/ui/dialog/dialog';
 import { AuthService } from '../../auth/auth';
 import { ThemeService } from '../../theme/theme.service';
+import { NavHistoryService } from '../nav-history';
 import { NAV, NavItem, PROMO_ANY_PERMISSION } from '../nav.config';
 import { PendingCountStore } from '../../../features/promos/pending-count';
 import { AssignmentAlertStore } from '../../../features/assignments/assignment-alerts';
@@ -25,6 +26,7 @@ export class ShellComponent {
   private breakpoints = inject(BreakpointObserver);
   private dialog = inject(UiDialogService);
   readonly theme = inject(ThemeService);
+  readonly navHistory = inject(NavHistoryService);
   readonly pendingCount = inject(PendingCountStore);
   readonly assignmentAlerts = inject(AssignmentAlertStore);
   readonly routeStore = inject(RouteStore);
@@ -85,6 +87,18 @@ export class ShellComponent {
 
   protected openJornada() {
     this.routeStore.start();
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  protected onKeydown(ev: KeyboardEvent) {
+    if (!ev.altKey) return;
+    if (ev.key === 'ArrowLeft' && this.navHistory.canGoBack()) {
+      ev.preventDefault();
+      this.navHistory.back();
+    } else if (ev.key === 'ArrowRight' && this.navHistory.canGoForward()) {
+      ev.preventDefault();
+      this.navHistory.forward();
+    }
   }
 
   protected closeJornada() {

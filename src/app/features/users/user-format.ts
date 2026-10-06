@@ -14,3 +14,11 @@ export function salesChannelName(id: number | null | undefined): string {
     (id != null ? `#${id}` : '—')
   );
 }
+
+/** Iniciales para el avatar de la ficha de usuario (máx. 2 letras). */
+export function userInitials(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}

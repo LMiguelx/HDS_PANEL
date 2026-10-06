@@ -57,6 +57,24 @@
   color: var(--ink-muted);
   white-space: nowrap;
 }
+.nav-history {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--sp-2, 4px);
+}
+.nav-history button[disabled] {
+  opacity: 0.35;
+}
+.nav-history .material-icons {
+  font-size: 18px;
+}
+
+@media (max-width: 767px) {
+  .nav-history {
+    display: none;
+  }
+}
 .topbar-actions {
   display: flex;
   align-items: center;

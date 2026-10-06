@@ -16,6 +16,32 @@
       <span class="brand">HDSAPP</span>
       <span class="brand-sep"></span>
       <span class="brand-sub">Panel de control</span>
+      <div class="nav-history">
+        <button
+          uiButton
+          variant="icon"
+          size="sm"
+          type="button"
+          aria-label="Atrás (Alt+Flecha izquierda)"
+          title="Atrás (Alt+←)"
+          [disabled]="!navHistory.canGoBack()"
+          (click)="navHistory.back()"
+        >
+          <span class="material-icons" aria-hidden="true">arrow_back</span>
+        </button>
+        <button
+          uiButton
+          variant="icon"
+          size="sm"
+          type="button"
+          aria-label="Adelante (Alt+Flecha derecha)"
+          title="Adelante (Alt+→)"
+          [disabled]="!navHistory.canGoForward()"
+          (click)="navHistory.forward()"
+        >
+          <span class="material-icons" aria-hidden="true">arrow_forward</span>
+        </button>
+      </div>
     </div>
 
     <div class="topbar-actions">

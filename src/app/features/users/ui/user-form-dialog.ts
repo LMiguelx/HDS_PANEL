@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../../shared/ui/field/field';
+import { UiModal } from '../../../shared/ui/modal/modal';
 import { UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { UserAdminService } from '../user-admin';
 import { RoleLookupService } from '../role-lookup';
@@ -13,70 +14,112 @@ import { UserCreatedResult } from '../../../shared/models/user.models';
 /** Alta de usuario — POST /api/users. `user.manage`. */
 @Component({
   selector: 'app-user-form-dialog',
-  imports: [UiButton, UiField],
+  imports: [UiButton, UiField, UiModal],
   template: `
-    <div class="ufd">
-      <h2 class="ufd-title">Nuevo usuario</h2>
+    <ui-modal title="Nuevo usuario" (close)="ref.close(false)">
+      <div class="ufd">
+        <div class="ufd-grid">
+          <ui-field
+            label="Código"
+            [(value)]="code"
+            hint="Máx. 10 — único"
+            [error]="submitted() && !code().trim() ? 'Obligatorio' : ''"
+          />
+          <ui-field
+            label="Usuario (login)"
+            [(value)]="username"
+            hint="Máx. 60 — único"
+            [error]="submitted() && !username().trim() ? 'Obligatorio' : ''"
+          />
 
-      <div class="ufd-grid">
-        <ui-field label="Código" [(value)]="code" hint="Máx. 10 — único" />
-        <ui-field label="Usuario (login)" [(value)]="username" hint="Máx. 60 — único" />
-        <ui-field label="Contraseña" type="password" [(value)]="password" hint="8-100 caracteres" />
-        <ui-field label="Nombres" [(value)]="firstName" />
-        <ui-field label="Apellidos" [(value)]="lastName" />
-        <ui-field label="Correo" [(value)]="email" />
-        <ui-field label="Teléfono" [(value)]="phone" />
-        <ui-field
-          label="Sede"
-          type="select"
-          [(value)]="homeBranchId"
-          [options]="branchOptions()"
-          [disabled]="loadingBranches()"
-        />
-        <ui-field
-          label="Canal de venta"
-          type="select"
-          [(value)]="salesChannelId"
-          [options]="salesChannelOptions"
-        />
-      </div>
+          <ui-field
+            label="Contraseña"
+            [type]="hidePassword() ? 'password' : 'text'"
+            icon="lock"
+            [hasSuffix]="true"
+            [(value)]="password"
+            hint="8-100 caracteres"
+            [error]="passwordError()"
+          >
+            <button
+              type="button"
+              fieldSuffix
+              class="ufd-eye"
+              [attr.aria-label]="hidePassword() ? 'Mostrar contraseña' : 'Ocultar contraseña'"
+              (click)="hidePassword.set(!hidePassword())"
+            >
+              <span class="material-icons" aria-hidden="true">{{
+                hidePassword() ? 'visibility' : 'visibility_off'
+              }}</span>
+            </button>
+          </ui-field>
+          <ui-field
+            label="Sede"
+            type="select"
+            [(value)]="homeBranchId"
+            [options]="branchOptions()"
+            [disabled]="loadingBranches()"
+          />
 
-      <div class="ufd-roles">
-        <span class="ufd-roles-label">Roles</span>
-        @if (loadingRoles()) {
-          <span class="ufd-muted">Cargando…</span>
-        } @else {
-          <div class="ufd-roles-list">
-            @for (r of roles(); track r.roleId) {
-              <label class="ufd-role-row">
-                <input
-                  type="checkbox"
-                  [checked]="selectedRoleIds().has(r.roleId)"
-                  (change)="toggleRole(r.roleId)"
-                />
-                <span>{{ r.name }}</span>
-              </label>
-            }
-          </div>
+          <ui-field
+            label="Nombres"
+            [(value)]="firstName"
+            [error]="submitted() && !firstName().trim() ? 'Obligatorio' : ''"
+          />
+          <ui-field label="Apellidos" [(value)]="lastName" />
+
+          <ui-field label="Correo" [(value)]="email" />
+          <ui-field label="Teléfono" [(value)]="phone" />
+
+          <ui-field
+            class="ufd-span-2"
+            label="Canal de venta"
+            type="select"
+            [(value)]="salesChannelId"
+            [options]="salesChannelOptions"
+            [error]="submitted() && salesChannelId() === '' ? 'Obligatorio' : ''"
+          />
+        </div>
+
+        <div
+          class="ufd-roles"
+          [class.ufd-roles-error]="submitted() && selectedRoleIds().size === 0"
+        >
+          <span class="ufd-roles-label">Roles</span>
+          @if (loadingRoles()) {
+            <span class="ufd-muted">Cargando…</span>
+          } @else {
+            <div class="ufd-roles-list">
+              @for (r of roles(); track r.roleId) {
+                <label class="ufd-role-row">
+                  <input
+                    type="checkbox"
+                    [checked]="selectedRoleIds().has(r.roleId)"
+                    (change)="toggleRole(r.roleId)"
+                  />
+                  <span>{{ r.name }}</span>
+                </label>
+              }
+            </div>
+          }
+          @if (submitted() && selectedRoleIds().size === 0) {
+            <span class="ufd-roles-error-text">Elige al menos un rol</span>
+          }
+        </div>
+
+        @if (error()) {
+          <div class="ufd-error">{{ error() }}</div>
         }
       </div>
 
-      @if (error()) {
-        <div class="ufd-error">{{ error() }}</div>
-      }
-
-      <div class="ufd-actions">
+      <ng-container modalFooter>
         <button uiButton variant="secondary" (click)="ref.close(false)">Cancelar</button>
         <button uiButton variant="primary" [loading]="saving()" (click)="submit()">
           Crear usuario
         </button>
-      </div>
-    </div>
+      </ng-container>
+    </ui-modal>
   `,
-  host: {
-    style:
-      'display:block; background:var(--bg); border:2px solid var(--divider); box-shadow:var(--elev-dialog); padding:24px;',
-  },
   styles: [
     `
       .ufd {
@@ -84,15 +127,34 @@ import { UserCreatedResult } from '../../../shared/models/user.models';
         gap: 18px;
         width: 100%;
       }
-      .ufd-title {
-        font-size: 20px;
-        margin: 0;
-        color: var(--ink);
-      }
       .ufd-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+        grid-template-columns: 1fr 1fr;
         gap: 14px;
+      }
+      .ufd-span-2 {
+        grid-column: 1 / -1;
+      }
+      .ufd-eye {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--ink-muted);
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+      }
+      .ufd-eye:hover {
+        color: var(--ink);
+      }
+      .ufd-eye .material-icons {
+        font-size: 20px;
       }
       .ufd-roles {
         display: grid;
@@ -116,6 +178,13 @@ import { UserCreatedResult } from '../../../shared/models/user.models';
         max-height: 180px;
         overflow-y: auto;
       }
+      .ufd-roles-error .ufd-roles-list {
+        border-color: var(--st-vencida, #d13b3b);
+      }
+      .ufd-roles-error-text {
+        font-size: 12px;
+        color: var(--accent-ink);
+      }
       .ufd-role-row {
         display: flex;
         align-items: center;
@@ -127,10 +196,14 @@ import { UserCreatedResult } from '../../../shared/models/user.models';
         color: var(--accent-ink);
         font-size: 13px;
       }
-      .ufd-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
+
+      @media (max-width: 599px) {
+        .ufd-grid {
+          grid-template-columns: 1fr;
+        }
+        .ufd-span-2 {
+          grid-column: auto;
+        }
       }
     `,
   ],
@@ -146,6 +219,7 @@ export class UserFormDialog {
   protected code = signal('');
   protected username = signal('');
   protected password = signal('');
+  protected hidePassword = signal(true);
   protected firstName = signal('');
   protected lastName = signal('');
   protected email = signal('');
@@ -161,12 +235,20 @@ export class UserFormDialog {
   protected loadingBranches = signal(true);
 
   protected saving = signal(false);
+  protected submitted = signal(false);
   protected error = signal('');
 
   protected branchOptions = computed<UiFieldOption[]>(() => [
     { value: '', label: 'Sin sede' },
     ...this.branches().map((b) => ({ value: String(b.branchId), label: b.name })),
   ]);
+
+  protected passwordError = computed(() => {
+    if (!this.submitted()) return '';
+    if (!this.password()) return 'Obligatorio';
+    if (this.password().length < 8) return 'Mínimo 8 caracteres';
+    return '';
+  });
 
   constructor() {
     this.roleSvc.list().subscribe({
@@ -193,6 +275,7 @@ export class UserFormDialog {
   }
 
   protected submit() {
+    this.submitted.set(true);
     const salesChannelId = Number(this.salesChannelId());
     const hasPasswordLengthIssue = this.password().length > 0 && this.password().length < 8;
 
@@ -205,11 +288,7 @@ export class UserFormDialog {
       this.salesChannelId() === '' ||
       this.selectedRoleIds().size === 0
     ) {
-      this.error.set(
-        hasPasswordLengthIssue
-          ? 'La contraseña debe tener al menos 8 caracteres.'
-          : 'Código, usuario, contraseña, nombres, canal de venta y al menos un rol son obligatorios.',
-      );
+      this.error.set('Revisa los campos marcados en rojo.');
       return;
     }
 

@@ -1,13 +1,13 @@
 import { Component, input, model } from '@angular/core';
 
-const WEEKDAYS: { value: number; label: string }[] = [
-  { value: 1, label: 'Lun' },
-  { value: 2, label: 'Mar' },
-  { value: 3, label: 'Mié' },
-  { value: 4, label: 'Jue' },
-  { value: 5, label: 'Vie' },
-  { value: 6, label: 'Sáb' },
-  { value: 7, label: 'Dom' },
+const WEEKDAYS: { value: number; label: string; fullName: string }[] = [
+  { value: 1, label: 'L', fullName: 'Lunes' },
+  { value: 2, label: 'M', fullName: 'Martes' },
+  { value: 3, label: 'M', fullName: 'Miércoles' },
+  { value: 4, label: 'J', fullName: 'Jueves' },
+  { value: 5, label: 'V', fullName: 'Viernes' },
+  { value: 6, label: 'S', fullName: 'Sábado' },
+  { value: 7, label: 'D', fullName: 'Domingo' },
 ];
 
 const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
@@ -29,6 +29,8 @@ const CYCLE_WEEKS: number[] = [1, 2, 3, 4];
             type="button"
             class="sched-chip"
             [class.on]="weekdaysValue().includes(day.value)"
+            [title]="day.fullName"
+            [attr.aria-label]="day.fullName"
             (click)="toggleWeekday(day.value)"
           >
             {{ day.label }}

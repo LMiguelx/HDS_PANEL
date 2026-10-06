@@ -33,7 +33,6 @@ const HAS_GAP_OPTIONS: UiFieldOption[] = [
           <h1>Asignaciones vigentes</h1>
           <p class="asl-sub">{{ countText() }}</p>
         </div>
-        <button uiButton variant="primary" (click)="openCreate()">Asignación manual</button>
       </div>
 
       <div class="asl-filters">
@@ -370,13 +369,6 @@ export class AssignmentListPage {
           this.error.set(true);
         },
       });
-  }
-
-  protected openCreate() {
-    this.dialog
-      .open(CreateAssignmentDialog, { width: '520px' })
-      .afterClosed()
-      .subscribe((created) => created && this.load());
   }
 
   protected editSchedule(a: AssignmentAdminView) {

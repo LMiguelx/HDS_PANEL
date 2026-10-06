@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal, untracked } from '@angular
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiTypeahead, UiLookupItem } from '../../../shared/ui/typeahead/typeahead';
+import { UiModal } from '../../../shared/ui/modal/modal';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { ToastService } from '../../../core/ui/toast';
 import { LookupService, toUiLookup } from '../../promos/lookup';
@@ -31,84 +32,88 @@ type AssignCase = 'assign' | 'replace' | 'same';
  */
 @Component({
   selector: 'app-create-assignment-dialog',
-  imports: [UiButton, UiTypeahead, SchedulePicker],
+  imports: [UiButton, UiTypeahead, SchedulePicker, UiModal],
   template: `
-    <div class="cad">
-      <h2 class="cad-title">Asignar cliente a vendedor</h2>
-
-      @if (data.fixedCustomer; as customer) {
-        <div class="cad-fixed-customer">
-          <span class="cad-fixed-label">Cliente</span>
-          <span class="cad-fixed-value">
-            {{ customer.name }}
-            @if (customer.code) {
-              <span class="cad-fixed-code">· {{ customer.code }}</span>
-            }
-          </span>
-        </div>
-      } @else {
-        <ui-typeahead
-          label="Cliente — busca por nombre"
-          [clearOnPick]="false"
-          [search]="customerSearch"
-          [selected]="customer()"
-          (picked)="customer.set($event)"
-        />
-      }
-
-      @if (effectiveCustomerId()) {
-        <div class="cad-situation">
-          <span class="cad-situation-label">Situación actual</span>
-          @if (situationLoading()) {
-            <span class="cad-muted">Cargando…</span>
-          } @else if (currentAssignment(); as ca) {
-            <span class="cad-situation-value"
-              >{{ ca.salespersonCode }} {{ ca.salespersonName }} · desde
-              {{ dateText(ca.effectiveFrom) }}</span
-            >
-            <span class="cad-muted">
-              @if (!ca.weekdays.length || !ca.weeksOfCycle.length) {
-                {{ weekdaysText(ca.weekdays) }} · {{ weeksOfCycleText(ca.weeksOfCycle) }} ·
-                <span class="cad-warn">horario incompleto</span>
-              } @else {
-                {{ scheduleSummaryText(ca.weekdays, ca.weeksOfCycle) }}
+    <ui-modal
+      title="Asignar cliente a vendedor"
+      subtitle="La asignación empieza hoy — no hay fecha que elegir."
+      (close)="ref.close(false)"
+    >
+      <div class="cad">
+        @if (data.fixedCustomer; as customer) {
+          <div class="cad-fixed-customer">
+            <span class="cad-fixed-label">Cliente</span>
+            <span class="cad-fixed-value">
+              {{ customer.name }}
+              @if (customer.code) {
+                <span class="cad-fixed-code">· {{ customer.code }}</span>
               }
             </span>
-          } @else {
-            <span class="cad-muted">Sin vendedor asignado</span>
-          }
-        </div>
-      }
+          </div>
+        } @else {
+          <ui-typeahead
+            label="Cliente — busca por nombre"
+            [clearOnPick]="false"
+            [search]="customerSearch"
+            [selected]="customer()"
+            (picked)="customer.set($event)"
+          />
+        }
 
-      <ui-typeahead
-        label="Vendedor nuevo"
-        [clearOnPick]="false"
-        [search]="userSearch"
-        [selected]="vendor()"
-        (picked)="vendor.set($event)"
-      />
+        @if (effectiveCustomerId()) {
+          <div class="cad-situation">
+            <span class="cad-situation-label">Situación actual</span>
+            @if (situationLoading()) {
+              <span class="cad-muted">Cargando…</span>
+            } @else if (currentAssignment(); as ca) {
+              <span class="cad-situation-value"
+                >{{ ca.salespersonCode }} {{ ca.salespersonName }} · desde
+                {{ dateText(ca.effectiveFrom) }}</span
+              >
+              <span class="cad-muted">
+                @if (!ca.weekdays.length || !ca.weeksOfCycle.length) {
+                  {{ weekdaysText(ca.weekdays) }} · {{ weeksOfCycleText(ca.weeksOfCycle) }} ·
+                  <span class="cad-warn">horario incompleto</span>
+                } @else {
+                  {{ scheduleSummaryText(ca.weekdays, ca.weeksOfCycle) }}
+                }
+              </span>
+            } @else {
+              <span class="cad-muted">Sin vendedor asignado</span>
+            }
+          </div>
+        }
 
-      <app-schedule-picker
-        [(weekdaysValue)]="weekdays"
-        [(weeksOfCycleValue)]="weeksOfCycle"
-        [weekdaysError]="weekdaysError()"
-        [weeksError]="weeksError()"
-      />
+        <ui-typeahead
+          label="Vendedor nuevo"
+          [clearOnPick]="false"
+          [search]="userSearch"
+          [selected]="vendor()"
+          (picked)="vendor.set($event)"
+        />
 
-      @if (assignCase() === 'replace' && currentAssignment(); as ca) {
-        <div class="cad-banner cad-banner-warn">
-          Desde hoy este cliente deja la cartera de {{ ca.salespersonName }} y pasa a
-          {{ vendor()?.name }}.
-        </div>
-      } @else if (assignCase() === 'same') {
-        <div class="cad-banner">Ya es su vendedor: solo se actualizará el horario.</div>
-      }
+        <app-schedule-picker
+          [(weekdaysValue)]="weekdays"
+          [(weeksOfCycleValue)]="weeksOfCycle"
+          [weekdaysError]="weekdaysError()"
+          [weeksError]="weeksError()"
+        />
 
-      @if (error()) {
-        <div class="cad-error">{{ error() }}</div>
-      }
+        @if (assignCase() === 'replace' && currentAssignment(); as ca) {
+          <div class="cad-banner cad-banner-warn">
+            Desde hoy este cliente deja la cartera de {{ ca.salespersonName }} y pasa a
+            {{ vendor()?.name }}.
+          </div>
+        } @else if (assignCase() === 'same') {
+          <div class="cad-banner">Ya es su vendedor: solo se actualizará el horario.</div>
+        }
 
-      <div class="cad-actions">
+        @if (error()) {
+          <div class="cad-error">{{ error() }}</div>
+        }
+      </div>
+
+      <ng-container modalFooter>
         <button uiButton variant="secondary" (click)="ref.close(false)">Cancelar</button>
         <button
           uiButton
@@ -119,23 +124,14 @@ type AssignCase = 'assign' | 'replace' | 'same';
         >
           {{ submitLabel() }}
         </button>
-      </div>
-    </div>
+      </ng-container>
+    </ui-modal>
   `,
-  host: {
-    style:
-      'display:block; background:var(--bg); border:2px solid var(--divider); box-shadow:var(--elev-dialog); padding:24px;',
-  },
   styles: [
     `
       .cad {
         display: grid;
         gap: 16px;
-      }
-      .cad-title {
-        font-size: 20px;
-        margin: 0;
-        color: var(--ink);
       }
       .cad-fixed-customer {
         display: grid;
@@ -197,11 +193,6 @@ type AssignCase = 'assign' | 'replace' | 'same';
       .cad-error {
         color: var(--accent-ink);
         font-size: 13px;
-      }
-      .cad-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
       }
     `,
   ],
