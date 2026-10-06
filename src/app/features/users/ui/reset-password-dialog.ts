@@ -84,8 +84,8 @@ export class ResetPasswordDialog {
   protected error = signal('');
 
   protected submit() {
-    if (this.newPassword().length < 8) {
-      this.error.set('La contraseña debe tener al menos 8 caracteres.');
+    if (this.newPassword().length < 4) {
+      this.error.set('La contraseña debe tener al menos 4 caracteres.');
       return;
     }
     this.saving.set(true);

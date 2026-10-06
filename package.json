@@ -1,6 +1,6 @@
 {
   "name": "hdsapp-frontend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Panel de supervisión",
   "author": "Tu nombre",
   "main": "electron/main.js",
@@ -59,7 +59,7 @@
     "appId": "com.tuempresa.panel",
     "productName": "Panel de Supervision",
     "directories": {
-      "output": "release"
+      "output": "C:/build-panel/release"
     },
     "files": [
       "dist/**/*",

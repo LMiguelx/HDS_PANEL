@@ -194,16 +194,21 @@ export class UserFormDialog {
 
   protected submit() {
     const salesChannelId = Number(this.salesChannelId());
+    const hasPasswordLengthIssue = this.password().length > 0 && this.password().length < 8;
+
     if (
       !this.code().trim() ||
       !this.username().trim() ||
       !this.password() ||
+      hasPasswordLengthIssue ||
       !this.firstName().trim() ||
       this.salesChannelId() === '' ||
       this.selectedRoleIds().size === 0
     ) {
       this.error.set(
-        'Código, usuario, contraseña, nombres, canal de venta y al menos un rol son obligatorios.',
+        hasPasswordLengthIssue
+          ? 'La contraseña debe tener al menos 8 caracteres.'
+          : 'Código, usuario, contraseña, nombres, canal de venta y al menos un rol son obligatorios.',
       );
       return;
     }
