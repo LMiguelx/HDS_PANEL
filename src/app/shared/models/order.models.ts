@@ -23,12 +23,19 @@ export interface OrderSummary {
  * devolviendo esa forma, no está documentada en este archivo.
  * originCode/createdById/createdByName — ver doc 30, sección 9.1.
  */
+/**
+ * sentToBillingAt/erpUploaded/erpUploadedAt — doc 32, sección 5.2: cuándo
+ * se envió a facturación y si facturación ya lo recibió (sección 3.5).
+ */
 export interface AdminOrderSummary extends OrderSummary {
   salespersonId: number;
   salespersonName: string;
   originCode: string; // FIELD | COUNTER
   createdById: number;
   createdByName: string;
+  sentToBillingAt: string | null;
+  erpUploaded: boolean;
+  erpUploadedAt: string | null;
 }
 
 export interface OrderListFilters {
@@ -89,6 +96,8 @@ export interface OrderDetail {
   createdByName: string;
   salesChannelId: number | null;
   salesChannelName: string | null;
+  erpUploaded: boolean; // NUEVO (doc 32, sección 9.3)
+  erpUploadedAt: string | null; // null si facturación aún no lo recibió
 }
 
 /** PATCH /orders/{orderId}/items — doc 30, sección 8.2. Solo pedidos OPEN. */

@@ -12,11 +12,17 @@ import { ToastService } from '../../core/ui/toast';
 import { OrderAdminService } from './order-admin';
 import { PromoService } from '../promos/promo';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
+import { BillingValidationAdminService } from '../billing/billing-validation-admin';
 import {
   OrderDetail,
   PendingBonusOrderView,
   ReturnedLineView,
 } from '../../shared/models/order.models';
+import {
+  BillingIssue,
+  OrderBillingValidation,
+} from '../../shared/models/billing-validation.models';
+import { hasRecalcFix } from '../billing/billing-validation-format';
 import { ApplicationView, ChoiceOptionView, PendingChoiceView } from '../promos/promo.types';
 import { deliveryStatusName, orderStatusName, originName } from './order-format';
 import { dateTimeText } from '../assignments/assignment-format';
@@ -97,7 +103,7 @@ import { formatSoles } from '../../shared/pipes/money';
                 [disabled]="blockedForClosing()"
                 [title]="blockedForClosing() ? 'Resuelve lo pendiente antes de enviarlo' : ''"
                 [loading]="sendingToBilling()"
-                (click)="sendToBilling(o)"
+                (click)="validateAndSend(o)"
               >
                 Enviar a facturación
               </button>
@@ -178,10 +184,48 @@ import { formatSoles } from '../../shared/pipes/money';
           @if (o.sentToBillingAt) {
             <div class="od-field">
               <span class="od-label">Enviado a facturación</span>
-              <span class="od-value">{{ dateTimeText(o.sentToBillingAt) }}</span>
+              <span class="od-value">
+                {{ dateTimeText(o.sentToBillingAt) }}
+                @if (o.erpUploaded) {
+                  <span class="od-badge-erp od-badge-erp-ok">Recibido</span>
+                } @else {
+                  <span class="od-badge-erp od-badge-erp-pending">Pendiente</span>
+                }
+              </span>
             </div>
           }
         </div>
+
+        @if (billingValidation(); as bv) {
+          <div class="od-alert od-alert-warn">
+            <strong>El pedido no pasó la validación de facturación.</strong>
+            <div class="od-checks-row">
+              @for (c of bv.checks; track c.group) {
+                <span class="od-check" [class.fail]="!c.passed">
+                  {{ c.passed ? '✓' : '✗' }} {{ c.groupName }}
+                </span>
+              }
+            </div>
+            @for (issue of bv.issues; track $index) {
+              <div class="od-issue-row">
+                • {{ issue.lineNumber != null ? 'Línea ' + issue.lineNumber + ' · ' : '' }}
+                {{ issue.message }}
+              </div>
+            }
+            @if (billingHasRecalcFix(bv)) {
+              <button
+                uiButton
+                variant="secondary"
+                size="sm"
+                class="od-recalc-btn"
+                [loading]="recalculating()"
+                (click)="recalculateAndRevalidate(o)"
+              >
+                Recalcular pedido
+              </button>
+            }
+          </div>
+        }
 
         <h2 class="od-section-title">Líneas</h2>
         <table class="ui-table-grid od-table-desktop">
@@ -459,6 +503,40 @@ import { formatSoles } from '../../shared/pipes/money';
         padding: 8px 10px;
         font-size: 13px;
       }
+      .od-badge-erp {
+        display: inline-block;
+        margin-left: 8px;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 1px 6px;
+      }
+      .od-badge-erp-ok {
+        color: var(--st-vigente);
+      }
+      .od-badge-erp-pending {
+        color: var(--st-pendiente);
+      }
+      .od-checks-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin: 10px 0;
+        font-size: 13px;
+      }
+      .od-check {
+        color: var(--st-vigente);
+      }
+      .od-check.fail {
+        color: var(--st-vencida, #d13b3b);
+        font-weight: 700;
+      }
+      .od-issue-row {
+        font-size: 13px;
+        padding: 2px 0;
+      }
+      .od-recalc-btn {
+        margin-top: 10px;
+      }
 
       @media (max-width: 767px) {
         .od-page {
@@ -494,6 +572,7 @@ export class OrderDetailPage {
   private orderSvc = inject(OrderAdminService);
   private promoSvc = inject(PromoService);
   private catalogSvc = inject(CatalogLookupService);
+  private billingSvc = inject(BillingValidationAdminService);
   private auth = inject(AuthService);
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
@@ -518,6 +597,8 @@ export class OrderDetailPage {
   protected delivering = signal(false);
   protected sendingToBilling = signal(false);
   protected cancelling = signal(false);
+  protected recalculating = signal(false);
+  protected billingValidation = signal<OrderBillingValidation | null>(null);
 
   private paymentConditionNames = signal<Map<number, string>>(new Map());
 
@@ -549,6 +630,7 @@ export class OrderDetailPage {
       next: (detail) => {
         this.order.set(detail);
         this.loading.set(false);
+        this.billingValidation.set(null);
         this.loadAlerts(detail);
         this.promoSvc
           .applicationsByOrder(id)
@@ -653,20 +735,79 @@ export class OrderDetailPage {
       });
   }
 
-  protected sendToBilling(o: OrderDetail) {
+  protected billingHasRecalcFix(bv: OrderBillingValidation): boolean {
+    return hasRecalcFix(bv.issues.map((i: BillingIssue) => i.code));
+  }
+
+  /** Valida antes de enviar (doc 32, sección 10.3): si falla, muestra los motivos en vez de enviar. */
+  protected validateAndSend(o: OrderDetail) {
     this.sendingToBilling.set(true);
-    this.orderSvc.sendToBilling(o.orderId).subscribe({
-      next: () => {
+    this.billingValidation.set(null);
+    this.billingSvc.validate({ orderIds: [o.orderId] }).subscribe({
+      next: (result) => {
         this.sendingToBilling.set(false);
-        this.toast.success('Pedido enviado a facturación.');
-        this.load();
+        const validation = result.orders[0];
+        if (!validation || !validation.valid) {
+          if (validation) this.billingValidation.set(validation);
+          return;
+        }
+        this.dialog
+          .confirm({
+            title: 'Enviar a facturación',
+            message: `¿Enviar el pedido ${o.orderId} a facturación? Después no se podrá editar ni anular.`,
+            confirmLabel: 'Enviar',
+          })
+          .subscribe((confirmed) => {
+            if (!confirmed) return;
+            this.sendingToBilling.set(true);
+            this.orderSvc.sendToBilling(o.orderId).subscribe({
+              next: () => {
+                this.sendingToBilling.set(false);
+                this.toast.success('Pedido enviado a facturación.');
+                this.load();
+              },
+              error: (err) => {
+                this.sendingToBilling.set(false);
+                const detalle = err?.error?.detail ?? err?.error?.message;
+                this.toast.error(detalle || 'No pudimos enviar el pedido a facturación.');
+              },
+            });
+          });
       },
       error: (err) => {
         this.sendingToBilling.set(false);
         const detalle = err?.error?.detail ?? err?.error?.message;
-        this.toast.error(detalle || 'No pudimos enviar el pedido a facturación.');
+        this.toast.error(detalle || 'No pudimos validar el pedido.');
       },
     });
+  }
+
+  protected recalculateAndRevalidate(o: OrderDetail) {
+    this.dialog
+      .confirm({
+        title: 'Recalcular pedido',
+        message: `Se actualizarán los precios y las promociones del pedido ${o.orderId}. Su total puede cambiar. ¿Recalcular?`,
+        confirmLabel: 'Recalcular',
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.recalculating.set(true);
+        const catalogItems = o.items
+          .filter((i) => !i.bonus)
+          .map((i) => ({ productId: i.productId, newQuantity: i.quantity }));
+        this.orderSvc.updateItems(o.orderId, { catalogItems, predictedItems: [] }).subscribe({
+          next: () => {
+            this.recalculating.set(false);
+            this.toast.success('Pedido recalculado.');
+            this.load();
+          },
+          error: (err) => {
+            this.recalculating.set(false);
+            const detalle = err?.error?.detail ?? err?.error?.message;
+            this.toast.error(detalle || 'No pudimos recalcular el pedido.');
+          },
+        });
+      });
   }
 
   protected cancelOrder(o: OrderDetail) {

@@ -101,6 +101,15 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/billing/billing.routes').then((m) => m.BILLING_ROUTES),
       },
+      // Validación y envío de pedidos a facturación — doc 32, nuevo.
+      {
+        path: 'validacion-facturacion',
+        canActivate: [permissionGuard('order.send_to_billing')],
+        loadChildren: () =>
+          import('./features/billing/billing-validation.routes').then(
+            (m) => m.BILLING_VALIDATION_ROUTES,
+          ),
+      },
       // Detalle de factura — ruta propia (no cuelga de /facturas) porque su
       // permiso es más amplio que el de la bandeja de conciliación: customer.view
       // basta para verla (ej. desde el mapa de una planilla), no solo invoice.reconcile.

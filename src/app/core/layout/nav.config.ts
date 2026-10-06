@@ -111,6 +111,13 @@ export const NAV: NavItem[] = [
 
   // Facturación
   {
+    label: 'Validación de pedidos',
+    icon: 'fact_check',
+    route: '/validacion-facturacion',
+    anyOf: ['order.send_to_billing'],
+    group: 'Facturación',
+  },
+  {
     label: 'Facturas',
     icon: 'description',
     route: '/facturas',
