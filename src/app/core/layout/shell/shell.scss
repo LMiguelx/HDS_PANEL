@@ -6,11 +6,15 @@
   color: var(--ink);
 }
 
+// El shell ocupa exactamente la ventana y nunca hace scroll él mismo: solo
+// .content (abajo) tiene overflow-y, para que la barra superior y el lateral
+// queden fijos mientras se navega una pantalla larga.
 .shell {
-  min-height: 100vh;
+  height: 100vh;
   background: var(--bg);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 // ---- Cabecera ----
@@ -19,13 +23,20 @@
   align-items: stretch;
   justify-content: space-between;
   gap: 24px;
-  border-bottom: var(--border-rule);
   padding: 0 var(--sp-6);
-  min-height: 60px;
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: var(--bg);
+  height: 64px;
+  flex: none;
+  background: var(--topbar-bg);
+  color: var(--topbar-ink);
+  // La barra es oscura fija (no cambia con el tema): redefine las variables
+  // de tinta/borde solo dentro de ella, para que botones/menús ya
+  // existentes (que leen --ink/--divider/--faint) queden legibles sin
+  // duplicar sus estilos.
+  --ink: var(--topbar-ink);
+  --ink-muted: var(--topbar-ink-muted);
+  --divider: rgba(255, 255, 255, 0.2);
+  --hairline: rgba(255, 255, 255, 0.14);
+  --faint: rgba(255, 255, 255, 0.1);
 }
 .brand-zone {
   display: flex;
@@ -132,7 +143,7 @@
 // ---- Cuerpo: lateral + contenido ----
 .body {
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: 240px 1fr;
   flex: 1;
   min-height: 0;
 }
@@ -141,6 +152,7 @@
   padding: var(--sp-5) 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 .group-label {
   padding: 0 var(--sp-5) 10px;
@@ -228,6 +240,8 @@
 
 .content {
   min-width: 0;
+  overflow-y: auto;
+  height: 100%;
 }
 
 // ---- Móvil: el lateral se vuelve cajón ----
@@ -244,7 +258,7 @@
   }
   .sidebar {
     position: fixed;
-    top: 60px;
+    top: 64px;
     bottom: 0;
     left: 0;
     width: 260px;
@@ -261,7 +275,7 @@
   }
   .scrim {
     position: fixed;
-    inset: 60px 0 0 0;
+    inset: 64px 0 0 0;
     background: rgba(0, 0, 0, 0.4);
     z-index: 3;
   }

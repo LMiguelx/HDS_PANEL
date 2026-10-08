@@ -67,23 +67,41 @@
   // html.theme-light / html.theme-dark (ver _material.scss).
   color-scheme: light dark;
 
-  /* — Superficies y tinta — */
-  --bg: light-dark(#f3f2f2, #1a1918);
-  --surface: light-dark(#eae9e9, #242221);
-  --surface-sunk: light-dark(#f8f4f4, #201e1d);
-  --ink: light-dark(#201e1d, #f3f2f2);
-  --ink-muted: light-dark(#605d5d, #a09b98);
-  --divider: light-dark(rgba(32, 30, 29, 0.4), rgba(243, 242, 242, 0.26)); /* 2px, secciones */
-  --hairline: light-dark(rgba(32, 30, 29, 0.14), rgba(243, 242, 242, 0.14)); /* 1px, filas */
-  --faint: light-dark(rgba(32, 30, 29, 0.06), rgba(243, 242, 242, 0.06)); /* relleno sutil */
+  /* — Superficies y tinta (sistema de diseño 2026 — ver DESIGN.md) —
+     El claro trae la paleta nueva; el oscuro se mantiene igual que antes,
+     por eso cada light-dark() cambia solo su primer valor. */
+  --bg: light-dark(#f4f3f1, #1a1918); /* lienzo de página */
+  --surface: light-dark(#ffffff, #242221); /* fondo de tarjeta, por encima del lienzo */
+  --surface-sunk: light-dark(#f7f7f6, #201e1d); /* inputs, filas alternas */
+  --ink: light-dark(#16181d, #f3f2f2);
+  --ink-muted: light-dark(#5f6672, #a09b98);
+  --divider: light-dark(#e3e5e9, rgba(243, 242, 242, 0.26)); /* 2px, secciones */
+  --hairline: light-dark(#ececee, rgba(243, 242, 242, 0.14)); /* 1px, filas */
+  --faint: light-dark(rgba(22, 24, 29, 0.05), rgba(243, 242, 242, 0.06)); /* relleno sutil */
 
   /* — Acento (una sola familia; rojo institucional) — */
-  --accent: #ec3013;
-  --accent-hover: light-dark(#dd2b0f, #ff563c);
-  --accent-press: light-dark(#ae1800, #ff9783);
-  --accent-ink: light-dark(#ae1800, #ff9783); /* acento en texto tamaño párrafo */
-  --accent-wash: light-dark(#fff2ef, rgba(236, 48, 19, 0.16));
+  --accent: #c93217;
+  --accent-hover: light-dark(#b32912, #ff563c);
+  --accent-press: light-dark(#8f2310, #ff9783);
+  --accent-ink: light-dark(#8f2310, #ff9783); /* acento en texto tamaño párrafo */
+  --accent-wash: light-dark(#fff6f3, rgba(201, 50, 23, 0.16));
+  --accent-soft: light-dark(#fce9e4, rgba(201, 50, 23, 0.22)); /* selección (OptionCard, chips) */
   --on-accent: light-dark(#f3f2f2, #1a1918);
+
+  /* — Éxito (para el sistema de diseño nuevo: Badge, Stepper; no reemplaza
+     los --st-* de negocio de arriba, que siguen cada uno con su matiz) — */
+  --success: light-dark(#1e7a4a, #5ed98a);
+
+  /* — Barra superior — fija, no cambia con el tema (como --brand-*). — */
+  --topbar-bg: #14161a;
+  --topbar-ink: #ffffff;
+  --topbar-ink-muted: rgba(255, 255, 255, 0.64);
+
+  /* — Radios del sistema de diseño nuevo (inputs/botones 10px, tarjetas 14px).
+     No reemplaza --radius-sm/md/lg/pill (legado, border-radius:0 en el resto
+     del panel) — son del wizard de Pedido de mostrador en adelante. — */
+  --radius-control: 10px;
+  --radius-card: 14px;
 
   /* — Marca (pantallas de entrada: login y splash) — mismo rojo
      institucional que --accent, con un tono oscuro de acompañamiento.
@@ -108,8 +126,8 @@
   --st-pendiente: light-dark(#b03a00, #ffab7a);
   --st-sin-stock: light-dark(#6b6663, #7d7979);
 
-  /* — Tipografía (Archivo 400/600/800) — */
-  --font-sans: 'Archivo', system-ui, sans-serif;
+  /* — Tipografía (DM Sans 400/500/600/700 — sistema de diseño 2026) — */
+  --font-sans: 'DM Sans', system-ui, sans-serif;
   --fs-display: 30px;
   --lh-display: 1.12;
   --fw-display: 800;

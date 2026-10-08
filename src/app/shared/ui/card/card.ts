@@ -3,9 +3,10 @@ import { Component, computed, input, output } from '@angular/core';
 export type UiCardVariant = 'container' | 'section' | 'work';
 
 /**
- * Contenedor con borde 2px (container), sub-bloque 1px (section) o tarjeta
- * de trabajo de bandeja (work). La sombra queda reservada para overlays del
- * CDK; las tarjetas nunca llevan sombra.
+ * Tarjeta del sistema de diseño (ver DESIGN.md): superficie elevada sobre
+ * el lienzo de página, radio 14px. `title`/`subtitle` opcionales pintan la
+ * cabecera "título + texto de ayuda" que piden las pantallas nuevas; si se
+ * omiten, el contenido proyectado ocupa toda la tarjeta como antes.
  */
 @Component({
   selector: 'ui-card',
@@ -18,13 +19,22 @@ export type UiCardVariant = 'container' | 'section' | 'work';
       (click)="clickable() && cardClick.emit()"
       (keydown.enter)="clickable() && cardClick.emit()"
     >
+      @if (title()) {
+        <div class="ui-card-head">
+          <h3 class="ui-card-title">{{ title() }}</h3>
+          @if (subtitle()) {
+            <p class="ui-card-subtitle">{{ subtitle() }}</p>
+          }
+        </div>
+      }
       <ng-content></ng-content>
     </div>
   `,
   styles: [
     `
       .ui-card {
-        background: var(--bg);
+        background: var(--surface);
+        border-radius: var(--radius-card, 0);
       }
       .ui-card-container {
         border: 2px solid var(--divider);
@@ -37,6 +47,20 @@ export type UiCardVariant = 'container' | 'section' | 'work';
       .ui-card-work {
         border: 2px solid var(--divider);
         padding: 18px;
+      }
+      .ui-card-head {
+        margin-bottom: 14px;
+      }
+      .ui-card-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .ui-card-subtitle {
+        margin: 2px 0 0;
+        font-size: 13px;
+        color: var(--ink-muted);
       }
       .ui-card-clickable {
         cursor: pointer;
@@ -68,6 +92,8 @@ export class UiCard {
   selected = input(false);
   resolved = input(false);
   saving = input(false);
+  title = input('');
+  subtitle = input('');
 
   cardClick = output<void>();
 

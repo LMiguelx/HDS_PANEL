@@ -115,7 +115,7 @@ let nextId = 0;
         color: var(--ink);
         background: var(--surface-sunk);
         border: 1px solid var(--divider);
-        border-radius: 0;
+        border-radius: var(--radius-control, 0);
         min-height: var(--touch-min);
         padding: 0 12px;
         width: 100%;
