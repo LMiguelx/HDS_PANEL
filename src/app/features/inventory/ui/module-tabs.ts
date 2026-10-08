@@ -14,8 +14,20 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
         [routerLinkActiveOptions]="{ exact: true }"
         >Stock por almacén</a
       >
+      <a
+        routerLink="/inventario/adelantos"
+        routerLinkActive="active"
+        *hasPermission="['stock.advance', 'report.view']"
+        >Adelantos</a
+      >
       <a routerLink="/inventario/ajuste" routerLinkActive="active" *hasPermission="'config.edit'"
         >Ajuste de stock</a
+      >
+      <a
+        routerLink="/inventario/cuadre"
+        routerLinkActive="active"
+        *hasPermission="['stock.advance', 'report.view']"
+        >Cuadre con el ERP</a
       >
     </nav>
   `,

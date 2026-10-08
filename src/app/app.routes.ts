@@ -141,7 +141,7 @@ export const routes: Routes = [
       },
       {
         path: 'inventario',
-        canActivate: [permissionGuard('report.view', 'config.edit')],
+        canActivate: [permissionGuard('report.view', 'config.edit', 'stock.advance')],
         loadChildren: () =>
           import('./features/inventory/inventory.routes').then((m) => m.INVENTORY_ROUTES),
       },

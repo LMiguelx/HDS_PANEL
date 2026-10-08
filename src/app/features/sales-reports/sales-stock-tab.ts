@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Router } from '@angular/router';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiToggle } from '../../shared/ui/toggle/toggle';
 import { UiEmpty } from '../../shared/ui/empty/empty';
@@ -7,8 +8,19 @@ import { SalesReportAdminService } from './sales-report-admin';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
 import { CounterSessionStore } from '../orders/counter-session-store';
 import { WarehouseView } from '../../shared/models/inventory.models';
-import { SalesStockReport } from '../../shared/models/sales-report.models';
+import { SalesStockReport, SalesStockRow } from '../../shared/models/sales-report.models';
+import { dateTimeText } from '../assignments/assignment-format';
 import { quantityText } from './sales-report-format';
+
+function isPastDay(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() !== now.getFullYear() ||
+    d.getMonth() !== now.getMonth() ||
+    d.getDate() !== now.getDate()
+  );
+}
 
 function todayIso(): string {
   const d = new Date();
@@ -95,11 +107,16 @@ function todayIso(): string {
                   <th>Stock esperado</th>
                   <th [class.sks-dim]="!r.erpStockAvailable">Stock ERP</th>
                   <th [class.sks-dim]="!r.erpStockAvailable">Diferencia</th>
+                  <th [class.sks-dim]="!r.erpStockAvailable">Subida del ERP</th>
                 </tr>
               </thead>
               <tbody>
                 @for (row of r.rows; track row.productId) {
-                  <tr [class.sks-row-issue]="row.pendingQuantity > 0">
+                  <tr
+                    [class.sks-row-issue]="row.pendingQuantity > 0"
+                    [class.sks-row-clickable]="row.difference != null && row.difference !== 0"
+                    (click)="openReconciliation(row)"
+                  >
                     <td class="sks-muted">{{ row.productCode }}</td>
                     <td>{{ row.productName }}</td>
                     <td class="sks-muted">{{ row.unitOfMeasure }}</td>
@@ -112,8 +129,20 @@ function todayIso(): string {
                     <td [class.sks-dim]="!r.erpStockAvailable">
                       {{ row.erpStock != null ? quantityText(row.erpStock) : '—' }}
                     </td>
-                    <td [class.sks-dim]="!r.erpStockAvailable">
+                    <td
+                      [class.sks-dim]="!r.erpStockAvailable"
+                      [class.sks-diff-negative]="(row.difference ?? 0) < 0"
+                      [class.sks-diff-positive]="(row.difference ?? 0) > 0"
+                    >
                       {{ row.difference != null ? quantityText(row.difference) : '—' }}
+                    </td>
+                    <td
+                      class="sks-muted"
+                      [class.sks-dim]="
+                        !r.erpStockAvailable || (row.erpStockAt && isPastDay(row.erpStockAt))
+                      "
+                    >
+                      {{ row.erpStockAt ? dateTimeText(row.erpStockAt) : '—' }}
                     </td>
                   </tr>
                 }
@@ -205,6 +234,20 @@ function todayIso(): string {
       .sks-dim {
         opacity: 0.4;
       }
+      .sks-row-clickable {
+        cursor: pointer;
+      }
+      .sks-row-clickable:hover {
+        background: var(--faint);
+      }
+      .sks-diff-negative {
+        color: var(--st-mismatch);
+        font-weight: 700;
+      }
+      .sks-diff-positive {
+        color: var(--st-open);
+        font-weight: 700;
+      }
 
       @media (max-width: 767px) {
         .sks-page {
@@ -217,9 +260,12 @@ function todayIso(): string {
 export class SalesStockTab {
   private reportSvc = inject(SalesReportAdminService);
   private catalogSvc = inject(CatalogLookupService);
+  private router = inject(Router);
   protected counterSession = inject(CounterSessionStore);
 
   protected quantityText = quantityText;
+  protected dateTimeText = dateTimeText;
+  protected isPastDay = isPastDay;
 
   protected warehouses = signal<WarehouseView[]>([]);
   protected loadingWarehouses = signal(true);
@@ -259,6 +305,13 @@ export class SalesStockTab {
         }
       },
       error: () => this.loadingWarehouses.set(false),
+    });
+  }
+
+  protected openReconciliation(row: SalesStockRow) {
+    if (row.difference == null || row.difference === 0) return;
+    this.router.navigate(['/inventario/cuadre'], {
+      queryParams: { productId: row.productId, warehouseId: this.warehouseId() },
     });
   }
 

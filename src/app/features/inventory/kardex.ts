@@ -1,26 +1,22 @@
-import { Component, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
+import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { InventoryAdminService } from './inventory-admin';
-import { KardexResponse } from '../../shared/models/inventory.models';
+import { KardexResponse, WarehouseView } from '../../shared/models/inventory.models';
 import { dateTimeText } from '../assignments/assignment-format';
+import { movementReference } from './inventory-format';
 
-const MOVEMENT_TYPE_NAMES: Record<string, string> = {
-  SALE_PROMISE: 'Promesa de venta',
-  INVOICE_SYNC: 'Sincronizado con factura',
-  RETURN: 'Devolución',
-  BONUS_OUT: 'Salida por bonificación',
-  BONUS_SUBSTITUTION: 'Sustitución de bonificación',
-  MANUAL_ADJUSTMENT: 'Ajuste manual',
-  ERP_SYNC: 'Sincronizado con ERP',
-  ORDER_EDIT: 'Edición de pedido',
-  BONUS_REVERSAL: 'Reversión de bonificación',
-};
-
-/** Historial de movimientos de un producto en un almacén — GET /inventory/kardex/{id}. `report.view`. */
+/**
+ * Historial de movimientos de un producto en un almacén — GET
+ * /inventory/kardex/{id}. `report.view`. Punto de llegada común para saber
+ * qué pasó con un producto: el nombre del tipo y de quien lo hizo ya llegan
+ * listos desde el backend (doc 35, sección 9).
+ */
 @Component({
   selector: 'app-kardex',
-  imports: [UiButton, UiEmpty],
+  imports: [RouterLink, UiButton, UiField, UiEmpty],
   template: `
     <section class="kx-page">
       @if (loading()) {
@@ -37,12 +33,25 @@ const MOVEMENT_TYPE_NAMES: Record<string, string> = {
         <div class="kx-head">
           <div>
             <h1>{{ k.productName }}</h1>
-            <p class="kx-meta">Stock actual: {{ k.currentStock }}</p>
+            <p class="kx-meta">
+              Stock actual en este almacén: <strong>{{ k.currentStock }}</strong>
+            </p>
           </div>
+          <ui-field
+            label="Almacén"
+            type="select"
+            [value]="selectedWarehouseId()"
+            (valueChange)="onWarehouseChange($event)"
+            [options]="warehouseOptions()"
+            class="kx-warehouse-select"
+          />
         </div>
 
         @if (k.movements.content.length === 0) {
-          <ui-empty title="Sin movimientos" body="Este producto no tiene movimientos registrados." />
+          <ui-empty
+            title="Sin movimientos"
+            body="Este producto no tiene movimientos en este almacén."
+          />
         } @else {
           <table class="ui-table-grid kx-table">
             <thead>
@@ -50,23 +59,45 @@ const MOVEMENT_TYPE_NAMES: Record<string, string> = {
                 <th>Fecha</th>
                 <th>Tipo</th>
                 <th>Cantidad</th>
+                <th>Origen</th>
                 <th>Nota</th>
+                <th>Hecho por</th>
               </tr>
             </thead>
             <tbody>
               @for (m of k.movements.content; track m.stockMovementId) {
                 <tr>
                   <td class="kx-muted">{{ dateTimeText(m.createdAt) }}</td>
-                  <td>{{ movementTypeName(m.movementTypeCode) }}</td>
-                  <td [class.kx-negative]="m.quantity < 0" class="kx-qty">{{ m.quantity }}</td>
+                  <td>{{ m.movementTypeName }}</td>
+                  <td
+                    [class.kx-negative]="m.quantity < 0"
+                    [class.kx-positive]="m.quantity > 0"
+                    class="kx-qty"
+                  >
+                    {{ m.quantity > 0 ? '+' : '' }}{{ m.quantity }}
+                  </td>
+                  <td>
+                    @if (ref(m).route) {
+                      <a [routerLink]="ref(m).route" class="kx-link">{{ ref(m).text }}</a>
+                    } @else {
+                      <span class="kx-muted">{{ ref(m).text }}</span>
+                    }
+                  </td>
                   <td class="kx-muted">{{ m.note || '—' }}</td>
+                  <td class="kx-muted">{{ m.createdByName || 'Automático' }}</td>
                 </tr>
               }
             </tbody>
           </table>
 
           <div class="kx-pager">
-            <button uiButton variant="secondary" size="sm" [disabled]="page() === 0" (click)="prevPage()">
+            <button
+              uiButton
+              variant="secondary"
+              size="sm"
+              [disabled]="page() === 0"
+              (click)="prevPage()"
+            >
               Anterior
             </button>
             <span class="kx-pager-label">
@@ -97,6 +128,13 @@ const MOVEMENT_TYPE_NAMES: Record<string, string> = {
         height: 240px;
         background: var(--faint);
       }
+      .kx-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
         margin: 0 0 4px;
@@ -107,16 +145,31 @@ const MOVEMENT_TYPE_NAMES: Record<string, string> = {
         color: var(--ink-muted);
         font-size: 14px;
       }
+      .kx-meta strong {
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .kx-warehouse-select {
+        width: 220px;
+      }
       .kx-table {
         margin-top: 20px;
+        width: 100%;
       }
       .kx-muted {
         color: var(--ink-muted);
         font-size: 13px;
       }
+      .kx-link {
+        font-size: 13px;
+        color: var(--accent-ink);
+      }
       .kx-qty {
         font-weight: 800;
         font-variant-numeric: var(--tnum);
+      }
+      .kx-positive {
+        color: var(--st-open);
       }
       .kx-negative {
         color: var(--accent-ink);
@@ -138,28 +191,53 @@ const MOVEMENT_TYPE_NAMES: Record<string, string> = {
         .kx-page {
           padding: var(--sp-4);
         }
+        .kx-table {
+          display: block;
+          overflow-x: auto;
+        }
       }
     `,
   ],
 })
 export class KardexPage {
   private inventorySvc = inject(InventoryAdminService);
+  private router = inject(Router);
 
   productId = input('', { alias: 'productId' });
   warehouseId = input('', { alias: 'warehouseId' });
 
   protected dateTimeText = dateTimeText;
+  protected ref = (m: { referenceTable: string | null; referenceId: string | null }) =>
+    movementReference(m.referenceTable, m.referenceId);
+
   protected kardex = signal<KardexResponse | null>(null);
   protected loading = signal(true);
   protected error = signal(false);
   protected page = signal(0);
 
+  protected warehouses = signal<WarehouseView[]>([]);
+  protected selectedWarehouseId = signal('');
+  protected warehouseOptions = computed<UiFieldOption[]>(() =>
+    this.warehouses().map((w) => ({ value: String(w.warehouseId), label: w.name })),
+  );
+
   private loadEffect = effect(() => {
-    if (this.productId() && this.warehouseId()) this.load();
+    if (this.productId() && this.warehouseId()) {
+      this.selectedWarehouseId.set(this.warehouseId());
+      this.page.set(0);
+      this.load();
+    }
   });
 
-  protected movementTypeName(code: string): string {
-    return MOVEMENT_TYPE_NAMES[code] ?? code;
+  constructor() {
+    this.inventorySvc.warehouses().subscribe((list) => this.warehouses.set(list));
+  }
+
+  protected onWarehouseChange(value: string) {
+    if (value === this.warehouseId()) return;
+    this.router.navigate(['/inventario/kardex', this.productId()], {
+      queryParams: { warehouseId: value },
+    });
   }
 
   load() {

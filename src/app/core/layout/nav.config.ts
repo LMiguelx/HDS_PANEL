@@ -144,7 +144,7 @@ export const NAV: NavItem[] = [
     label: 'Inventario',
     icon: 'inventory',
     route: '/inventario',
-    anyOf: ['report.view', 'config.edit'],
+    anyOf: ['report.view', 'config.edit', 'stock.advance'],
     group: 'Administración',
   },
   {

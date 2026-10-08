@@ -104,9 +104,10 @@ export interface SalesStockRow {
   soldQuantity: number; // venta + bonificación, sin anulados
   pendingQuantity: number; // de lo vendido, lo que NO se pudo descontar del stock
   systemStock: number; // ya descontado lo vendido
-  expectedErpStock: number; // systemStock + soldQuantity - pendingQuantity
-  erpStock: number | null; // null hasta que exista la conexión
-  difference: number | null; // erpStock - expectedErpStock
+  expectedErpStock: number | null; // lo que el sistema esperaba en la última subida del ERP; null si nunca subió
+  erpStock: number | null; // lo que el ERP informó en su última subida; null si nunca
+  difference: number | null; // erpStock - expectedErpStock; null si nunca
+  erpStockAt: string | null; // cuándo fue esa subida; null si nunca
 }
 
 export interface SalesStockReport {
