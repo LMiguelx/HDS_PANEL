@@ -136,6 +136,7 @@ function initials(name: string): string {
         <div class="cof-grid">
           <div class="cof-left">
             <ui-card
+              class="cof-card-stack"
               title="Cliente"
               subtitle="Busca y selecciona a quién se le registra el pedido."
             >
@@ -218,6 +219,7 @@ function initials(name: string): string {
             </ui-card>
 
             <ui-card
+              class="cof-card-stack"
               title="Condiciones de venta"
               subtitle="Define cómo se paga y si la entrega es inmediata."
             >
@@ -238,7 +240,7 @@ function initials(name: string): string {
             </ui-card>
 
             @if (canEditCart()) {
-              <ui-card class="cof-cart-card">
+              <ui-card class="cof-card-stack">
                 <h3 class="cof-cart-title">
                   Carrito
                   @if (lines().length > 0) {
@@ -276,7 +278,7 @@ function initials(name: string): string {
                 }
               </ui-card>
 
-              <ui-card class="cof-catalog-card">
+              <ui-card class="cof-card-stack">
                 <ui-tabs [items]="tabs" [(value)]="activeTab" />
 
                 <div class="cof-tab-content">
@@ -505,7 +507,6 @@ function initials(name: string): string {
         border-left: 3px solid var(--st-no-purchase);
         background: color-mix(in srgb, var(--st-no-purchase) 10%, transparent);
         font-size: 13px;
-        margin-top: 12px;
       }
       .cof-customer-card {
         display: flex;
@@ -549,7 +550,6 @@ function initials(name: string): string {
       .cof-attribution {
         display: grid;
         gap: 8px;
-        margin-top: 14px;
       }
       .cof-attribution-options {
         display: grid;
@@ -561,6 +561,13 @@ function initials(name: string): string {
         gap: 20px;
         align-content: start;
         min-width: 0;
+      }
+      /* ui-card no espacia su contenido solo (ver DESIGN.md): cada tarjeta
+         con más de un campo apilado pide esta clase en su host. */
+      .cof-card-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
       }
       .cof-grid {
         display: grid;
@@ -590,7 +597,6 @@ function initials(name: string): string {
         opacity: 0.6;
       }
       .cof-tab-content {
-        margin-top: 16px;
         display: grid;
         gap: 12px;
       }

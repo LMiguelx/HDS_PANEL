@@ -132,9 +132,6 @@ let nextId = 0;
         color: var(--ink-muted);
         pointer-events: none;
       }
-      .ui-input-icon {
-        padding-left: 40px;
-      }
       .ui-input {
         font-family: var(--font-sans);
         font-size: 15px;
@@ -146,6 +143,12 @@ let nextId = 0;
         padding: 0 40px 0 12px;
         width: 100%;
         box-sizing: border-box;
+      }
+      /* Después de .ui-input a propósito: su padding en bloque (arriba) deja
+         el izquierdo en 12px: esta regla necesita ganar el empate de
+         especificidad para separar el texto del ícono. */
+      .ui-input-icon {
+        padding-left: 40px;
       }
       .ui-input:hover:not(:disabled) {
         border-color: var(--ink-muted);
