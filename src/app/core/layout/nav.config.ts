@@ -125,6 +125,15 @@ export const NAV: NavItem[] = [
     group: 'Facturación',
   },
 
+  // Notificaciones
+  {
+    label: 'Notificaciones',
+    icon: 'notifications',
+    route: '/notificaciones',
+    anyOf: ['notification.view_all', 'notification.send'],
+    group: 'Notificaciones',
+  },
+
   // Administración
   {
     label: 'Catálogo y precios',

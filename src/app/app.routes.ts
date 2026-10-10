@@ -120,6 +120,14 @@ export const routes: Routes = [
           import('./features/billing/invoice-detail').then((m) => m.InvoiceDetailPage),
       },
 
+      // Notificaciones de supervisión — doc 36, nuevo.
+      {
+        path: 'notificaciones',
+        canActivate: [permissionGuard('notification.view_all', 'notification.send')],
+        loadChildren: () =>
+          import('./features/notifications/notification.routes').then((m) => m.NOTIFICATION_ROUTES),
+      },
+
       // Administración (módulo 7) — rediseñado
       {
         path: 'usuarios',
