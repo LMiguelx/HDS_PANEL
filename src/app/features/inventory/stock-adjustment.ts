@@ -18,6 +18,7 @@ import {
   WarehouseView,
 } from '../../shared/models/inventory.models';
 import { downloadCsvTemplate, parseStockCsv, toProductLookup } from './inventory-format';
+import { round2 } from '../../shared/utils/quantity';
 
 const BATCH_SIZE = 500;
 
@@ -554,7 +555,7 @@ export class StockAdjustmentPage {
 
   protected addLine() {
     const warehouseId = Number(this.warehouseId());
-    const quantity = Number(this.draftQuantity());
+    const quantity = round2(Number(this.draftQuantity()));
     const product = this.pickedProduct();
     const mode = this.mode();
     if (!warehouseId || !product) {

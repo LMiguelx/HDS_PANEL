@@ -43,6 +43,7 @@ import { AllocationView } from '../../shared/models/allocation.models';
 import { formatSoles } from '../../shared/pipes/money';
 import { quantityText } from '../sales-reports/sales-report-format';
 import { dateText } from '../assignments/assignment-format';
+import { round2 } from '../../shared/utils/quantity';
 
 interface AllocationRow {
   allocationId: number;
@@ -1238,7 +1239,7 @@ export class CounterOrderFormPage {
     const value = Number((ev.target as HTMLInputElement).value);
     if (!(value > 0)) return;
     this.lines.update((list) =>
-      list.map((l) => (l.productId === line.productId ? { ...l, quantity: value } : l)),
+      list.map((l) => (l.productId === line.productId ? { ...l, quantity: round2(value) } : l)),
     );
   }
 
@@ -1351,7 +1352,9 @@ export class CounterOrderFormPage {
 
   protected setAllocationQuantity(row: AllocationRow, ev: Event) {
     const raw = Number((ev.target as HTMLInputElement).value);
-    const value = Number.isFinite(raw) ? Math.max(0, Math.min(raw, row.max)) : row.originalQuantity;
+    const value = Number.isFinite(raw)
+      ? round2(Math.max(0, Math.min(raw, row.max)))
+      : row.originalQuantity;
     this.allocationQuantities.update((map) => {
       const next = new Map(map);
       next.set(row.allocationId, value);

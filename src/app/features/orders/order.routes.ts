@@ -12,8 +12,10 @@ export const ORDER_ROUTES: Routes = [
     loadComponent: () => import('./counter-order-form').then((m) => m.CounterOrderFormPage),
   },
   {
+    // order.edit: el vendedor puede editar sus propios pedidos de campo;
+    // order.manage: supervisión edita cualquiera, dotación incluida — doc 36, sección 13.4.
     path: 'editar/:orderId',
-    canActivate: [permissionGuard('order.manage')],
+    canActivate: [permissionGuard('order.manage', 'order.edit')],
     loadComponent: () => import('./counter-order-form').then((m) => m.CounterOrderFormPage),
   },
   {
