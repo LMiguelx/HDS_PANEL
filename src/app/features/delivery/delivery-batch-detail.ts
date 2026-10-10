@@ -5,6 +5,7 @@ import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiCard } from '../../shared/ui/card/card';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { ToastService } from '../../core/ui/toast';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
@@ -13,7 +14,13 @@ import { DeliveryAdminService } from './delivery-admin';
 import { AssignTeamDialog } from './ui/assign-team-dialog';
 import { ReturnsDialog } from './ui/returns-dialog';
 import { BatchMap } from './ui/batch-map';
-import { BatchCustomerView, BatchDetail, MemberTotals } from '../../shared/models/delivery.models';
+import {
+  BatchCustomerView,
+  BatchDetail,
+  BatchReturnInvoiceView,
+  BatchReturnsReport,
+  MemberTotals,
+} from '../../shared/models/delivery.models';
 import {
   ITEM_STATUS_OPTIONS,
   batchStatusName,
@@ -22,6 +29,12 @@ import {
 } from './delivery-format';
 import { dateText, dateTimeText, timeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
+
+const RETURNS_AUTO_REFRESH_MS = 60_000;
+const RETURN_INVOICE_STATUS_NAME: Record<string, string> = {
+  PARTIAL: 'Entrega parcial',
+  REJECTED: 'Rechazado por el cliente',
+};
 
 const ITEM_STATUS_FILTER_OPTIONS: UiFieldOption[] = [
   { value: '', label: 'Todos los estados' },
@@ -33,7 +46,16 @@ const UNATTENDED_FILTER_VALUE = '__none__';
 /** Detalle de una planilla: comprobantes + mapa de entregas. */
 @Component({
   selector: 'app-delivery-batch-detail',
-  imports: [RouterLink, UiButton, UiField, UiStatus, UiEmpty, BatchMap, HasPermissionDirective],
+  imports: [
+    RouterLink,
+    UiButton,
+    UiField,
+    UiStatus,
+    UiEmpty,
+    UiCard,
+    BatchMap,
+    HasPermissionDirective,
+  ],
   template: `
     <section class="dbd-page">
       @if (loading()) {
@@ -151,6 +173,27 @@ const UNATTENDED_FILTER_VALUE = '__none__';
           >
             Mapa
           </button>
+          <button
+            type="button"
+            class="dbd-tab"
+            *hasPermission="'delivery.manage'"
+            [class.on]="view() === 'returns'"
+            (click)="view.set('returns')"
+          >
+            Devoluciones
+          </button>
+          @if (view() === 'returns') {
+            <button
+              type="button"
+              class="dbd-tab-refresh"
+              [disabled]="loadingReturns()"
+              (click)="refreshReturns()"
+              aria-label="Actualizar"
+              title="Actualizar"
+            >
+              ↻
+            </button>
+          }
         </div>
 
         @if (view() === 'items') {
@@ -356,11 +399,183 @@ const UNATTENDED_FILTER_VALUE = '__none__';
               </div>
             </div>
           }
-        } @else {
+        } @else if (view() === 'map') {
           @if (loadingCustomers()) {
             <div class="dbd-skeleton" role="status" aria-label="Cargando mapa"></div>
           } @else {
             <app-batch-map [customers]="customers()" />
+          }
+        } @else {
+          @if (loadingReturns()) {
+            <div class="dbd-skeleton" role="status" aria-label="Cargando devoluciones"></div>
+          } @else if (errorReturns()) {
+            <ui-empty
+              variant="error"
+              title="No pudimos cargar las devoluciones"
+              body="Intenta de nuevo en unos segundos."
+              actionLabel="Reintentar"
+              (action)="refreshReturns()"
+            />
+          } @else if (returnsReport(); as r) {
+            @if (r.invoicesWithReturns === 0) {
+              <ui-empty title="Esta planilla no tiene devoluciones" />
+            } @else {
+              @if (r.statusCode === 'SETTLED') {
+                <p class="dbd-hint dbd-ret-banner-settled">
+                  Planilla liquidada el {{ dateTimeText(r.settledAt) }}: lista definitiva.
+                </p>
+              } @else {
+                <p class="dbd-hint dbd-hint-alert">
+                  La planilla sigue en ruta: faltan {{ r.pendingInvoices }} comprobante{{
+                    r.pendingInvoices === 1 ? '' : 's'
+                  }}
+                  por atender y esta lista puede crecer.
+                </p>
+              }
+
+              <div class="dbd-metrics">
+                <div class="dbd-metric">
+                  <span class="dbd-metric-value">{{ formatSoles(r.returnedAmount) }}</span>
+                  <span class="dbd-metric-label">Devuelto</span>
+                </div>
+                <div class="dbd-metric">
+                  <span class="dbd-metric-value">{{ r.returnedQuantity }}</span>
+                  <span class="dbd-metric-label">Unidades</span>
+                </div>
+                <div class="dbd-metric">
+                  <span class="dbd-metric-value">{{ r.productCount }}</span>
+                  <span class="dbd-metric-label">Productos</span>
+                </div>
+                <div class="dbd-metric">
+                  <span class="dbd-metric-value"
+                    >{{ r.invoicesWithReturns }} de {{ r.totalInvoices }}</span
+                  >
+                  <span class="dbd-metric-label">Comprobantes con devolución</span>
+                </div>
+                <div
+                  class="dbd-metric"
+                  [class.dbd-metric-click]="r.pendingInvoices > 0"
+                  [class.dbd-metric-alert]="r.pendingInvoices > 0"
+                  (click)="r.pendingInvoices > 0 && openUnattended()"
+                >
+                  <span class="dbd-metric-value">{{ r.pendingInvoices }}</span>
+                  <span class="dbd-metric-label">Sin atender</span>
+                </div>
+              </div>
+
+              <div class="dbd-ret-grid">
+                <ui-card title="Qué vuelve al almacén">
+                  <table class="ui-table-grid dbd-ret-table">
+                    <thead>
+                      <tr>
+                        <th>Código</th>
+                        <th>Producto</th>
+                        <th>Und.</th>
+                        <th>Cantidad</th>
+                        <th>Empaque</th>
+                        <th>Monto</th>
+                        <th>En</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (p of r.products; track p.productId) {
+                        <tr [class.dbd-ret-row-highlight]="highlightedProductId() === p.productId">
+                          <td class="dbd-muted">{{ p.productCode }}</td>
+                          <td>
+                            <button
+                              type="button"
+                              class="dbd-ret-product-link"
+                              (click)="toggleProductHighlight(p.productId)"
+                            >
+                              {{ p.productName }}
+                            </button>
+                            @if (p.bonusQuantity > 0) {
+                              <span class="dbd-ret-bonus-tag"
+                                >Bonificación: {{ p.bonusQuantity }}</span
+                              >
+                            }
+                          </td>
+                          <td class="dbd-muted">{{ p.unitOfMeasure }}</td>
+                          <td class="dbd-cell-strong">{{ p.returnedQuantity }}</td>
+                          <td class="dbd-muted">{{ packageText(p) }}</td>
+                          <td class="dbd-muted">{{ formatSoles(p.returnedAmount) }}</td>
+                          <td class="dbd-muted">en {{ p.invoiceCount }} comprobantes</td>
+                        </tr>
+                      }
+                    </tbody>
+                    <tfoot>
+                      <tr class="dbd-team-row-total">
+                        <td class="dbd-cell-strong" colspan="3">Total</td>
+                        <td class="dbd-cell-strong">{{ r.returnedQuantity }}</td>
+                        <td></td>
+                        <td class="dbd-cell-strong">{{ formatSoles(r.returnedAmount) }}</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  <button uiButton variant="ghost" size="sm" (click)="printConsolidated()">
+                    Imprimir
+                  </button>
+                </ui-card>
+
+                <ui-card title="Comprobantes con devolución">
+                  <div class="dbd-ret-invoices">
+                    @for (inv of r.invoices; track inv.lineNumber) {
+                      <div
+                        class="dbd-ret-invoice"
+                        [class.dbd-ret-row-highlight]="
+                          invoiceHasProduct(inv, highlightedProductId())
+                        "
+                      >
+                        <button
+                          type="button"
+                          class="dbd-ret-invoice-head"
+                          (click)="toggleInvoiceExpand(inv.lineNumber)"
+                        >
+                          <span class="dbd-muted">{{ inv.lineNumber }}</span>
+                          <span class="dbd-cell-strong">{{ inv.invoiceId }}</span>
+                          <span class="dbd-ret-invoice-customer">{{ inv.customerName }}</span>
+                          <ui-status
+                            [label]="returnInvoiceStatusName(inv.statusCode)"
+                            [status]="returnInvoiceStatusSlug(inv.statusCode)"
+                          />
+                          <span class="dbd-cell-strong">{{ formatSoles(inv.returnedAmount) }}</span>
+                          <span class="dbd-ret-invoice-caret">{{
+                            expandedInvoiceLine() === inv.lineNumber ? '▾' : '▸'
+                          }}</span>
+                        </button>
+                        <div class="dbd-muted dbd-ret-invoice-meta">
+                          @if (inv.registeredByName) {
+                            {{ inv.registeredByName }} · {{ timeText(inv.registeredAt) }}
+                          }
+                          Monto {{ formatSoles(inv.amount) }} · Neto
+                          {{ formatSoles(inv.netAmount) }}
+                        </div>
+                        @if (expandedInvoiceLine() === inv.lineNumber) {
+                          <table class="ui-table-grid dbd-ret-lines">
+                            <tbody>
+                              @for (l of inv.lines; track l.productId) {
+                                <tr>
+                                  <td>
+                                    {{ l.productName }}
+                                    @if (l.bonus) {
+                                      <span class="dbd-ret-bonus-tag">Bonificación</span>
+                                    }
+                                  </td>
+                                  <td class="dbd-muted">{{ l.quantity }}</td>
+                                  <td class="dbd-muted">{{ formatSoles(l.amount) }}</td>
+                                  <td class="dbd-muted">{{ l.reasonName }}</td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        }
+                      </div>
+                    }
+                  </div>
+                </ui-card>
+              </div>
+            }
           }
         }
       }
@@ -510,10 +725,114 @@ const UNATTENDED_FILTER_VALUE = '__none__';
       .dbd-cards-mobile {
         display: none;
       }
+      .dbd-tab-refresh {
+        appearance: none;
+        background: none;
+        border: 0;
+        cursor: pointer;
+        margin-left: auto;
+        font-size: 18px;
+        color: var(--ink-muted);
+        padding: 12px 10px;
+      }
+      .dbd-tab-refresh:hover {
+        color: var(--ink);
+      }
+      .dbd-tab-refresh:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .dbd-metric-click {
+        cursor: pointer;
+      }
+      .dbd-metric-alert .dbd-metric-value {
+        color: var(--accent-ink);
+      }
+      .dbd-ret-banner-settled {
+        color: var(--success);
+        font-weight: 600;
+      }
+      .dbd-ret-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+        align-items: start;
+      }
+      .dbd-ret-table {
+        margin-bottom: 14px;
+      }
+      .dbd-ret-product-link {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 800;
+        color: var(--ink);
+        text-align: left;
+      }
+      .dbd-ret-product-link:hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+      .dbd-ret-bonus-tag {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #1d4ed8;
+        background: rgba(37, 99, 235, 0.12);
+      }
+      .dbd-ret-row-highlight {
+        background: var(--accent-wash);
+      }
+      .dbd-ret-invoices {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .dbd-ret-invoice {
+        border: 1px solid var(--hairline);
+        padding: 10px 12px;
+      }
+      .dbd-ret-invoice-head {
+        appearance: none;
+        background: none;
+        border: 0;
+        width: 100%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0;
+        font: inherit;
+        color: var(--ink);
+        text-align: left;
+      }
+      .dbd-ret-invoice-customer {
+        flex: 1;
+        color: var(--ink-muted);
+        font-size: 13px;
+      }
+      .dbd-ret-invoice-caret {
+        color: var(--ink-muted);
+      }
+      .dbd-ret-invoice-meta {
+        margin-top: 6px;
+      }
+      .dbd-ret-lines {
+        margin-top: 10px;
+      }
 
       @media (max-width: 767px) {
         .dbd-page {
           padding: var(--sp-4);
+        }
+        .dbd-ret-grid {
+          grid-template-columns: 1fr;
         }
         .dbd-table-desktop {
           display: none;
@@ -573,10 +892,17 @@ export class DeliveryBatchDetailPage {
   protected loadingCustomers = signal(true);
   protected error = signal(false);
   protected settling = signal(false);
-  protected view = signal<'items' | 'team' | 'map'>('items');
+  protected view = signal<'items' | 'team' | 'map' | 'returns'>('items');
   protected itemStatusFilter = signal('');
   /** '' = todos, UNATTENDED_FILTER_VALUE = sin atender, o el registeredByUserId como texto. */
   protected attendedByFilter = signal('');
+
+  protected returnsReport = signal<BatchReturnsReport | null>(null);
+  protected loadingReturns = signal(false);
+  protected errorReturns = signal(false);
+  protected highlightedProductId = signal<number | null>(null);
+  protected expandedInvoiceLine = signal<number | null>(null);
+  protected returnInvoiceStatusName = (code: string) => RETURN_INVOICE_STATUS_NAME[code] ?? code;
 
   protected pendingCount = computed(
     () => this.batch()?.items.filter((i) => i.statusCode === 'PENDING').length ?? 0,
@@ -632,6 +958,23 @@ export class DeliveryBatchDetailPage {
   // dispara apenas el router setea el id real (y de nuevo si cambia).
   private loadEffect = effect(() => {
     if (this.id()) this.load();
+  });
+
+  /**
+   * Devoluciones por planilla no se carga junto al resto: solo mientras la
+   * pestaña está activa, y con refresco automático cada 60s salvo que la
+   * planilla ya esté liquidada (sección 8.5 del doc 36).
+   */
+  private returnsViewEffect = effect((onCleanup) => {
+    const active = this.view() === 'returns';
+    const id = Number(this.id());
+    if (!active || !id) return;
+    this.loadReturns(id);
+    const timer = setInterval(() => {
+      if (this.returnsReport()?.statusCode === 'SETTLED') return;
+      this.loadReturns(id, true);
+    }, RETURNS_AUTO_REFRESH_MS);
+    onCleanup(() => clearInterval(timer));
   });
 
   protected canSettle(b: BatchDetail): boolean {
@@ -714,5 +1057,64 @@ export class DeliveryBatchDetailPage {
     this.attendedByFilter.set('');
     this.itemStatusFilter.set('PENDING');
     this.view.set('items');
+  }
+
+  /** `silent` evita parpadear el skeleton en el refresco automático de 60s. */
+  protected loadReturns(id: number, silent = false) {
+    if (!silent) {
+      this.loadingReturns.set(true);
+      this.errorReturns.set(false);
+    }
+    this.deliverySvc.batchReturns(id).subscribe({
+      next: (report) => {
+        this.returnsReport.set(report);
+        this.loadingReturns.set(false);
+        this.errorReturns.set(false);
+      },
+      error: () => {
+        this.loadingReturns.set(false);
+        if (!silent) this.errorReturns.set(true);
+      },
+    });
+  }
+
+  protected refreshReturns() {
+    const id = Number(this.id());
+    if (id) this.loadReturns(id);
+  }
+
+  protected returnInvoiceStatusSlug(code: string): string {
+    return code === 'REJECTED' ? 'rechazado' : 'entrega parcial';
+  }
+
+  protected toggleProductHighlight(productId: number) {
+    this.highlightedProductId.set(this.highlightedProductId() === productId ? null : productId);
+  }
+
+  protected toggleInvoiceExpand(lineNumber: number) {
+    this.expandedInvoiceLine.set(this.expandedInvoiceLine() === lineNumber ? null : lineNumber);
+  }
+
+  protected invoiceHasProduct(inv: BatchReturnInvoiceView, productId: number | null): boolean {
+    if (productId == null) return false;
+    return inv.lines.some((l) => l.productId === productId);
+  }
+
+  /** "1 paq. + 18 und." — con empaque desconocido, solo las unidades. */
+  protected packageText(p: {
+    fullPackages: number | null;
+    looseUnits: number | null;
+    returnedQuantity: number;
+  }): string {
+    if (p.fullPackages == null || p.looseUnits == null) return `${p.returnedQuantity} und.`;
+    const parts: string[] = [];
+    if (p.fullPackages > 0) parts.push(`${p.fullPackages} paq.`);
+    if (p.looseUnits > 0 || parts.length === 0) parts.push(`${p.looseUnits} und.`);
+    return parts.join(' + ');
+  }
+
+  /** La hoja con la que almacén recibe la mercadería — sección 8.5. */
+  protected printConsolidated() {
+    window.print();
   }
 }

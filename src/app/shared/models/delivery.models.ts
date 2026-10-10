@@ -128,3 +128,63 @@ export interface ReturnReasonView {
   code: string;
   name: string;
 }
+
+// ─────────────────────── Devoluciones por planilla (doc 36, sección 8) ───────────────────────
+
+export interface BatchReturnProductView {
+  productId: number;
+  productCode: string;
+  productName: string;
+  unitOfMeasure: string;
+  unitsPerPackage: number | null; // null si el producto no maneja paquetes
+  returnedQuantity: number; // total devuelto, incluida la bonificación
+  bonusQuantity: number; // de ese total, cuánto era bonificación
+  fullPackages: number | null;
+  looseUnits: number | null;
+  returnedAmount: number;
+  invoiceCount: number; // en cuántos comprobantes vuelve
+}
+
+export interface BatchReturnLineView {
+  productId: number;
+  productCode: string;
+  productName: string;
+  quantity: number;
+  amount: number;
+  reasonName: string;
+  bonus: boolean; // true = bonificación recuperada, no una venta devuelta
+}
+
+export interface BatchReturnInvoiceView {
+  lineNumber: number; // posición del comprobante en la planilla
+  invoiceId: string;
+  customerCode: string;
+  customerName: string;
+  statusCode: string; // PARTIAL | REJECTED — sección 3.3
+  amount: number;
+  returnedAmount: number;
+  netAmount: number;
+  registeredByUserId: number | null;
+  registeredByName: string | null;
+  registeredAt: string | null; // ISO datetime
+  lines: BatchReturnLineView[];
+}
+
+export interface BatchReturnsReport {
+  batchId: number;
+  batchDate: string; // yyyy-MM-dd
+  series: number;
+  number: number;
+  statusCode: string; // estado de la PLANILLA — OPEN | IN_ROUTE | SETTLED
+  vehiclePlate: string | null;
+  driverName: string | null;
+  settledAt: string | null;
+  totalInvoices: number;
+  pendingInvoices: number; // de esos, cuántos siguen sin atender
+  invoicesWithReturns: number;
+  returnedAmount: number;
+  returnedQuantity: number;
+  productCount: number; // productos distintos devueltos
+  products: BatchReturnProductView[]; // consolidado, ordenado por nombre
+  invoices: BatchReturnInvoiceView[]; // comprobantes con devolución, en orden de planilla
+}

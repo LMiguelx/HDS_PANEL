@@ -5,6 +5,8 @@ import { catchError } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiCard } from '../../shared/ui/card/card';
+import { UiBadge } from '../../shared/ui/badge/badge';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { AuthService } from '../../core/auth/auth';
@@ -13,25 +15,27 @@ import { OrderAdminService } from './order-admin';
 import { PromoService } from '../promos/promo';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
 import { BillingValidationAdminService } from '../billing/billing-validation-admin';
-import {
-  OrderDetail,
-  PendingBonusOrderView,
-  ReturnedLineView,
-} from '../../shared/models/order.models';
+import { OrderDetail, OrderItemView, ReturnedLineView } from '../../shared/models/order.models';
 import {
   BillingIssue,
   OrderBillingValidation,
 } from '../../shared/models/billing-validation.models';
 import { hasRecalcFix } from '../billing/billing-validation-format';
 import { ApplicationView, ChoiceOptionView, PendingChoiceView } from '../promos/promo.types';
-import { deliveryStatusName, orderStatusName, originName } from './order-format';
+import {
+  ORDER_LINE_TYPE_COLOR_VAR,
+  deliveryStatusName,
+  orderLineType,
+  orderLineTypeName,
+  orderStatusName,
+} from './order-format';
 import { dateTimeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 
 /** Detalle de un pedido con sus líneas (GET /orders/{id}) y sus acciones (doc 30, sección 8). */
 @Component({
   selector: 'app-order-detail',
-  imports: [RouterLink, UiButton, UiStatus, UiEmpty, HasPermissionDirective],
+  imports: [RouterLink, UiButton, UiStatus, UiEmpty, UiCard, UiBadge, HasPermissionDirective],
   template: `
     <section class="od-page">
       @if (loading()) {
@@ -153,48 +157,36 @@ import { formatSoles } from '../../shared/pipes/money';
             }
           </div>
         }
-        @if (o.statusCode === 'OPEN' && pendingBonus(); as pb) {
+        @if (o.statusCode === 'OPEN' && stockPendingLines().length > 0) {
           <div class="od-alert od-alert-warn">
-            <strong>Hay una bonificación sin stock.</strong> Edita el pedido para que se reevalúe
-            cuando haya stock del producto de regalo.
+            <strong
+              >Este pedido tiene {{ stockPendingLines().length }} bonificación{{
+                stockPendingLines().length === 1 ? '' : 'es'
+              }}
+              pendiente{{ stockPendingLines().length === 1 ? '' : 's' }} de stock:</strong
+            >
+            no se puede enviar a facturación ni entregar en mostrador hasta resolverlas.
+            <div class="od-alert-actions">
+              <button
+                uiButton
+                variant="secondary"
+                size="sm"
+                [loading]="recalculating()"
+                (click)="recalculateAndRevalidate(o)"
+              >
+                Reintentar stock
+              </button>
+              <button
+                uiButton
+                variant="ghost"
+                size="sm"
+                routerLink="/pedidos/bonificaciones-pendientes"
+              >
+                Ver bonificaciones pendientes
+              </button>
+            </div>
           </div>
         }
-
-        <div class="od-grid">
-          <div class="od-field">
-            <span class="od-label">Vendedor</span>
-            <span class="od-value">{{ o.salespersonName }}</span>
-          </div>
-          <div class="od-field">
-            <span class="od-label">Condición de pago</span>
-            <span class="od-value">{{ paymentConditionName(o.paymentConditionId) }}</span>
-          </div>
-          <div class="od-field">
-            <span class="od-label">Total</span>
-            <span class="od-value">{{ formatSoles(o.totalAmount) }}</span>
-          </div>
-          <div class="od-field">
-            <span class="od-label">Descuento</span>
-            <span class="od-value">{{ formatSoles(o.discountAmount) }}</span>
-          </div>
-          <div class="od-field">
-            <span class="od-label">Neto a cobrar</span>
-            <span class="od-value od-value-strong">{{ formatSoles(o.netAmount) }}</span>
-          </div>
-          @if (o.sentToBillingAt) {
-            <div class="od-field">
-              <span class="od-label">Enviado a facturación</span>
-              <span class="od-value">
-                {{ dateTimeText(o.sentToBillingAt) }}
-                @if (o.erpUploaded) {
-                  <span class="od-badge-erp od-badge-erp-ok">Recibido</span>
-                } @else {
-                  <span class="od-badge-erp od-badge-erp-pending">Pendiente</span>
-                }
-              </span>
-            </div>
-          }
-        </div>
 
         @if (billingValidation(); as bv) {
           <div class="od-alert od-alert-warn">
@@ -227,103 +219,179 @@ import { formatSoles } from '../../shared/pipes/money';
           </div>
         }
 
-        <h2 class="od-section-title">Líneas</h2>
-        <table class="ui-table-grid od-table-desktop">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Producto</th>
-              <th>Cantidad</th>
-              <th>Precio unit.</th>
-              <th>Subtotal</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (item of o.items; track item.lineNumber) {
-              <tr [class.od-row-pending]="isPendingLine(item.lineNumber)">
-                <td class="od-muted">{{ item.lineNumber }}</td>
-                <td>{{ item.productName }}</td>
-                <td class="od-muted">{{ item.quantity }}</td>
-                <td class="od-muted">{{ formatSoles(item.unitPrice) }}</td>
-                <td class="od-muted">{{ formatSoles(item.subtotal) }}</td>
-                <td>
-                  @if (isPendingLine(item.lineNumber)) {
-                    <span class="od-badge od-badge-warn">Sin stock</span>
-                  } @else if (item.bonus) {
-                    <span class="od-badge">Bonificado</span>
+        <div class="od-grid">
+          <div class="od-main">
+            <ui-card>
+              <h2 class="od-section-title">Líneas</h2>
+              <table class="ui-table-grid od-table-desktop">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Producto</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Precio unit.</th>
+                    <th>Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (item of sortedItems(); track item.lineNumber) {
+                    <tr [class.od-row-pending]="item.stockPending">
+                      <td class="od-muted">{{ item.lineNumber }}</td>
+                      <td>{{ item.productName }}</td>
+                      <td>
+                        @if (lineType(item) === 'SALE') {
+                          Venta
+                        } @else {
+                          <span class="od-type-tag" [style.color]="typeColorVar(item)">{{
+                            lineTypeName(item)
+                          }}</span>
+                        }
+                      </td>
+                      <td class="od-muted">{{ item.quantity }}</td>
+                      <td class="od-muted">{{ item.bonus ? '—' : formatSoles(item.unitPrice) }}</td>
+                      <td class="od-muted">{{ item.bonus ? '—' : formatSoles(item.subtotal) }}</td>
+                    </tr>
+                    @if (item.stockPending) {
+                      <tr class="od-pending-note-row">
+                        <td colspan="6" class="od-pending-note">⚠ Pendiente de stock</td>
+                      </tr>
+                    }
                   }
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+                </tbody>
+              </table>
 
-        <div class="od-cards-mobile">
-          @for (item of o.items; track item.lineNumber) {
-            <div class="od-card-mobile">
-              <div class="od-card-mobile-head">
-                <span class="od-card-mobile-name">{{ item.productName }}</span>
-                @if (isPendingLine(item.lineNumber)) {
-                  <span class="od-badge od-badge-warn">Sin stock</span>
-                } @else if (item.bonus) {
-                  <span class="od-badge">Bonificado</span>
-                }
-              </div>
-              <div class="od-muted">
-                {{ item.quantity }} × {{ formatSoles(item.unitPrice) }} =
-                {{ formatSoles(item.subtotal) }}
-              </div>
-            </div>
-          }
-        </div>
-
-        @if (applications().length > 0) {
-          <h2 class="od-section-title">Promociones aplicadas</h2>
-          <div class="od-promo-list">
-            @for (a of applications(); track a.promoApplicationId) {
-              <div class="od-promo-row">
-                <span class="od-promo-name">{{ a.promoName }}</span>
-                <span class="od-muted">
-                  @if (a.productName) {
-                    {{ a.quantity }} × {{ a.productName }}
-                  } @else if (a.discountAmount) {
-                    {{ formatSoles(a.discountAmount) }} de descuento
-                  }
-                </span>
-              </div>
-            }
-          </div>
-        }
-
-        <h2 class="od-section-title">Reparto</h2>
-        @if (!o.deliveryStatus) {
-          <ui-empty
-            title="Sin información de reparto"
-            body="Este pedido todavía no tiene planilla asociada."
-          />
-        } @else {
-          <div class="od-delivery">
-            <ui-status [label]="deliveryName(o.deliveryStatus.statusCode)" />
-            @if (o.deliveryStatus.returnedLines.length === 0) {
-              <p class="od-muted od-delivery-note">Sin líneas devueltas.</p>
-            } @else {
-              <div class="od-returns">
-                @for (line of o.deliveryStatus.returnedLines; track line.productId) {
-                  <div class="od-return-row">
-                    <span>{{ productName(line) }}</span>
-                    <span class="od-muted">
-                      {{ line.quantity }} unid.
-                      @if (line.bonus) {
-                        · Bonificado
+              <div class="od-cards-mobile">
+                @for (item of sortedItems(); track item.lineNumber) {
+                  <div class="od-card-mobile">
+                    <div class="od-card-mobile-head">
+                      <span class="od-card-mobile-name">{{ item.productName }}</span>
+                      @if (lineType(item) !== 'SALE') {
+                        <span class="od-type-tag" [style.color]="typeColorVar(item)">{{
+                          lineTypeName(item)
+                        }}</span>
                       }
-                    </span>
+                    </div>
+                    <div class="od-muted">
+                      {{ item.quantity }}
+                      @if (!item.bonus) {
+                        × {{ formatSoles(item.unitPrice) }} = {{ formatSoles(item.subtotal) }}
+                      }
+                    </div>
+                    @if (item.stockPending) {
+                      <div class="od-pending-note">⚠ Pendiente de stock</div>
+                    }
                   </div>
                 }
               </div>
+            </ui-card>
+
+            @if (applications().length > 0) {
+              <ui-card>
+                <h2 class="od-section-title">Promociones aplicadas</h2>
+                <div class="od-promo-list">
+                  @for (a of applications(); track a.promoApplicationId) {
+                    <div class="od-promo-row">
+                      <span class="od-promo-name">{{ a.promoName }}</span>
+                      <span class="od-muted">
+                        @if (a.productName) {
+                          {{ a.quantity }} × {{ a.productName }}
+                        } @else if (a.discountAmount) {
+                          {{ formatSoles(a.discountAmount) }} de descuento
+                        }
+                      </span>
+                    </div>
+                  }
+                </div>
+              </ui-card>
+            }
+
+            <ui-card>
+              <h2 class="od-section-title">Reparto</h2>
+              @if (!o.deliveryStatus) {
+                <ui-empty
+                  title="Sin información de reparto"
+                  body="Este pedido todavía no tiene planilla asociada."
+                />
+              } @else {
+                <div class="od-delivery">
+                  <ui-status [label]="deliveryName(o.deliveryStatus.statusCode)" />
+                  @if (o.deliveryStatus.returnedLines.length === 0) {
+                    <p class="od-muted od-delivery-note">Sin líneas devueltas.</p>
+                  } @else {
+                    <div class="od-returns">
+                      @for (line of o.deliveryStatus.returnedLines; track line.productId) {
+                        <div class="od-return-row">
+                          <span>{{ productName(line) }}</span>
+                          <span class="od-muted">
+                            {{ line.quantity }} unid.
+                            @if (line.bonus) {
+                              · Bonificado
+                            }
+                          </span>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </ui-card>
+          </div>
+
+          <div class="od-side">
+            <ui-card title="Resumen" class="od-card-stack">
+              <div class="od-summary-row">
+                <span>Condición de pago</span
+                ><span>{{ paymentConditionName(o.paymentConditionId) }}</span>
+              </div>
+              <div class="od-summary-row">
+                <span>Total</span><span>{{ formatSoles(o.totalAmount) }}</span>
+              </div>
+              <div class="od-summary-row">
+                <span>Descuento</span><span>{{ formatSoles(o.discountAmount) }}</span>
+              </div>
+              <div class="od-summary-row od-summary-strong">
+                <span>Neto a cobrar</span><span>{{ formatSoles(o.netAmount) }}</span>
+              </div>
+              @if (o.sentToBillingAt) {
+                <div class="od-summary-row">
+                  <span>Enviado a facturación</span>
+                  <span>
+                    {{ dateTimeText(o.sentToBillingAt) }}
+                    @if (o.erpUploaded) {
+                      <ui-badge tone="success">Recibido</ui-badge>
+                    } @else {
+                      <ui-badge tone="warning">Pendiente</ui-badge>
+                    }
+                  </span>
+                </div>
+              }
+            </ui-card>
+
+            @if (bonusLines().length > 0) {
+              <ui-card title="Bonificaciones" class="od-card-stack">
+                <p class="od-muted">
+                  {{ bonusLines().length }} línea{{ bonusLines().length === 1 ? '' : 's' }} ·
+                  {{ bonusUnits() }} unidad{{ bonusUnits() === 1 ? '' : 'es' }}
+                </p>
+                @if (stockPendingLines().length > 0) {
+                  <button
+                    uiButton
+                    variant="ghost"
+                    size="sm"
+                    class="od-bonus-pending-link"
+                    routerLink="/pedidos/bonificaciones-pendientes"
+                  >
+                    {{ stockPendingLines().length }} pendiente{{
+                      stockPendingLines().length === 1 ? '' : 's'
+                    }}
+                    de stock · ver
+                  </button>
+                }
+              </ui-card>
             }
           </div>
-        }
+        </div>
       }
     </section>
   `,
@@ -396,11 +464,17 @@ import { formatSoles } from '../../shared/pipes/money';
         margin-top: 16px;
         padding: 12px 16px;
         border: 1px solid var(--st-no-purchase);
+        border-radius: var(--radius-control, 0);
         font-size: 13px;
         color: var(--ink);
       }
       .od-alert-warn {
         background: color-mix(in srgb, var(--st-no-purchase) 10%, transparent);
+      }
+      .od-alert-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
       }
       .od-choice-card {
         margin-top: 10px;
@@ -419,48 +493,77 @@ import { formatSoles } from '../../shared/pipes/money';
       }
       .od-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+        grid-template-columns: 1fr 360px;
         gap: 20px;
         margin-top: 20px;
+        align-items: start;
       }
-      .od-field {
+      .od-main {
         display: grid;
-        gap: 4px;
+        gap: 20px;
+        min-width: 0;
       }
-      .od-label {
-        font-size: var(--fs-label);
-        letter-spacing: var(--ls-label);
-        text-transform: uppercase;
+      .od-side {
+        display: grid;
+        gap: 20px;
+        position: sticky;
+        top: var(--sp-6);
+      }
+      .od-card-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .od-summary-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
         color: var(--ink-muted);
       }
-      .od-value {
-        font-size: 15px;
-        color: var(--ink);
+      .od-summary-row:last-child {
+        align-items: flex-start;
       }
-      .od-value-strong {
-        font-weight: 800;
+      .od-summary-strong {
+        padding-top: 8px;
+        border-top: 1px solid var(--hairline);
+        font-weight: 700;
+        color: var(--ink);
+        font-size: 16px;
+      }
+      .od-bonus-pending-link {
+        color: var(--st-pendiente);
+        justify-content: flex-start;
+        padding: 0;
       }
       .od-section-title {
-        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
-        margin: 32px 0 14px;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 14px;
         color: var(--ink);
-        border-bottom: var(--border-rule);
-        padding-bottom: 8px;
       }
       .od-muted {
         color: var(--ink-muted);
         font-size: 13px;
       }
-      .od-badge {
+      .od-type-tag {
         font-size: 11px;
         font-weight: 800;
-        color: var(--st-vigente, var(--accent-ink));
-      }
-      .od-badge-warn {
-        color: var(--st-no-purchase);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
       }
       .od-row-pending {
         background: color-mix(in srgb, var(--st-no-purchase) 8%, transparent);
+      }
+      .od-pending-note-row td {
+        padding: 0 0 10px;
+        border: 0;
+      }
+      .od-pending-note {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--st-no-purchase);
       }
       .od-cards-mobile {
         display: none;
@@ -475,7 +578,7 @@ import { formatSoles } from '../../shared/pipes/money';
         display: flex;
         justify-content: space-between;
         gap: 12px;
-        background: var(--bg);
+        background: var(--surface);
         padding: 8px 10px;
         font-size: 13px;
       }
@@ -499,22 +602,9 @@ import { formatSoles } from '../../shared/pipes/money';
         display: flex;
         justify-content: space-between;
         gap: 12px;
-        background: var(--bg);
+        background: var(--surface);
         padding: 8px 10px;
         font-size: 13px;
-      }
-      .od-badge-erp {
-        display: inline-block;
-        margin-left: 8px;
-        font-size: 11px;
-        font-weight: 800;
-        padding: 1px 6px;
-      }
-      .od-badge-erp-ok {
-        color: var(--st-vigente);
-      }
-      .od-badge-erp-pending {
-        color: var(--st-pendiente);
       }
       .od-checks-row {
         display: flex;
@@ -538,6 +628,14 @@ import { formatSoles } from '../../shared/pipes/money';
         margin-top: 10px;
       }
 
+      @media (max-width: 900px) {
+        .od-grid {
+          grid-template-columns: 1fr;
+        }
+        .od-side {
+          position: static;
+        }
+      }
       @media (max-width: 767px) {
         .od-page {
           padding: var(--sp-4);
@@ -581,17 +679,21 @@ export class OrderDetailPage {
   orderId = input<string>('');
 
   protected statusName = orderStatusName;
-  protected originName = originName;
   protected deliveryName = deliveryStatusName;
   protected dateTimeText = dateTimeText;
   protected formatSoles = formatSoles;
+  protected lineType = orderLineType;
+  protected lineTypeName = (item: OrderItemView) => orderLineTypeName(orderLineType(item));
+  protected typeColorVar = (item: OrderItemView) => {
+    const v = ORDER_LINE_TYPE_COLOR_VAR[orderLineType(item)];
+    return v ? `var(${v})` : null;
+  };
 
   protected order = signal<OrderDetail | null>(null);
   protected loading = signal(true);
   protected error = signal(false);
 
   protected pendingChoices = signal<PendingChoiceView[]>([]);
-  protected pendingBonus = signal<PendingBonusOrderView | null>(null);
   protected applications = signal<ApplicationView[]>([]);
   protected resolvingChoice = signal(false);
   protected delivering = signal(false);
@@ -603,8 +705,20 @@ export class OrderDetailPage {
   private paymentConditionNames = signal<Map<number, string>>(new Map());
 
   protected canViewCustomer = computed(() => this.auth.hasAny('customer.view'));
+
+  /** Ventas primero, luego bonificaciones; dentro de cada grupo, por lineNumber — doc 36, sección 5.4. */
+  protected sortedItems = computed(() => {
+    const items = this.order()?.items ?? [];
+    return [...items].sort((a, b) => {
+      if (a.bonus !== b.bonus) return a.bonus ? 1 : -1;
+      return a.lineNumber - b.lineNumber;
+    });
+  });
+  protected bonusLines = computed(() => this.order()?.items.filter((i) => i.bonus) ?? []);
+  protected bonusUnits = computed(() => this.bonusLines().reduce((sum, i) => sum + i.quantity, 0));
+  protected stockPendingLines = computed(() => this.bonusLines().filter((i) => i.stockPending));
   protected blockedForClosing = computed(
-    () => this.pendingChoices().length > 0 || !!this.pendingBonus(),
+    () => this.pendingChoices().length > 0 || this.stockPendingLines().length > 0,
   );
 
   private loadEffect = effect(() => {
@@ -631,7 +745,7 @@ export class OrderDetailPage {
         this.order.set(detail);
         this.loading.set(false);
         this.billingValidation.set(null);
-        this.loadAlerts(detail);
+        this.loadPendingChoices(detail);
         this.promoSvc
           .applicationsByOrder(id)
           .pipe(catchError(() => of([])))
@@ -644,23 +758,16 @@ export class OrderDetailPage {
     });
   }
 
-  private loadAlerts(detail: OrderDetail) {
+  private loadPendingChoices(detail: OrderDetail) {
     if (detail.statusCode !== 'OPEN') {
       this.pendingChoices.set([]);
-      this.pendingBonus.set(null);
       return;
     }
     forkJoin({
       choices: this.promoSvc.pendingChoices().pipe(catchError(() => of([]))),
-      bonuses: this.orderSvc.pendingBonuses().pipe(catchError(() => of([]))),
-    }).subscribe(({ choices, bonuses }) => {
+    }).subscribe(({ choices }) => {
       this.pendingChoices.set(choices.filter((c) => c.orderId === detail.orderId));
-      this.pendingBonus.set(bonuses.find((b) => b.orderId === detail.orderId) ?? null);
     });
-  }
-
-  protected isPendingLine(lineNumber: number): boolean {
-    return !!this.pendingBonus()?.pendingLines.some((l) => l.lineNumber === lineNumber);
   }
 
   protected optionAvailable(opt: ChoiceOptionView): boolean {
@@ -786,7 +893,7 @@ export class OrderDetailPage {
     this.dialog
       .confirm({
         title: 'Recalcular pedido',
-        message: `Se actualizarán los precios y las promociones del pedido ${o.orderId}. Su total puede cambiar. ¿Recalcular?`,
+        message: `Se actualizarán los precios y las promociones del pedido ${o.orderId}, y se reintentará el stock de sus bonificaciones. Su total puede cambiar. ¿Recalcular?`,
         confirmLabel: 'Recalcular',
       })
       .subscribe((confirmed) => {

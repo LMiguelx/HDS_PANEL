@@ -7,6 +7,7 @@ import {
   BatchCustomerView,
   BatchDetail,
   BatchListFilters,
+  BatchReturnsReport,
   BatchSummary,
   ReturnReasonView,
   ReturnView,
@@ -44,6 +45,11 @@ export class DeliveryAdminService {
   /** Exige que ningún ítem quede en PENDING. */
   settle(batchId: number) {
     return this.http.post<void>(`${this.base}/batches/${batchId}/settle`, {});
+  }
+
+  /** delivery.manage — todo lo devuelto en la planilla, sin paginar (doc 36, sección 8.2). */
+  batchReturns(batchId: number) {
+    return this.http.get<BatchReturnsReport>(`${this.base}/batches/${batchId}/returns`);
   }
 
   returnsByInvoice(invoiceId: string) {

@@ -67,3 +67,28 @@ export function deliveryColumnText(
   if (deliveryStatusCode) return deliveryStatusName(deliveryStatusCode);
   return statusCode === 'COUNTER_DELIVERED' ? 'Entregado en mostrador' : '—';
 }
+
+/**
+ * Tipo de línea del pedido — doc 36, sección 3.1. No llega como campo: se
+ * deduce de `bonus`/`allocationId`.
+ */
+export type OrderLineType = 'SALE' | 'PROMO' | 'ALLOCATION';
+
+export function orderLineType(item: {
+  bonus: boolean;
+  allocationId: number | null;
+}): OrderLineType {
+  if (!item.bonus) return 'SALE';
+  return item.allocationId != null ? 'ALLOCATION' : 'PROMO';
+}
+
+export function orderLineTypeName(type: OrderLineType): string {
+  return type === 'SALE' ? 'Venta' : type === 'PROMO' ? 'Promoción' : 'Dotación';
+}
+
+/** Violeta: reutiliza --st-counter-delivered, el único tono violeta ya definido en la paleta. */
+export const ORDER_LINE_TYPE_COLOR_VAR: Record<OrderLineType, string | null> = {
+  SALE: null,
+  PROMO: '--st-open',
+  ALLOCATION: '--st-counter-delivered',
+};

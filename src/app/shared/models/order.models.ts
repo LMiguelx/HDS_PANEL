@@ -57,6 +57,8 @@ export interface OrderItemView {
   unitPrice: number;
   subtotal: number;
   bonus: boolean;
+  allocationId: number | null; // con valor: la línea es Dotación — doc 36, sección 3.1
+  stockPending: boolean; // true = bonificación otorgada sin stock que la respalde
 }
 
 export interface ReturnedLineView {
@@ -106,10 +108,17 @@ export interface OrderItemEditCommand {
   newQuantity: number; // cantidad FINAL; 0 = quitar la línea
 }
 
+/** Dotación que cambia al editar — doc 36, sección 6.2. */
+export interface AllocationEditCommand {
+  allocationId: number;
+  newQuantity: number; // cantidad FINAL, 0 o más, hasta 2 decimales; 0 = quitar
+}
+
 export interface UpdateOrderCommand {
   paymentConditionId?: number | null; // null/omitido = no cambia
   catalogItems: OrderItemEditCommand[];
   predictedItems: OrderItemEditCommand[];
+  allocationItems?: AllocationEditCommand[]; // NUEVO (doc 36) — dotaciones del vendedor que cambian
 }
 
 export interface PendingBonusLineView {

@@ -12,10 +12,13 @@ import { UiStepper, UiStep } from '../../shared/ui/stepper/stepper';
 import { UiOptionCard } from '../../shared/ui/option-card/option-card';
 import { UiBadge } from '../../shared/ui/badge/badge';
 import { UiTabs, UiTabItem } from '../../shared/ui/tabs/tabs';
+import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { AuthService } from '../../core/auth/auth';
 import { RouteStore } from './route-store';
 import { CounterSessionStore } from './counter-session-store';
 import { CounterOrderAdminService } from './counter-order-admin';
 import { OrderAdminService } from './order-admin';
+import { AllocationService } from '../sales/allocation';
 import { OrderSimulationService } from '../promos/order-simulation';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
 import { LookupService, toUiLookup } from '../promos/lookup';
@@ -31,12 +34,27 @@ import {
   SimulateOrderCommand,
 } from '../../shared/models/promo-simulation.models';
 import {
+  AllocationEditCommand,
   OrderDetail,
   OrderItemEditCommand,
   UpdateOrderCommand,
 } from '../../shared/models/order.models';
+import { AllocationView } from '../../shared/models/allocation.models';
 import { formatSoles } from '../../shared/pipes/money';
 import { quantityText } from '../sales-reports/sales-report-format';
+import { dateText } from '../assignments/assignment-format';
+
+interface AllocationRow {
+  allocationId: number;
+  productName: string;
+  promoName: string | null;
+  periodEnd: string | null; // null + !expired = sin fecha de fin
+  expired: boolean;
+  available: number | null; // null en las vencidas
+  originalQuantity: number; // lo que ya tenía el pedido — para el diff al guardar
+  max: number;
+  stockPending: boolean;
+}
 
 interface CartLine {
   productId: number;
@@ -265,7 +283,7 @@ function initials(name: string): string {
                           class="cof-line-qty"
                           type="number"
                           min="0.001"
-                          step="0.001"
+                          step="0.01"
                           [value]="line.quantity"
                           (change)="updateQuantity(line, $event)"
                         />
@@ -276,7 +294,86 @@ function initials(name: string): string {
                     }
                   </div>
                 }
+
+                @if (editMode() && promoLines().length > 0) {
+                  <div class="cof-promo-readonly">
+                    <span class="cof-label">Promociones de este pedido</span>
+                    @for (p of promoLines(); track p.lineNumber) {
+                      <div class="cof-promo-readonly-row">
+                        <span>{{ p.quantity }} × {{ p.productName }}</span>
+                        <span class="cof-muted">Se recalcula al guardar</span>
+                      </div>
+                    }
+                  </div>
+                }
               </ui-card>
+
+              @if (showAllocationBlock()) {
+                <ui-card
+                  title="Dotación de {{ originalOrder()?.salespersonName }}"
+                  subtitle="Es el cupo del vendedor, aunque edite supervisión."
+                >
+                  @if (allocationRows().length === 0) {
+                    <p class="cof-muted">
+                      Este vendedor no tiene dotaciones vigentes ni en este pedido.
+                    </p>
+                  } @else {
+                    <table class="ui-table-grid cof-allocation-table">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>Vigencia</th>
+                          <th>Disponible</th>
+                          <th>En el pedido</th>
+                          <th>Máx.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (row of allocationRows(); track row.allocationId) {
+                          <tr>
+                            <td>{{ row.productName }}</td>
+                            <td>
+                              @if (row.expired) {
+                                <span class="cof-expired-tag">Vencida</span>
+                              } @else if (row.periodEnd) {
+                                {{ 'hasta ' + dateText(row.periodEnd) }}
+                              } @else {
+                                Sin fecha de fin
+                              }
+                            </td>
+                            <td class="cof-muted">{{ row.available ?? '—' }}</td>
+                            <td>
+                              <input
+                                class="cof-line-qty"
+                                type="number"
+                                min="0"
+                                [max]="row.max"
+                                step="0.01"
+                                [value]="allocationQuantity(row)"
+                                (change)="setAllocationQuantity(row, $event)"
+                              />
+                            </td>
+                            <td class="cof-muted">{{ row.max }}</td>
+                          </tr>
+                          @if (row.expired) {
+                            <tr class="cof-allocation-note-row">
+                              <td colspan="5" class="cof-allocation-note">
+                                Solo se puede bajar o quitar
+                              </td>
+                            </tr>
+                          } @else if (row.stockPending) {
+                            <tr class="cof-allocation-note-row">
+                              <td colspan="5" class="cof-allocation-note cof-allocation-note-warn">
+                                ⚠ Pendiente de stock: se reintenta al guardar
+                              </td>
+                            </tr>
+                          }
+                        }
+                      </tbody>
+                    </table>
+                  }
+                </ui-card>
+              }
 
               <ui-card class="cof-card-stack">
                 <ui-tabs [items]="tabs" [(value)]="activeTab" />
@@ -354,6 +451,30 @@ function initials(name: string): string {
           @if (canEditCart()) {
             <div class="cof-right">
               <ui-card title="Resumen" class="cof-sim-card">
+                @if (editMode()) {
+                  <div class="cof-change-summary">
+                    <p class="cof-muted">
+                      @if (saleChangeCount() === 0 && allocationChangeCount() === 0) {
+                        Todavía no hay cambios.
+                      } @else {
+                        @if (saleChangeCount() > 0) {
+                          {{ saleChangeCount() }} línea{{ saleChangeCount() === 1 ? '' : 's' }} de
+                          venta cambia{{ saleChangeCount() === 1 ? '' : 'n' }}
+                        }
+                        @if (allocationChangeCount() > 0) {
+                          @if (saleChangeCount() > 0) {
+                            ·
+                          }
+                          {{ allocationChangeCount() }} dotación{{
+                            allocationChangeCount() === 1 ? '' : 'es'
+                          }}
+                          cambia{{ allocationChangeCount() === 1 ? '' : 'n' }}
+                        }
+                      }
+                    </p>
+                    <p class="cof-muted">Las promociones se vuelven a calcular al guardar.</p>
+                  </div>
+                }
                 @if (simulating()) {
                   <p class="cof-muted">Calculando…</p>
                 } @else if (simResult(); as s) {
@@ -666,6 +787,47 @@ function initials(name: string): string {
         background: var(--surface-sunk);
         color: var(--ink);
       }
+      .cof-promo-readonly {
+        display: grid;
+        gap: 6px;
+        padding-top: 14px;
+        margin-top: 14px;
+        border-top: 1px solid var(--hairline);
+      }
+      .cof-promo-readonly-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 13px;
+      }
+      .cof-allocation-table {
+        width: 100%;
+      }
+      .cof-allocation-note-row td {
+        padding: 0 0 10px;
+        border: 0;
+      }
+      .cof-allocation-note {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .cof-allocation-note-warn {
+        color: var(--st-no-purchase);
+        font-weight: 700;
+      }
+      .cof-expired-tag {
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+      .cof-change-summary {
+        padding-bottom: 14px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid var(--hairline);
+        display: grid;
+        gap: 4px;
+      }
       .cof-right {
         position: sticky;
         top: var(--sp-6);
@@ -756,9 +918,12 @@ function initials(name: string): string {
 export class CounterOrderFormPage {
   private counterOrderSvc = inject(CounterOrderAdminService);
   private orderSvc = inject(OrderAdminService);
+  private allocationSvc = inject(AllocationService);
   private simulationSvc = inject(OrderSimulationService);
   private catalogSvc = inject(CatalogLookupService);
   private lookupSvc = inject(LookupService);
+  private auth = inject(AuthService);
+  private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
   private router = inject(Router);
 
@@ -800,6 +965,79 @@ export class CounterOrderFormPage {
   protected simResult = signal<OrderSimulationView | null>(null);
   protected simulating = signal(false);
   protected submitting = signal(false);
+
+  // — Dotación del vendedor (doc 36, sección 6) — solo en edición de pedidos de campo.
+  protected vendorAllocations = signal<AllocationView[]>([]);
+  protected allocationQuantities = signal<Map<number, number>>(new Map());
+  protected canManageAllocations = computed(() =>
+    this.auth.hasAny('order.manage', 'promo.allocate'),
+  );
+  protected showAllocationBlock = computed(
+    () =>
+      this.editMode() &&
+      this.originalOrder()?.originCode === 'FIELD' &&
+      this.canManageAllocations(),
+  );
+
+  protected allocationRows = computed<AllocationRow[]>(() => {
+    const order = this.originalOrder();
+    if (!order) return [];
+    const inOrder = new Map<
+      number,
+      { productName: string; quantity: number; stockPending: boolean }
+    >();
+    for (const item of order.items) {
+      if (!item.bonus || item.allocationId == null) continue;
+      const prev = inOrder.get(item.allocationId);
+      inOrder.set(item.allocationId, {
+        productName: item.productName,
+        quantity: (prev?.quantity ?? 0) + item.quantity,
+        stockPending: (prev?.stockPending ?? false) || item.stockPending,
+      });
+    }
+    const rows: AllocationRow[] = [];
+    const seen = new Set<number>();
+    for (const a of this.vendorAllocations()) {
+      const existing = inOrder.get(a.allocationId);
+      seen.add(a.allocationId);
+      rows.push({
+        allocationId: a.allocationId,
+        productName: a.productName,
+        promoName: a.promoName,
+        periodEnd: a.periodEnd,
+        expired: false,
+        available: a.availableQuantity,
+        originalQuantity: existing?.quantity ?? 0,
+        max: a.availableQuantity + (existing?.quantity ?? 0),
+        stockPending: existing?.stockPending ?? false,
+      });
+    }
+    for (const [allocationId, data] of inOrder) {
+      if (seen.has(allocationId)) continue;
+      rows.push({
+        allocationId,
+        productName: data.productName,
+        promoName: null,
+        periodEnd: null,
+        expired: true,
+        available: null,
+        originalQuantity: data.quantity,
+        max: data.quantity,
+        stockPending: data.stockPending,
+      });
+    }
+    return rows;
+  });
+
+  protected allocationChangeCount = computed(
+    () =>
+      this.allocationRows().filter(
+        (r) =>
+          (this.allocationQuantities().get(r.allocationId) ?? r.originalQuantity) !==
+          r.originalQuantity,
+      ).length,
+  );
+  protected saleChangeCount = computed(() => this.buildSaleItemChanges().length);
 
   private idempotencyKey = signal(newIdempotencyKey());
   private simTrigger$ = new Subject<void>();
@@ -853,13 +1091,23 @@ export class CounterOrderFormPage {
           this.originalOrder.set(detail);
           this.loadingOrder.set(false);
           this.paymentConditionId.set(String(detail.paymentConditionId));
+          // Solo las líneas de venta son editables aquí — promoción y
+          // dotación tienen su propio trato (doc 36, sección 6.3).
           this.lines.set(
-            detail.items.map((i) => ({
-              productId: i.productId,
-              productName: i.productName,
-              quantity: i.quantity,
-            })),
+            detail.items
+              .filter((i) => !i.bonus)
+              .map((i) => ({
+                productId: i.productId,
+                productName: i.productName,
+                quantity: i.quantity,
+              })),
           );
+          if (detail.originCode === 'FIELD' && this.canManageAllocations()) {
+            this.allocationSvc.byUser(detail.salespersonId).subscribe({
+              next: (list) => this.vendorAllocations.set(list),
+              error: () => this.vendorAllocations.set([]),
+            });
+          }
         },
         error: () => this.loadingOrder.set(false),
       });
@@ -1059,10 +1307,13 @@ export class CounterOrderFormPage {
     });
   }
 
-  protected submitEdit() {
+  /** Solo las líneas de venta (bonus = false) del pedido original. */
+  private buildSaleItemChanges(): OrderItemEditCommand[] {
     const order = this.originalOrder();
-    if (!order) return;
-    const originalMap = new Map(order.items.map((i) => [i.productId, i.quantity]));
+    if (!order) return [];
+    const originalMap = new Map(
+      order.items.filter((i) => !i.bonus).map((i) => [i.productId, i.quantity]),
+    );
     const currentMap = new Map(this.lines().map((l) => [l.productId, l.quantity]));
     const items: OrderItemEditCommand[] = [];
     for (const [productId, qty] of currentMap) {
@@ -1071,20 +1322,102 @@ export class CounterOrderFormPage {
     for (const productId of originalMap.keys()) {
       if (!currentMap.has(productId)) items.push({ productId, newQuantity: 0 });
     }
-    if (items.length === 0) {
+    return items;
+  }
+
+  private buildAllocationChanges(): AllocationEditCommand[] {
+    return this.allocationRows()
+      .filter(
+        (r) =>
+          (this.allocationQuantities().get(r.allocationId) ?? r.originalQuantity) !==
+          r.originalQuantity,
+      )
+      .map((r) => ({
+        allocationId: r.allocationId,
+        newQuantity: this.allocationQuantities().get(r.allocationId) ?? r.originalQuantity,
+      }));
+  }
+
+  /** Líneas de promoción del pedido — solo lectura, se recalculan al guardar (doc 36, sección 6.3). */
+  protected promoLines = computed(
+    () => this.originalOrder()?.items.filter((i) => i.bonus && i.allocationId == null) ?? [],
+  );
+
+  protected dateText = dateText;
+
+  protected allocationQuantity(row: AllocationRow): number {
+    return this.allocationQuantities().get(row.allocationId) ?? row.originalQuantity;
+  }
+
+  protected setAllocationQuantity(row: AllocationRow, ev: Event) {
+    const raw = Number((ev.target as HTMLInputElement).value);
+    const value = Number.isFinite(raw) ? Math.max(0, Math.min(raw, row.max)) : row.originalQuantity;
+    this.allocationQuantities.update((map) => {
+      const next = new Map(map);
+      next.set(row.allocationId, value);
+      return next;
+    });
+  }
+
+  protected submitEdit() {
+    const order = this.originalOrder();
+    if (!order) return;
+    const catalogItems = this.buildSaleItemChanges();
+    const allocationItems = this.buildAllocationChanges();
+    const paymentConditionChanged = Number(this.paymentConditionId()) !== order.paymentConditionId;
+
+    if (catalogItems.length === 0 && allocationItems.length === 0 && !paymentConditionChanged) {
       this.toast.info('No hay cambios para guardar.');
       return;
     }
+
+    const parts: string[] = [];
+    if (catalogItems.length > 0) {
+      parts.push(
+        `${catalogItems.length} línea${catalogItems.length === 1 ? '' : 's'} de venta cambia${catalogItems.length === 1 ? '' : 'n'}`,
+      );
+    }
+    if (allocationItems.length > 0) {
+      parts.push(
+        `${allocationItems.length} dotación${allocationItems.length === 1 ? '' : 'es'} cambia${allocationItems.length === 1 ? '' : 'n'}`,
+      );
+    }
+    const message = `${parts.join(' y ')}. Las promociones se vuelven a calcular al guardar. ¿Guardar cambios?`;
+
+    this.dialog
+      .confirm({ title: 'Guardar cambios', message, confirmLabel: 'Guardar cambios' })
+      .subscribe((confirmed) => {
+        if (confirmed) this.doSubmitEdit(order, catalogItems, allocationItems);
+      });
+  }
+
+  private doSubmitEdit(
+    order: OrderDetail,
+    catalogItems: OrderItemEditCommand[],
+    allocationItems: AllocationEditCommand[],
+  ) {
     const cmd: UpdateOrderCommand = {
       paymentConditionId: Number(this.paymentConditionId()) || null,
-      catalogItems: items,
+      catalogItems,
       predictedItems: [],
+      allocationItems: allocationItems.length > 0 ? allocationItems : undefined,
     };
+    const editedAllocationIds = new Set(allocationItems.map((a) => a.allocationId));
     this.submitting.set(true);
     this.orderSvc.updateItems(order.orderId, cmd).subscribe({
-      next: () => {
+      next: (updated) => {
         this.submitting.set(false);
-        this.toast.success('Pedido actualizado.');
+        const pendingNames = updated.items
+          .filter(
+            (i) =>
+              i.allocationId != null && editedAllocationIds.has(i.allocationId) && i.stockPending,
+          )
+          .map((i) => i.productName);
+        if (pendingNames.length > 0) {
+          this.toast.error(`La dotación de ${pendingNames.join(', ')} quedó pendiente de stock.`);
+        } else {
+          this.toast.success('Pedido actualizado.');
+        }
         this.router.navigate(['/pedidos/detalle', order.orderId]);
       },
       error: (err) => {
