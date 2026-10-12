@@ -1,20 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, ReplaySubject, share } from 'rxjs';
-
-/** Memoriza el primer resultado exitoso para el resto de la sesión; un error no queda pegado (se reintenta en la próxima llamada). */
-function cacheForSession<T>(source$: Observable<T>): Observable<T> {
-  return source$.pipe(
-    share({
-      connector: () => new ReplaySubject(1),
-      resetOnError: true,
-      resetOnComplete: false,
-      resetOnRefCountZero: false,
-    }),
-  );
-}
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
+import { cacheForSession } from '../../shared/utils/cache-for-session';
 import {
   AdminNotificationPage,
   BroadcastDetail,

@@ -22,6 +22,13 @@ export interface PaymentConditionView {
   termDays: number;
 }
 
+/** Catálogo global de tipos de cliente — GET /catalog/customer-types (doc 38, sección 4.1). */
+export interface CustomerTypeView {
+  customerTypeId: number;
+  code: string;
+  name: string;
+}
+
 export interface ProductView {
   productId: number;
   code: string;
@@ -35,6 +42,7 @@ export interface ProductView {
   familyId: number;
   familyName: string;
   brandName: string;
+  active: boolean;
 }
 
 export interface ProductListFilters {

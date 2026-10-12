@@ -1,8 +1,15 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { BrandView, FamilyView, PaymentConditionView } from '../../shared/models/catalog.models';
+import {
+  BrandView,
+  CustomerTypeView,
+  FamilyView,
+  PaymentConditionView,
+} from '../../shared/models/catalog.models';
 import { WarehouseView } from '../../shared/models/inventory.models';
+import { cacheForSession } from '../../shared/utils/cache-for-session';
 
 /**
  * Datos de referencia sin permiso especial (cualquier autenticado) — marcas,
@@ -16,6 +23,20 @@ import { WarehouseView } from '../../shared/models/inventory.models';
 export class CatalogLookupService {
   private http = inject(HttpClient);
   private api = environment.apiUrl;
+
+  private customerTypesCache$: Observable<CustomerTypeView[]> | null = null;
+
+  /**
+   * Catálogo global de tipos de cliente — nuevo, doc 38 sección 4.1. Es
+   * igual para todas las empresas y cambia muy poco: se memoriza para el
+   * resto de la sesión en vez de pedirlo en cada diálogo de precio.
+   */
+  customerTypes(): Observable<CustomerTypeView[]> {
+    this.customerTypesCache$ ??= cacheForSession(
+      this.http.get<CustomerTypeView[]>(`${this.api}/catalog/customer-types`),
+    );
+    return this.customerTypesCache$;
+  }
 
   brands() {
     return this.http.get<BrandView[]>(`${this.api}/catalog/brands`);

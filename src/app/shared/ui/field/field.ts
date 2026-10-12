@@ -58,11 +58,13 @@ let nextId = 0;
           <div class="ui-field-input-wrap">
             @if (icon()) {
               <span class="material-icons ui-field-icon" aria-hidden="true">{{ icon() }}</span>
+            } @else if (prefix()) {
+              <span class="ui-field-prefix" aria-hidden="true">{{ prefix() }}</span>
             }
             <input
               [id]="id"
               class="ui-input"
-              [class.ui-input-icon]="!!icon()"
+              [class.ui-input-icon]="!!icon() || !!prefix()"
               [class.ui-input-suffix]="hasSuffix()"
               [type]="type()"
               [placeholder]="placeholder()"
@@ -106,6 +108,16 @@ let nextId = 0;
         top: 50%;
         transform: translateY(-50%);
         font-size: 20px;
+        color: var(--ink-muted);
+        pointer-events: none;
+      }
+      .ui-field-prefix {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--fs-dense);
+        font-weight: 700;
         color: var(--ink-muted);
         pointer-events: none;
       }
@@ -180,6 +192,8 @@ export class UiField {
   options = input<UiFieldOption[]>([]);
   /** Ícono (ligadura de Material Icons) a la izquierda del input. Opcional. */
   icon = input('');
+  /** Texto corto a la izquierda del input en vez de un ícono (p. ej. "S/"). Se ignora si también hay `icon`. */
+  prefix = input('');
   /** Reserva espacio a la derecha para contenido proyectado con `fieldSuffix` (p. ej. el botón de mostrar/ocultar contraseña). */
   hasSuffix = input(false);
 

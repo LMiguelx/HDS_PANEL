@@ -731,13 +731,10 @@ Antes de dar una pantalla por terminada:
 
 Registro de lo que hoy no cumple este documento. Se corrige al tocar la pantalla o cuando se ordene; al corregirse, se borra la fila.
 
-| ID  | Defecto                                                                                                                                         | Dónde                          | Regla                                                                 |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
-| V1  | La sección "Escala de precios" de un producto sin precios muestra un rectángulo gris grande sin texto                                           | Catálogo → detalle de producto | 5.2 y 9: vacío compacto con "Agregar precio", o esqueleto que termina |
-| V2  | "Tipo de cliente (id)" es un campo de texto para escribir un id, con la ayuda "No hay catálogo de tipos de cliente — usa el id que corresponda" | Catálogo → Agregar precio      | 8.1 y 11.1: select con los nombres del catálogo                       |
-| V3  | **Activar** y **Desactivar** se muestran a la vez                                                                                               | Catálogo → detalle de producto | 13.1: solo la acción válida para el estado                            |
-| V7  | Avisos y esqueletos repetidos a mano en cada página (`od-alert`, `cof-alert`, `od-skeleton`, `cof-skeleton`)                                    | `orders` y otros               | 14.2                                                                  |
-| V8  | Títulos de sección con tamaños distintos (15 px en el detalle, 16 px en el carrito), escritos a mano                                            | `orders`                       | 6                                                                     |
-| V9  | Avisos generales con `--st-no-purchase` (estado de visita)                                                                                      | `orders`                       | 7.3: `--status-warn`                                                  |
-| V10 | Separación entre tarjetas de 20 px en un sitio y 24 px en otro                                                                                  | `orders`                       | 5.1                                                                   |
-| V11 | El ícono (`material-icons`) se carga desde Google Fonts por CDN, no empaquetado                                                                 | `index.html`                   | 2 y 14.3: se ve roto en el `.exe` sin internet                        |
+| ID  | Defecto                                                                                                      | Dónde            | Regla                                          |
+| --- | ------------------------------------------------------------------------------------------------------------ | ---------------- | ---------------------------------------------- |
+| V7  | Avisos y esqueletos repetidos a mano en cada página (`od-alert`, `cof-alert`, `od-skeleton`, `cof-skeleton`) | `orders` y otros | 14.2                                           |
+| V8  | Títulos de sección con tamaños distintos (15 px en el detalle, 16 px en el carrito), escritos a mano         | `orders`         | 6                                              |
+| V9  | Avisos generales con `--st-no-purchase` (estado de visita)                                                   | `orders`         | 7.3: `--status-warn`                           |
+| V10 | Separación entre tarjetas de 20 px en un sitio y 24 px en otro                                               | `orders`         | 5.1                                            |
+| V11 | El ícono (`material-icons`) se carga desde Google Fonts por CDN, no empaquetado                              | `index.html`     | 2 y 14.3: se ve roto en el `.exe` sin internet |

@@ -1,10 +1,12 @@
 import { Component, inject, signal } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../../shared/ui/field/field';
+import { UiModal } from '../../../shared/ui/modal/modal';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { PriceAdminService } from '../price-admin';
 import { CatalogLookupService } from '../catalog-lookup';
-import { PaymentConditionView } from '../../../shared/models/catalog.models';
+import { PaymentConditionView, CustomerTypeView } from '../../../shared/models/catalog.models';
 import { PriceView } from '../../../shared/models/price.models';
 
 export interface PriceFormDialogData {
@@ -16,81 +18,67 @@ export interface PriceFormDialogData {
 /**
  * Agregar/editar una fila de precio — PUT /api/prices (upsert por clave
  * natural: producto + condición de pago + tipo de cliente + cantidad
- * mínima). No hay catálogo documentado de tipos de cliente — se pide el id
- * como número, igual que el resto del panel trata ids sin nombre resuelto.
+ * mínima). Al editar, cambiar cualquiera de esos tres campos crearía otra
+ * fila en vez de modificar la existente, así que quedan bloqueados — doc
+ * 38, sección 4.3/7.5. El tipo de cliente ya tiene catálogo propio (antes
+ * se pedía el id a mano — V2).
  */
 @Component({
   selector: 'app-price-form-dialog',
-  imports: [UiButton, UiField],
+  imports: [UiButton, UiField, UiModal],
   template: `
-    <div class="pfd">
-      <h2 class="pfd-title">{{ data.price ? 'Editar precio' : 'Agregar precio' }}</h2>
-      <p class="pfd-sub">{{ data.productName }}</p>
-
+    <ui-modal
+      [title]="data.price ? 'Editar precio' : 'Agregar precio'"
+      [subtitle]="data.productName"
+      (close)="ref.close(false)"
+    >
       <div class="pfd-grid">
         <ui-field
           label="Condición de pago"
           type="select"
           [(value)]="paymentConditionId"
           [options]="paymentConditionOptions()"
-          [disabled]="loadingConditions()"
+          [disabled]="loadingCatalogs() || isEditing"
         />
         <ui-field
-          label="Tipo de cliente (id)"
-          type="number"
+          label="Tipo de cliente"
+          type="select"
           [(value)]="customerTypeId"
-          hint="No hay catálogo de tipos de cliente — usa el id que corresponda"
+          [options]="customerTypeOptions()"
+          [disabled]="loadingCatalogs() || isEditing"
         />
-        <ui-field label="Cantidad mínima" type="number" [(value)]="minQuantity" />
-        <ui-field label="Precio unitario" type="number" [(value)]="unitPrice" />
+        <ui-field
+          label="Cantidad mínima"
+          type="number"
+          [(value)]="minQuantity"
+          [disabled]="isEditing"
+        />
+        <ui-field label="Precio unitario" type="number" prefix="S/" [(value)]="unitPrice" />
       </div>
 
       @if (error()) {
         <div class="pfd-error">{{ error() }}</div>
       }
 
-      <div class="pfd-actions">
+      <ng-container modalFooter>
         <button uiButton variant="secondary" (click)="ref.close(false)">Cancelar</button>
         <button uiButton variant="primary" [loading]="saving()" (click)="submit()">
           Guardar precio
         </button>
-      </div>
-    </div>
+      </ng-container>
+    </ui-modal>
   `,
-  host: {
-    style:
-      'display:block; background:var(--bg); border:2px solid var(--divider); box-shadow:var(--elev-dialog); padding:24px;',
-  },
   styles: [
     `
-      .pfd {
-        display: grid;
-        gap: 16px;
-        width: 100%;
-      }
-      .pfd-title {
-        font-size: 20px;
-        margin: 0;
-        color: var(--ink);
-      }
-      .pfd-sub {
-        margin: -8px 0 0;
-        font-size: 13px;
-        color: var(--ink-muted);
-      }
       .pfd-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
-        gap: 14px;
+        gap: var(--sp-4);
       }
       .pfd-error {
-        color: var(--accent-ink);
-        font-size: 13px;
-      }
-      .pfd-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
+        color: var(--status-danger);
+        font-size: var(--fs-dense);
+        margin-top: var(--sp-3);
       }
     `,
   ],
@@ -101,13 +89,16 @@ export class PriceFormDialog {
   private priceSvc = inject(PriceAdminService);
   private lookupSvc = inject(CatalogLookupService);
 
+  protected isEditing = !!this.data.price;
+
   protected paymentConditionId = signal(String(this.data.price?.paymentConditionId ?? ''));
   protected customerTypeId = signal(String(this.data.price?.customerTypeId ?? ''));
   protected minQuantity = signal(String(this.data.price?.minQuantity ?? '1'));
   protected unitPrice = signal(String(this.data.price?.unitPrice ?? ''));
 
   protected paymentConditions = signal<PaymentConditionView[]>([]);
-  protected loadingConditions = signal(true);
+  protected customerTypes = signal<CustomerTypeView[]>([]);
+  protected loadingCatalogs = signal(true);
   protected saving = signal(false);
   protected error = signal('');
 
@@ -121,13 +112,24 @@ export class PriceFormDialog {
     ];
   }
 
+  protected customerTypeOptions(): UiFieldOption[] {
+    return [
+      { value: '', label: 'Selecciona un tipo de cliente' },
+      ...this.customerTypes().map((c) => ({ value: String(c.customerTypeId), label: c.name })),
+    ];
+  }
+
   constructor() {
-    this.lookupSvc.paymentConditions().subscribe({
-      next: (list) => {
-        this.paymentConditions.set(list);
-        this.loadingConditions.set(false);
+    forkJoin({
+      paymentConditions: this.lookupSvc.paymentConditions(),
+      customerTypes: this.lookupSvc.customerTypes(),
+    }).subscribe({
+      next: ({ paymentConditions, customerTypes }) => {
+        this.paymentConditions.set(paymentConditions);
+        this.customerTypes.set(customerTypes);
+        this.loadingCatalogs.set(false);
       },
-      error: () => this.loadingConditions.set(false),
+      error: () => this.loadingCatalogs.set(false),
     });
   }
 
@@ -137,8 +139,16 @@ export class PriceFormDialog {
     const minQuantity = Number(this.minQuantity());
     const unitPrice = Number(this.unitPrice());
 
-    if (!paymentConditionId || !customerTypeId || !minQuantity || !unitPrice) {
-      this.error.set('Todos los campos son obligatorios y deben ser mayores a 0.');
+    if (!paymentConditionId || !customerTypeId) {
+      this.error.set('Elige la condición de pago y el tipo de cliente.');
+      return;
+    }
+    if (!(minQuantity >= 0.001)) {
+      this.error.set('La cantidad mínima debe ser al menos 0.001.');
+      return;
+    }
+    if (!(unitPrice >= 0.0001)) {
+      this.error.set('El precio unitario debe ser al menos 0.0001.');
       return;
     }
 
@@ -160,9 +170,7 @@ export class PriceFormDialog {
         error: (err) => {
           this.saving.set(false);
           const detalle = err?.error?.detail ?? err?.error?.message;
-          this.error.set(
-            detalle ? `No pudimos guardar: ${detalle}` : 'No pudimos guardar el precio.',
-          );
+          this.error.set(detalle || 'No pudimos guardar el precio.');
         },
       });
   }
