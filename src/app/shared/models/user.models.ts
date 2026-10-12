@@ -17,6 +17,10 @@ export interface UserView {
   salesChannelId: number | null;
   active: boolean;
   roles: Role[];
+  homeBranchName: string | null; // doc 38, sección 4.5
+  salesChannelName: string | null;
+  passwordChangedAt: string | null; // null si nunca la cambió
+  nextPasswordChangeAt: string | null; // null si ya puede volver a cambiarla
 }
 
 export interface UserSummaryView {
@@ -38,7 +42,7 @@ export interface UpdateProfileCommand {
 
 export interface ChangePasswordCommand {
   currentPassword: string;
-  newPassword: string; // 8-100
+  newPassword: string; // 4-100 (doc 38, sección 4.6 — antes el doc 21 decía 8-100)
 }
 
 // — Administración —
