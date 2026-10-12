@@ -618,7 +618,7 @@ import { formatSoles } from '../../shared/pipes/money';
         color: var(--st-vigente);
       }
       .od-check.fail {
-        color: var(--st-vencida, #d13b3b);
+        color: var(--status-danger);
         font-weight: 700;
       }
       .od-issue-row {
@@ -733,7 +733,7 @@ export class OrderDetailPage {
   }
 
   protected paymentConditionName(id: number): string {
-    return this.paymentConditionNames().get(id) ?? `#${id}`;
+    return this.paymentConditionNames().get(id) ?? '—';
   }
 
   load() {
@@ -795,10 +795,7 @@ export class OrderDetailPage {
   }
 
   protected productName(line: ReturnedLineView): string {
-    return (
-      this.order()?.items.find((i) => i.productId === line.productId)?.productName ??
-      `Producto #${line.productId}`
-    );
+    return this.order()?.items.find((i) => i.productId === line.productId)?.productName ?? '—';
   }
 
   protected canEdit(o: OrderDetail): boolean {

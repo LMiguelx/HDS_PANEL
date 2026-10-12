@@ -18,28 +18,61 @@
 // Punto de color a la izquierda (opcional, ayuda a distinguir en b/n)
 .status-chip::before {
   content: '';
-  width: 7px; height: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--c);
 }
 
 // ---- Mapa estado → color ----
-.status-chip[data-status="OPEN"]            { --c: var(--st-open); }
-.status-chip[data-status="SENT_TO_BILLING"] { --c: var(--st-sent-to-billing); }
-.status-chip[data-status="CANCELLED"]       { --c: var(--st-cancelled); }
-.status-chip[data-status="IN_ROUTE"]        { --c: var(--st-in-route); }
-.status-chip[data-status="SETTLED"]         { --c: var(--st-settled); }
-.status-chip[data-status="PENDING"]         { --c: var(--st-pending); }
-.status-chip[data-status="DELIVERED"]       { --c: var(--st-delivered); }
-.status-chip[data-status="PARTIAL"]         { --c: var(--st-partial); }
-.status-chip[data-status="REJECTED"]        { --c: var(--st-rejected); }
-.status-chip[data-status="UNMATCHED"]       { --c: var(--st-unmatched); }
-.status-chip[data-status="MATCHED_AUTO"]    { --c: var(--st-matched-auto); }
-.status-chip[data-status="MATCHED_MANUAL"]  { --c: var(--st-matched-manual); }
-.status-chip[data-status="MISMATCH"]        { --c: var(--st-mismatch); }
-.status-chip[data-status="ATTENDED"]        { --c: var(--st-attended); }
-.status-chip[data-status="CLOSED"]          { --c: var(--st-closed); }
-.status-chip[data-status="NO_PURCHASE"]     { --c: var(--st-no-purchase); }
+.status-chip[data-status='OPEN'] {
+  --c: var(--st-open);
+}
+.status-chip[data-status='SENT_TO_BILLING'] {
+  --c: var(--st-sent-to-billing);
+}
+.status-chip[data-status='CANCELLED'] {
+  --c: var(--st-cancelled);
+}
+.status-chip[data-status='IN_ROUTE'] {
+  --c: var(--st-in-route);
+}
+.status-chip[data-status='SETTLED'] {
+  --c: var(--st-settled);
+}
+.status-chip[data-status='PENDING'] {
+  --c: var(--st-pending);
+}
+.status-chip[data-status='DELIVERED'] {
+  --c: var(--st-delivered);
+}
+.status-chip[data-status='PARTIAL'] {
+  --c: var(--st-partial);
+}
+.status-chip[data-status='REJECTED'] {
+  --c: var(--st-rejected);
+}
+.status-chip[data-status='UNMATCHED'] {
+  --c: var(--st-unmatched);
+}
+.status-chip[data-status='MATCHED_AUTO'] {
+  --c: var(--st-matched-auto);
+}
+.status-chip[data-status='MATCHED_MANUAL'] {
+  --c: var(--st-matched-manual);
+}
+.status-chip[data-status='MISMATCH'] {
+  --c: var(--st-mismatch);
+}
+.status-chip[data-status='ATTENDED'] {
+  --c: var(--st-attended);
+}
+.status-chip[data-status='CLOSED'] {
+  --c: var(--st-closed);
+}
+.status-chip[data-status='NO_PURCHASE'] {
+  --c: var(--st-no-purchase);
+}
 
 // ============================================================================
 // Módulo de Promociones — tabla densa del sistema nuevo (sin Material).
@@ -95,4 +128,13 @@
   word-wrap: normal;
   direction: ltr;
   -webkit-font-smoothing: antialiased;
+}
+
+// Velo de UiDialogService (CDK Overlay la inserta fuera de cualquier
+// componente, en <body>, así que tiene que ser una clase global — DESIGN.md
+// V4: antes no existía ninguna regla y el fondo quedaba invisible. Negro fijo
+// a propósito (no light-dark()): el velo oscurece lo que tapa en los dos
+// temas, igual que el velo nativo de @angular/cdk.
+.ui-dialog-backdrop {
+  background: rgba(0, 0, 0, 0.55);
 }

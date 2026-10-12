@@ -55,15 +55,15 @@ Marcas que se usan en el documento:
 
 El panel lo usan supervisión y administración para **decidir y actuar** sobre pedidos, reparto, stock, promociones y clientes. Las decisiones de diseño salen de ahí:
 
-| Principio | Qué significa en la práctica |
-|---|---|
-| **Profesional y sobrio** | Pocas tipografías, un solo acento (rojo institucional), colores de estado con significado, sin decoración que no informe |
-| **Consistente** | Mismo patrón para lo mismo en todos los módulos: cabecera de página, tarjeta, tabla, estado, aviso, formulario |
-| **Coherente con el módulo** | Cada módulo muestra lo suyo con los mismos bloques: pedidos priorizan montos y estado; reparto, avance y comprobantes; stock, cantidades y diferencias |
-| **Densidad útil** | Mucha información por pantalla, pero ordenada. Ni huecos ni amontonamiento |
-| **Accionable** | Lo que requiere atención se ve primero (avisos, pendientes, descuadres) y la acción que lo resuelve está al lado |
-| **Datos de negocio, no de base de datos** | Nombres, códigos, montos y estados legibles. El usuario no conoce ids ni códigos de catálogo internos |
-| **Honesto** | Si algo falla o no hay datos, se dice con claridad y se ofrece qué hacer |
+| Principio                                 | Qué significa en la práctica                                                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Profesional y sobrio**                  | Pocas tipografías, un solo acento (rojo institucional), colores de estado con significado, sin decoración que no informe                               |
+| **Consistente**                           | Mismo patrón para lo mismo en todos los módulos: cabecera de página, tarjeta, tabla, estado, aviso, formulario                                         |
+| **Coherente con el módulo**               | Cada módulo muestra lo suyo con los mismos bloques: pedidos priorizan montos y estado; reparto, avance y comprobantes; stock, cantidades y diferencias |
+| **Densidad útil**                         | Mucha información por pantalla, pero ordenada. Ni huecos ni amontonamiento                                                                             |
+| **Accionable**                            | Lo que requiere atención se ve primero (avisos, pendientes, descuadres) y la acción que lo resuelve está al lado                                       |
+| **Datos de negocio, no de base de datos** | Nombres, códigos, montos y estados legibles. El usuario no conoce ids ni códigos de catálogo internos                                                  |
+| **Honesto**                               | Si algo falla o no hay datos, se dice con claridad y se ofrece qué hacer                                                                               |
 
 ---
 
@@ -71,11 +71,11 @@ El panel lo usan supervisión y administración para **decidir y actuar** sobre 
 
 El mismo build se distribuye de tres formas:
 
-| Plataforma | Cómo | Uso esperado |
-|---|---|---|
+| Plataforma                    | Cómo                                                                | Uso esperado                             |
+| ----------------------------- | ------------------------------------------------------------------- | ---------------------------------------- |
 | **Escritorio Windows (.exe)** | Electron (`npm run electron`, `npm run dist`, con `--base-href ./`) | Principal: oficina, supervisión, laptops |
-| **Web** | Navegador | Acceso desde cualquier equipo |
-| **PWA** | Service worker solo en `production` | Instalada en equipos o tablets |
+| **Web**                       | Navegador                                                           | Acceso desde cualquier equipo            |
+| **PWA**                       | Service worker solo en `production`                                 | Instalada en equipos o tablets           |
 
 **Reglas que salen de esto:**
 
@@ -115,30 +115,30 @@ Fuente de verdad: `src/styles/_tokens.scss`. Si este documento y el archivo difi
 
 ### 4.1 Superficies y tinta
 
-| Token | Claro | Uso |
-|---|---|---|
-| `--bg` | `#f4f3f1` | Lienzo de la página |
-| `--surface` | `#ffffff` | Fondo de tarjeta, diálogo y tabla |
-| `--surface-sunk` | `#f7f7f6` | Inputs, filas alternas, zonas hundidas |
-| `--faint` | `rgba(22,24,29,.05)` | Relleno sutil (esqueletos, notas) |
-| `--ink` | `#16181d` | Texto principal |
-| `--ink-muted` | `#5f6672` | Texto secundario, ayuda, etiquetas |
-| `--divider` | `#cbced4` | Borde de 2 px (secciones) |
-| `--hairline` | `#dde0e4` | Borde de 1 px (filas, separadores) |
+| Token            | Claro                | Uso                                    |
+| ---------------- | -------------------- | -------------------------------------- |
+| `--bg`           | `#f4f3f1`            | Lienzo de la página                    |
+| `--surface`      | `#ffffff`            | Fondo de tarjeta, diálogo y tabla      |
+| `--surface-sunk` | `#f7f7f6`            | Inputs, filas alternas, zonas hundidas |
+| `--faint`        | `rgba(22,24,29,.05)` | Relleno sutil (esqueletos, notas)      |
+| `--ink`          | `#16181d`            | Texto principal                        |
+| `--ink-muted`    | `#5f6672`            | Texto secundario, ayuda, etiquetas     |
+| `--divider`      | `#cbced4`            | Borde de 2 px (secciones)              |
+| `--hairline`     | `#dde0e4`            | Borde de 1 px (filas, separadores)     |
 
 ### 4.2 Acento y marca
 
-| Token | Uso |
-|---|---|
-| `--accent` (`#c93217`, fijo) | Acción principal, selección, foco |
-| `--accent-hover` / `--accent-press` | Estados del acento |
-| `--accent-ink` | Acento en texto de párrafo (enlaces) |
-| `--accent-wash` | Fondo muy suave (ficha seleccionada) |
-| `--accent-soft` | Selección más marcada (OptionCard, chips) |
-| `--on-accent` | Texto sobre el acento |
-| `--success` | Éxito del sistema nuevo (Badge, Stepper) |
-| `--topbar-bg` / `--topbar-ink` / `--topbar-ink-muted` | Barra superior, fija en los dos temas |
-| `--brand-start` / `--brand-mid` / `--brand-end` / `--brand-gradient` | **Solo** login y splash |
+| Token                                                                | Uso                                       |
+| -------------------------------------------------------------------- | ----------------------------------------- |
+| `--accent` (`#c93217`, fijo)                                         | Acción principal, selección, foco         |
+| `--accent-hover` / `--accent-press`                                  | Estados del acento                        |
+| `--accent-ink`                                                       | Acento en texto de párrafo (enlaces)      |
+| `--accent-wash`                                                      | Fondo muy suave (ficha seleccionada)      |
+| `--accent-soft`                                                      | Selección más marcada (OptionCard, chips) |
+| `--on-accent`                                                        | Texto sobre el acento                     |
+| `--success`                                                          | Éxito del sistema nuevo (Badge, Stepper)  |
+| `--topbar-bg` / `--topbar-ink` / `--topbar-ink-muted`                | Barra superior, fija en los dos temas     |
+| `--brand-start` / `--brand-mid` / `--brand-end` / `--brand-gradient` | **Solo** login y splash                   |
 
 ### 4.3 Tipografía
 
@@ -146,49 +146,49 @@ Fuente de verdad: `src/styles/_tokens.scss`. Si este documento y el archivo difi
 
 ### 4.4 Espaciado (escala de 4 px)
 
-| Token | Valor |
-|---|---|
-| `--sp-1` | 4 px |
-| `--sp-2` | 8 px |
-| `--sp-3` | 12 px |
-| `--sp-4` | 16 px |
-| `--sp-5` | 20 px |
-| `--sp-6` | 24 px |
-| `--sp-8` | 32 px |
+| Token     | Valor |
+| --------- | ----- |
+| `--sp-1`  | 4 px  |
+| `--sp-2`  | 8 px  |
+| `--sp-3`  | 12 px |
+| `--sp-4`  | 16 px |
+| `--sp-5`  | 20 px |
+| `--sp-6`  | 24 px |
+| `--sp-8`  | 32 px |
 | `--sp-10` | 40 px |
 
 `--touch-min` = 44 px: alto mínimo de botones e inputs.
 
 ### 4.5 Radios
 
-| Token | Valor | Uso |
-|---|---|---|
-| `--radius-control` | 10 px | Inputs, botones, avisos |
-| `--radius-card` | 14 px | Tarjetas, diálogos |
-| `--radius-pill` | 999 px | Interruptor, badges |
+| Token               | Valor      | Uso                                        |
+| ------------------- | ---------- | ------------------------------------------ |
+| `--radius-control`  | 10 px      | Inputs, botones, avisos                    |
+| `--radius-card`     | 14 px      | Tarjetas, diálogos                         |
+| `--radius-pill`     | 999 px     | Interruptor, badges                        |
 | `--radius-sm/md/lg` | 8/12/16 px | **Legado.** No se usan en pantallas nuevas |
 
 Pantallas antiguas todavía tienen radio 0. **Una pantalla no mezcla radio 0 con 10/14**: se lleva entera al sistema nuevo (sección 17).
 
 ### 4.6 Anchos de contenido
 
-| Token | Valor | Uso |
-|---|---|---|
+| Token         | Valor  | Uso                            |
+| ------------- | ------ | ------------------------------ |
 | `--card-w-sm` | 640 px | Diálogos y formularios simples |
-| `--card-w-md` | 820 px | Formularios con grillas |
-| `--card-w-lg` | 920 px | Formularios anchos |
+| `--card-w-md` | 820 px | Formularios con grillas        |
+| `--card-w-lg` | 920 px | Formularios anchos             |
 
 ### 4.7 Bordes, elevación y movimiento
 
-| Token | Uso |
-|---|---|
-| `--border-hair` | Borde de 1 px con `--hairline` |
-| `--border-rule` | Borde de 2 px con `--divider` |
-| `--border-focus` | Foco visible (2 px de acento) |
-| `--shadow-card` | Sombra suave de tarjeta |
-| `--elev-menu` / `--elev-dialog` | Menús y diálogos |
-| `--dur-fast` (120 ms) / `--dur-base` (200 ms) / `--dur-slow` (320 ms) | Duración de transiciones |
-| `--ease-standard` / `--ease-exit` | Curvas |
+| Token                                                                 | Uso                            |
+| --------------------------------------------------------------------- | ------------------------------ |
+| `--border-hair`                                                       | Borde de 1 px con `--hairline` |
+| `--border-rule`                                                       | Borde de 2 px con `--divider`  |
+| `--border-focus`                                                      | Foco visible (2 px de acento)  |
+| `--shadow-card`                                                       | Sombra suave de tarjeta        |
+| `--elev-menu` / `--elev-dialog`                                       | Menús y diálogos               |
+| `--dur-fast` (120 ms) / `--dur-base` (200 ms) / `--dur-slow` (320 ms) | Duración de transiciones       |
+| `--ease-standard` / `--ease-exit`                                     | Curvas                         |
 
 Las animaciones son cortas y funcionales (hover, foco, entrada de una fila). Nada se anima solo por adorno.
 
@@ -200,16 +200,16 @@ El objetivo es una pantalla **llena de información útil y sin huecos**.
 
 ### 5.1 Medidas fijas
 
-| Dónde | Token |
-|---|---|
-| Padding de página | `--sp-8` (escritorio), `--sp-4` (≤ 767 px) |
-| Cabecera de página → contenido | `--sp-5` |
-| Entre tarjetas o secciones de una misma columna | `--sp-5` |
-| Entre columnas de un grid de página | `--sp-6` |
-| Entre campos apilados dentro de una tarjeta | `--sp-4` |
-| Entre elementos en línea (botones, badges, icono y texto) | `--sp-2` |
-| Entre un título de sección y su contenido | `--sp-3` |
-| Padding interno de una fila de lista o tabla | `--sp-2` vertical, `--sp-3` horizontal |
+| Dónde                                                     | Token                                      |
+| --------------------------------------------------------- | ------------------------------------------ |
+| Padding de página                                         | `--sp-8` (escritorio), `--sp-4` (≤ 767 px) |
+| Cabecera de página → contenido                            | `--sp-5`                                   |
+| Entre tarjetas o secciones de una misma columna           | `--sp-5`                                   |
+| Entre columnas de un grid de página                       | `--sp-6`                                   |
+| Entre campos apilados dentro de una tarjeta               | `--sp-4`                                   |
+| Entre elementos en línea (botones, badges, icono y texto) | `--sp-2`                                   |
+| Entre un título de sección y su contenido                 | `--sp-3`                                   |
+| Padding interno de una fila de lista o tabla              | `--sp-2` vertical, `--sp-3` horizontal     |
 
 Hoy el detalle de pedido separa tarjetas con 20 px y el formulario con 24 px. La regla queda **`--sp-5` entre tarjetas y `--sp-6` entre columnas**.
 
@@ -240,16 +240,16 @@ Etiqueta arriba (estilo `label`, sección 6) y valor abajo. Un valor vacío se m
 
 Una sola familia (DM Sans) y una escala fija. **No se escriben tamaños sueltos** (`font-size: 15px`): se usa el token del nivel.
 
-| Nivel | Tokens | Uso |
-|---|---|---|
-| **Display** | `--fs-display` 30 / `--lh-display` / `--fw-display` 800 | Título de la página (`h1`): "Pedido #267225", nombre del producto |
-| **H1** | `--fs-h1` 24 / `--fw-h1` 800 | Título dentro de un diálogo grande o de una sección mayor |
-| **H2** | `--fs-h2` 18 / `--fw-h2` 800 | Título de sección o de tarjeta: "Líneas", "Escala de precios", "Resumen" |
-| **Body** | `--fs-body` 15 / `--lh-body` | Texto corrido, valores de ficha |
-| **Dense** | `--fs-dense` 14 / `--lh-dense` | Tablas, listas, formularios densos |
-| **Meta** | `--fs-meta` 12 / `--lh-meta` | Dato secundario: fecha bajo un nombre, código, ayuda de un campo |
-| **Label** | `--fs-label` 11 + `--ls-label`, mayúsculas, `--ink-muted` | Etiqueta de dato, cabecera de tabla, *eyebrow* sobre el título |
-| **Metric** | `--fs-metric` 22 / `--fw-metric` 800 | KPI, saldo, total destacado |
+| Nivel       | Tokens                                                    | Uso                                                                      |
+| ----------- | --------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Display** | `--fs-display` 30 / `--lh-display` / `--fw-display` 800   | Título de la página (`h1`): "Pedido #267225", nombre del producto        |
+| **H1**      | `--fs-h1` 24 / `--fw-h1` 800                              | Título dentro de un diálogo grande o de una sección mayor                |
+| **H2**      | `--fs-h2` 18 / `--fw-h2` 800                              | Título de sección o de tarjeta: "Líneas", "Escala de precios", "Resumen" |
+| **Body**    | `--fs-body` 15 / `--lh-body`                              | Texto corrido, valores de ficha                                          |
+| **Dense**   | `--fs-dense` 14 / `--lh-dense`                            | Tablas, listas, formularios densos                                       |
+| **Meta**    | `--fs-meta` 12 / `--lh-meta`                              | Dato secundario: fecha bajo un nombre, código, ayuda de un campo         |
+| **Label**   | `--fs-label` 11 + `--ls-label`, mayúsculas, `--ink-muted` | Etiqueta de dato, cabecera de tabla, _eyebrow_ sobre el título           |
+| **Metric**  | `--fs-metric` 22 / `--fw-metric` 800                      | KPI, saldo, total destacado                                              |
 
 Reglas:
 
@@ -272,49 +272,49 @@ Reglas:
 
 ### 7.2 Catálogo de tokens de estado
 
-| Dominio | Estado | Token |
-|---|---|---|
-| Pedido | Abierto | `--st-open` |
-| | Enviado a facturación | `--st-sent-to-billing` |
-| | Entregado en mostrador | `--st-counter-delivered` |
-| | Anulado | `--st-cancelled` |
-| Planilla | En ruta | `--st-in-route` |
-| | Liquidada | `--st-settled` |
-| Comprobante de planilla | Pendiente | `--st-pending` |
-| | Entregado | `--st-delivered` |
-| | Parcial | `--st-partial` |
-| | Rechazado | `--st-rejected` |
-| Conciliación de factura | Sin conciliar | `--st-unmatched` |
-| | Conciliada (auto) | `--st-matched-auto` |
-| | Conciliada (manual) | `--st-matched-manual` |
-| | Diferencia | `--st-mismatch` |
-| Visita | Atendido | `--st-attended` |
-| | Cerrado | `--st-closed` |
-| | No compró | `--st-no-purchase` |
-| Promoción | Vigente | `--st-vigente` |
-| | Programada | `--st-programada` |
-| | Vencida | `--st-vencida` |
-| | Apagada | `--st-apagada` |
-| | Pendiente | `--st-pendiente` |
-| | Sin stock | `--st-sin-stock` |
+| Dominio                            | Estado                     | Token                                               |
+| ---------------------------------- | -------------------------- | --------------------------------------------------- |
+| Pedido                             | Abierto                    | `--st-open`                                         |
+|                                    | Enviado a facturación      | `--st-sent-to-billing`                              |
+|                                    | Entregado en mostrador     | `--st-counter-delivered`                            |
+|                                    | Anulado                    | `--st-cancelled`                                    |
+| Planilla                           | En ruta                    | `--st-in-route`                                     |
+|                                    | Liquidada                  | `--st-settled`                                      |
+| Comprobante de planilla            | Pendiente                  | `--st-pending`                                      |
+|                                    | Entregado                  | `--st-delivered`                                    |
+|                                    | Parcial                    | `--st-partial`                                      |
+|                                    | Rechazado                  | `--st-rejected`                                     |
+| Conciliación de factura            | Sin conciliar              | `--st-unmatched`                                    |
+|                                    | Conciliada (auto)          | `--st-matched-auto`                                 |
+|                                    | Conciliada (manual)        | `--st-matched-manual`                               |
+|                                    | Diferencia                 | `--st-mismatch`                                     |
+| Visita                             | Atendido                   | `--st-attended`                                     |
+|                                    | Cerrado                    | `--st-closed`                                       |
+|                                    | No compró                  | `--st-no-purchase`                                  |
+| Promoción                          | Vigente                    | `--st-vigente`                                      |
+|                                    | Programada                 | `--st-programada`                                   |
+|                                    | Vencida                    | `--st-vencida`                                      |
+|                                    | Apagada                    | `--st-apagada`                                      |
+|                                    | Pendiente                  | `--st-pendiente`                                    |
+|                                    | Sin stock                  | `--st-sin-stock`                                    |
 | Genérico (salud, semáforo, avisos) | Bien / Atención / Problema | `--status-ok` / `--status-warn` / `--status-danger` |
 
 `--st-pending` (comprobante) y `--st-pendiente` (promoción) son tokens distintos: se usa el de su dominio.
 
 ### 7.3 Uso por tipo de aviso
 
-| Aviso | Token |
-|---|---|
-| Error, rechazo, bloqueo | `--status-danger` |
-| Atención, pendiente, algo por resolver | `--status-warn` |
-| Correcto, completado | `--status-ok` |
-| Información neutra | `--ink-muted` |
+| Aviso                                  | Token             |
+| -------------------------------------- | ----------------- |
+| Error, rechazo, bloqueo                | `--status-danger` |
+| Atención, pendiente, algo por resolver | `--status-warn`   |
+| Correcto, completado                   | `--status-ok`     |
+| Información neutra                     | `--ink-muted`     |
 
 Hoy varias pantallas usan `--st-no-purchase` (estado de visita) para avisos generales. En código nuevo o al tocar la pantalla, el aviso de atención usa `--status-warn`.
 
 ### 7.4 Tema claro y oscuro
 
-El panel tiene dos temas y **los dos son de primera clase**: el usuario cambia con el botón **Oscuro/Claro** de la barra superior y cualquier pantalla debe verse igual de bien, ordenada y legible en ambos.
+El panel tiene dos temas y **los dos son de primera clase**: el usuario cambia con el interruptor **Modo oscuro** dentro del menú del usuario de la barra superior (no un botón suelto) y cualquier pantalla debe verse igual de bien, ordenada y legible en ambos.
 
 **Cómo funciona.** Cada color de `_tokens.scss` se define con `light-dark(claro, oscuro)` y `color-scheme: light dark`. `ThemeService` fuerza el tema con `html.theme-light` / `html.theme-dark` (ver `_material.scss`). Por eso **un componente que solo usa tokens cambia de tema solo**, sin una línea de código extra. Cambiar de tema no recarga la página.
 
@@ -354,20 +354,20 @@ El panel tiene dos temas y **los dos son de primera clase**: el usuario cambia c
 
 ### 8.2 Formatos
 
-| Dato | Formato | Cómo |
-|---|---|---|
-| Monto | `S/ 1,234.50` | `formatSoles`. Alineado a la derecha en tablas, con `--tnum` |
-| Descuento | `− S/ 12.00` o columna "Descuento" en positivo | Coherente dentro de la pantalla |
-| Fecha | `12/10/2026` | `dateText` (hoy en `assignments/assignment-format`, excepción tolerada) |
-| Fecha y hora | `12/10/2026 14:54` | `dateTimeText` |
-| Hora | `14:54` | `timeText` |
-| Cantidad de venta | Entero: `12` | Siempre unidades enteras; no se vende fraccionado |
-| Cantidad con empaque | `3 cj + 4 und` | Cuando existe `unitsPerPackage` |
-| Peso | `1.5 kg` | |
-| Porcentaje | `12.5 %` | |
-| Sí / No | `Sí` / `No`, o un `ui-badge` si es un estado | Nunca `true` / `false` |
-| Estado de catálogo | Nombre + color (`ui-status`) | Nunca el código crudo (`OPEN`, `SENT_TO_BILLING`) |
-| Vacío o nulo | `—` | Nunca `null`, `undefined`, `0` inventado ni celda en blanco |
+| Dato                 | Formato                                        | Cómo                                                                    |
+| -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| Monto                | `S/ 1,234.50`                                  | `formatSoles`. Alineado a la derecha en tablas, con `--tnum`            |
+| Descuento            | `− S/ 12.00` o columna "Descuento" en positivo | Coherente dentro de la pantalla                                         |
+| Fecha                | `12/10/2026`                                   | `dateText` (hoy en `assignments/assignment-format`, excepción tolerada) |
+| Fecha y hora         | `12/10/2026 14:54`                             | `dateTimeText`                                                          |
+| Hora                 | `14:54`                                        | `timeText`                                                              |
+| Cantidad de venta    | Entero: `12`                                   | Siempre unidades enteras; no se vende fraccionado                       |
+| Cantidad con empaque | `3 cj + 4 und`                                 | Cuando existe `unitsPerPackage`                                         |
+| Peso                 | `1.5 kg`                                       |                                                                         |
+| Porcentaje           | `12.5 %`                                       |                                                                         |
+| Sí / No              | `Sí` / `No`, o un `ui-badge` si es un estado   | Nunca `true` / `false`                                                  |
+| Estado de catálogo   | Nombre + color (`ui-status`)                   | Nunca el código crudo (`OPEN`, `SENT_TO_BILLING`)                       |
+| Vacío o nulo         | `—`                                            | Nunca `null`, `undefined`, `0` inventado ni celda en blanco             |
 
 - **Fechas siempre en hora local de Lima.** Nunca `toISOString()` para "hoy" (después de las 19:00 da el día siguiente).
 - **Texto largo:** una línea con puntos suspensivos y el texto completo en `title`, salvo en el detalle, donde se muestra completo.
@@ -379,14 +379,14 @@ El panel tiene dos temas y **los dos son de primera clase**: el usuario cambia c
 
 Toda zona que carga datos (la página o una sección) resuelve **cuatro estados**, más dos de contexto:
 
-| Estado | Cómo se ve | Componente |
-|---|---|---|
-| **Cargando** | Esqueleto con la forma del contenido: filas para una tabla, bloques para una ficha. Sin spinner de página completa | Patrón esqueleto (14.2) |
-| **Error** | Título claro, una línea de explicación y **Reintentar** | `ui-empty variant="error"` con `actionLabel` y `(action)` |
-| **Vacío** | Mensaje que explica por qué no hay nada y, si existe, la acción que lo resuelve | `ui-empty` |
-| **Con datos** | El contenido | — |
-| **Solo lectura** | Sin acciones de edición y con el motivo visible ("Enviado a facturación: ya no se puede editar") | `ui-empty` o aviso en línea |
-| **Sin permiso** | La acción no se muestra (`*hasPermission`); si es la página entera, la protege el guard | — |
+| Estado           | Cómo se ve                                                                                                         | Componente                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| **Cargando**     | Esqueleto con la forma del contenido: filas para una tabla, bloques para una ficha. Sin spinner de página completa | Patrón esqueleto (14.2)                                   |
+| **Error**        | Título claro, una línea de explicación y **Reintentar**                                                            | `ui-empty variant="error"` con `actionLabel` y `(action)` |
+| **Vacío**        | Mensaje que explica por qué no hay nada y, si existe, la acción que lo resuelve                                    | `ui-empty`                                                |
+| **Con datos**    | El contenido                                                                                                       | —                                                         |
+| **Solo lectura** | Sin acciones de edición y con el motivo visible ("Enviado a facturación: ya no se puede editar")                   | `ui-empty` o aviso en línea                               |
+| **Sin permiso**  | La acción no se muestra (`*hasPermission`); si es la página entera, la protege el guard                            | —                                                         |
 
 Reglas:
 
@@ -409,7 +409,7 @@ línea meta: datos clave separados por " · "
 ```
 
 - Las acciones van arriba a la derecha, alineadas con el título.
-- El *eyebrow* da contexto ("VENTAS · PEDIDO DE MOSTRADOR", el código del producto).
+- El _eyebrow_ da contexto ("VENTAS · PEDIDO DE MOSTRADOR", el código del producto).
 - La línea meta resume quién, cuándo y de qué se trata, en `--ink-muted`.
 
 ### 10.1 Listado
@@ -487,7 +487,7 @@ Un formulario bien hecho se entiende sin explicación y no deja mandar algo inv�
 ### 11.1 Campos
 
 - **Siempre `ui-field` / `ui-typeahead`**, nunca un `<input>` o `<select>` nativo suelto. Excepción: inputs numéricos dentro de una tabla, con la clase de cantidad del sistema.
-- **La etiqueta siempre visible arriba del campo.** El *placeholder* es un ejemplo, nunca la etiqueta.
+- **La etiqueta siempre visible arriba del campo.** El _placeholder_ es un ejemplo, nunca la etiqueta.
 - **Obligatorio vs. opcional:** los opcionales llevan "(opcional)"; lo demás se asume obligatorio.
 - **Ayuda** debajo del campo, en `meta`, solo si aporta ("Se usa en el comprobante").
 - **Error** debajo del campo, en `--status-danger`, con el texto del API mapeado a ese campo (`error.errors.<campo>`) o uno claro del panel.
@@ -495,14 +495,14 @@ Un formulario bien hecho se entiende sin explicación y no deja mandar algo inv�
 
 ### 11.2 Tipos de dato
 
-| Dato | Campo |
-|---|---|
-| Cantidad de venta o dotación | Numérico entero, `step="1"`, mínimo según el caso; redondea y avisa si se escribe un decimal |
-| Monto o precio | Numérico con 2 decimales y prefijo `S/` |
-| Fecha | Selector de fecha local |
-| Sí / No | `ui-toggle` |
-| Elección excluyente con pocas opciones visibles | `ui-option-card` |
-| Texto largo | `ui-field type="textarea"` con límite de caracteres visible si el backend lo tiene |
+| Dato                                            | Campo                                                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Cantidad de venta o dotación                    | Numérico entero, `step="1"`, mínimo según el caso; redondea y avisa si se escribe un decimal |
+| Monto o precio                                  | Numérico con 2 decimales y prefijo `S/`                                                      |
+| Fecha                                           | Selector de fecha local                                                                      |
+| Sí / No                                         | `ui-toggle`                                                                                  |
+| Elección excluyente con pocas opciones visibles | `ui-option-card`                                                                             |
+| Texto largo                                     | `ui-field type="textarea"` con límite de caracteres visible si el backend lo tiene           |
 
 ### 11.3 Distribución
 
@@ -525,15 +525,15 @@ Un formulario bien hecho se entiende sin explicación y no deja mandar algo inv�
 
 Siempre `ui-table` (o la clase `ui-table-grid` donde ya se usa) con los estados de la sección 9.
 
-| Columna | Alineación | Formato |
-|---|---|---|
-| Texto (nombre, cliente, producto) | Izquierda | Una línea con elipsis y `title` |
-| Código o número de documento | Izquierda | `meta` o `dense`, sin cortar |
-| Monto | **Derecha** | `formatSoles`, `--tnum` |
-| Cantidad | **Derecha** | Entero, `--tnum` |
-| Fecha | Izquierda | `dateText`, sin cortar |
-| Estado | Izquierda | `ui-status` |
-| Acciones | Derecha, al final | Botones `icon` o `ui-menu` |
+| Columna                           | Alineación        | Formato                         |
+| --------------------------------- | ----------------- | ------------------------------- |
+| Texto (nombre, cliente, producto) | Izquierda         | Una línea con elipsis y `title` |
+| Código o número de documento      | Izquierda         | `meta` o `dense`, sin cortar    |
+| Monto                             | **Derecha**       | `formatSoles`, `--tnum`         |
+| Cantidad                          | **Derecha**       | Entero, `--tnum`                |
+| Fecha                             | Izquierda         | `dateText`, sin cortar          |
+| Estado                            | Izquierda         | `ui-status`                     |
+| Acciones                          | Derecha, al final | Botones `icon` o `ui-menu`      |
 
 - **Cabecera:** estilo `label` (11 px, mayúsculas, `--ink-muted`).
 - **Cuerpo:** `--fs-dense`.
@@ -549,12 +549,12 @@ Siempre `ui-table` (o la clase `ui-table-grid` donde ya se usa) con los estados 
 
 ### 13.1 Botones
 
-| Variante | Uso |
-|---|---|
-| `primary` | **Una por pantalla o diálogo**: la acción principal ("Guardar cambios", "Registrar pedido") |
-| `secondary` | Acciones de la cabecera y alternativas |
-| `ghost` | Acciones terciarias, enlaces de acción ("Ver bonificaciones pendientes") |
-| `icon` | Acciones de fila (quitar, editar) con `title` obligatorio |
+| Variante    | Uso                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `primary`   | **Una por pantalla o diálogo**: la acción principal ("Guardar cambios", "Registrar pedido") |
+| `secondary` | Acciones de la cabecera y alternativas                                                      |
+| `ghost`     | Acciones terciarias, enlaces de acción ("Ver bonificaciones pendientes")                    |
+| `icon`      | Acciones de fila (quitar, editar) con `title` obligatorio                                   |
 
 - **Solo se muestran las acciones válidas para el estado actual.** Si el producto está activo se ve **Desactivar**; si está inactivo, **Activar**. Nunca las dos (sección 19, V3).
 - **Máximo tres acciones visibles** en la cabecera; el resto va en un `ui-menu` ("Más").
@@ -563,12 +563,12 @@ Siempre `ui-table` (o la clase `ui-table-grid` donde ya se usa) con los estados 
 
 ### 13.2 Avisos
 
-| Tipo | Cuándo | Cómo |
-|---|---|---|
-| **Toast** | Resultado de una acción que ya pasó: "Pedido actualizado", o el error que devolvió el API al guardar | `ToastService` (`success`, `error`, `info`) |
+| Tipo               | Cuándo                                                                                                                         | Cómo                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| **Toast**          | Resultado de una acción que ya pasó: "Pedido actualizado", o el error que devolvió el API al guardar                           | `ToastService` (`success`, `error`, `info`)                                |
 | **Aviso en línea** | Una condición del dato que sigue vigente y requiere atención: "Falta elegir un premio", "2 bonificaciones pendientes de stock" | Patrón aviso (14.2), arriba del contenido afectado y con su acción al lado |
-| **Ayuda** | Explicar un dato o una regla sin ocupar espacio | `ui-info-tip` |
-| **Confirmación** | Antes de algo irreversible o con efectos | `UiDialogService.confirm()` |
+| **Ayuda**          | Explicar un dato o una regla sin ocupar espacio                                                                                | `ui-info-tip`                                                              |
+| **Confirmación**   | Antes de algo irreversible o con efectos                                                                                       | `UiDialogService.confirm()`                                                |
 
 - El texto dice **qué pasó y qué hacer**, en español claro y sin jerga del backend ("No pudimos guardar el precio: ya existe uno para esa condición y tipo de cliente").
 - Después de guardar, la pantalla muestra el dato actualizado (recarga la sección o navega al detalle). Nunca queda el dato viejo.
@@ -579,50 +579,51 @@ Siempre `ui-table` (o la clase `ui-table-grid` donde ya se usa) con los estados 
 
 ### 14.1 Disponibles en `shared/ui/`
 
-| Componente | Selector | Uso |
-|---|---|---|
-| Badge | `<ui-badge tone="neutral\|accent\|success\|warning">` | Conteos y estados cortos |
-| Button | `<button uiButton variant="primary\|secondary\|ghost\|icon" size="sm">` con `[loading]` | Toda acción |
-| Card | `<ui-card title="…" subtitle="…">` | Todo bloque visual. Sin `title`, el contenido ocupa toda la tarjeta. No espacia su contenido solo: con varios campos apilados se le agrega una clase con `display: flex; flex-direction: column; gap: var(--sp-4)` |
-| Coming soon | `coming-soon` | Módulo aún no disponible (a verificar) |
-| Dialog | `UiDialogService` (`open`, `confirm`), `UI_DIALOG_DATA`, `UiDialogRef` | Mecanismo de diálogos |
-| Empty | `<ui-empty variant="error" title body actionLabel (action)>` | Vacío y error |
-| Field | `<ui-field label type="text\|select\|textarea\|…" [(value)] [options] icon>` | Inputs y selects |
-| Info tip | `ui-info-tip` | Ayuda contextual (a verificar) |
-| Menu | `<ui-menu>` | Menú contextual y acciones de más |
-| Modal | `<ui-modal title subtitle (close)>` con slot `modalFooter` | Marco visual del diálogo |
-| Option card | `<ui-option-card [selected] (pick)>` | Elección excluyente tipo radio |
-| Status | `<ui-status [label]>` | Estado de catálogo con su color (a verificar cómo recibe el color) |
-| Stepper | `<ui-stepper [steps]="[{label, state}]">` | Progreso de un flujo; solo indicador |
-| Table | `<ui-table>` con `(retry)` | Tablas con estados |
-| Tabs | `<ui-tabs [items] [(value)]>` | Pestañas en memoria |
-| Toggle | `<ui-toggle label [(checked)]>` | Sí / No |
-| Typeahead | `<ui-typeahead label icon [search] [(selected)] (picked)>` | Búsqueda en catálogos grandes |
+| Componente  | Selector                                                                                | Uso                                                                                                                                                                                                                |
+| ----------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Badge       | `<ui-badge tone="neutral\|accent\|success\|warning">`                                   | Conteos y estados cortos                                                                                                                                                                                           |
+| Button      | `<button uiButton variant="primary\|secondary\|ghost\|icon" size="sm">` con `[loading]` | Toda acción                                                                                                                                                                                                        |
+| Card        | `<ui-card title="…" subtitle="…">`                                                      | Todo bloque visual. Sin `title`, el contenido ocupa toda la tarjeta. No espacia su contenido solo: con varios campos apilados se le agrega una clase con `display: flex; flex-direction: column; gap: var(--sp-4)` |
+| Checkbox    | `<ui-checkbox label [(checked)] [disabled] [hint]>`                                     | Casilla múltiple (sección 11.2 del doc 38)                                                                                                                                                                         |
+| Coming soon | `<app-coming-soon [title]>` (o `data.title` de la ruta)                                 | Módulo aún no disponible                                                                                                                                                                                           |
+| Dialog      | `UiDialogService` (`open`, `confirm`), `UI_DIALOG_DATA`, `UiDialogRef`                  | Mecanismo de diálogos                                                                                                                                                                                              |
+| Empty       | `<ui-empty variant="error" title body actionLabel (action)>`                            | Vacío y error                                                                                                                                                                                                      |
+| Field       | `<ui-field label type="text\|select\|textarea\|…" [(value)] [options] icon>`            | Inputs y selects                                                                                                                                                                                                   |
+| Info tip    | `<span [uiInfoTip]="'texto de ayuda'">`                                                 | Ayuda contextual, ícono ⓘ con `title`/`aria-label`                                                                                                                                                                 |
+| Menu        | `<ui-menu>`                                                                             | Menú contextual y acciones de más                                                                                                                                                                                  |
+| Modal       | `<ui-modal title subtitle (close)>` con slot `modalFooter`                              | Marco visual del diálogo                                                                                                                                                                                           |
+| Option card | `<ui-option-card [selected] (pick)>`                                                    | Elección excluyente tipo radio                                                                                                                                                                                     |
+| Status      | `<ui-status [label] [status]>`                                                          | Estado de catálogo con su color: normaliza `status` (o, si falta, `label`) a un slug y pinta `var(--st-<slug>)`; con un texto que no exista en su diccionario, se fuerza el color pasando `status` explícito       |
+| Stepper     | `<ui-stepper [steps]="[{label, state}]">`                                               | Progreso de un flujo; solo indicador                                                                                                                                                                               |
+| Table       | `<ui-table>` con `(retry)`                                                              | Tablas con estados                                                                                                                                                                                                 |
+| Tabs        | `<ui-tabs [items] [(value)]>`                                                           | Pestañas en memoria                                                                                                                                                                                                |
+| Toggle      | `<ui-toggle label [(checked)]>`                                                         | Sí / No                                                                                                                                                                                                            |
+| Typeahead   | `<ui-typeahead label icon [search] [(selected)] (picked)>`                              | Búsqueda en catálogos grandes                                                                                                                                                                                      |
 
 ### 14.2 Patrones que todavía no son componente (pendiente)
 
 Hoy se escriben a mano en cada página (`od-alert`, `cof-alert`, `od-skeleton`, `cof-skeleton`, `od-summary-row`…). **Mientras no exista el componente, se respeta el patrón** y no se inventa una variante nueva. Cuando se creen, van en `shared/ui/` y se reemplazan al tocar cada pantalla.
 
-| Componente previsto | Patrón actual a respetar |
-|---|---|
+| Componente previsto                              | Patrón actual a respetar                                                                                                                                                                    |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ui-alert` (tono `warn`, `danger`, `info`, `ok`) | Borde izquierdo de 3 px con el color del tono, fondo `color-mix(in srgb, <tono> 10%, transparent)`, `--radius-control`, padding `--sp-3 --sp-4`, texto `dense`; acciones en una fila debajo |
-| `ui-skeleton` | Bloques `--faint` con la forma del contenido; para tablas, 5 filas |
-| `ui-key-value` | Grid de la sección 5.3; etiqueta `label` arriba, valor `body` abajo, `—` si no hay valor |
-| `ui-summary-row` | Fila con la etiqueta a la izquierda (`--ink-muted`) y el valor a la derecha (`--tnum`); el total, en negrita con borde superior `--hairline` |
-| `ui-page-header` | Cabecera de la sección 10 |
+| `ui-skeleton`                                    | Bloques `--faint` con la forma del contenido; para tablas, 5 filas                                                                                                                          |
+| `ui-key-value`                                   | Grid de la sección 5.3; etiqueta `label` arriba, valor `body` abajo, `—` si no hay valor                                                                                                    |
+| `ui-summary-row`                                 | Fila con la etiqueta a la izquierda (`--ink-muted`) y el valor a la derecha (`--tnum`); el total, en negrita con borde superior `--hairline`                                                |
+| `ui-page-header`                                 | Cabecera de la sección 10                                                                                                                                                                   |
 
 ### 14.3 Iconos
 
-Material Symbols, por nombre. Deben estar **empaquetados en el build** para que se vean en el `.exe` sin conexión. Hoy conviven la clase `material-icons` (Nuevo pedido) y los Material Symbols del menú (a verificar que sea la misma fuente). Se usa una sola familia en todo el panel.
+Una sola familia en todo el código: clase `material-icons` (Material Icons de Google), por nombre (`<span class="material-icons">home</span>`). No hay mezcla de familias (V11 estaba mal planteado: el código ya usa una sola). El defecto real es otro: la fuente se carga desde Google Fonts (`index.html`, `<link href="https://fonts.googleapis.com/icon?family=Material+Icons">`), igual que Roboto/Inter/Archivo — **viola la regla "todo local, nada por CDN" de la sección 2** y se ve roto en el `.exe` sin internet. Autohospedar estas fuentes (como ya se hizo con DM Sans vía `@fontsource`) queda pendiente, fuera del alcance del doc 38.
 
 ---
 
 ## 15. Responsive
 
-| Corte | Qué cambia |
-|---|---|
-| > 900 px | Layout completo: grids de dos columnas (`1fr / 360px`) |
-| ≤ 900 px | Los grids de página pasan a una columna; el resumen deja de ser `sticky` |
+| Corte    | Qué cambia                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------- |
+| > 900 px | Layout completo: grids de dos columnas (`1fr / 360px`)                                              |
+| ≤ 900 px | Los grids de página pasan a una columna; el resumen deja de ser `sticky`                            |
 | ≤ 767 px | Padding de página `--sp-4`; las tablas pasan a tarjetas; las elecciones en dos columnas pasan a una |
 
 - **Son los únicos cortes.** No se agregan otros por pantalla.
@@ -636,13 +637,15 @@ Material Symbols, por nombre. Deben estar **empaquetados en el build** para que 
 `features/orders/counter-order-form.ts` es el ejemplo de uso del sistema.
 
 **Nuevo pedido (alta):**
-- Cabecera con *eyebrow*, título y **Cancelar**.
+
+- Cabecera con _eyebrow_, título y **Cancelar**.
 - Stepper (solo indicador).
 - Grid `1fr / 360px`: tarjetas Cliente, Condiciones de venta, Carrito y Catálogo-Sugerido-Promociones (con `ui-tabs`), y a la derecha el resumen fijo con la simulación y **Registrar pedido**.
 - `ui-option-card` para "Atribuir venta a".
 - Exige jornada abierta y sede.
 
 **Editar pedido (mismo componente, con `orderId`):**
+
 - Sin stepper.
 - Tarjeta **Pedido** en solo lectura: cliente, vendedor, fecha, canal y origen.
 - Carrito con cantidades enteras; las promociones, en solo lectura ("Se recalcula al guardar").
@@ -678,31 +681,37 @@ Los colores ya son globales: todo lo que usa `var(--accent)`, `var(--ink)`, etc.
 Antes de dar una pantalla por terminada:
 
 **Datos**
+
 - [ ] ¿Ningún id interno a la vista, ni como respaldo (`#12`)?
 - [ ] ¿Estados con nombre y color de su token, nunca el código crudo?
 - [ ] ¿Montos con `formatSoles`, fechas locales, cantidades enteras y `—` en los vacíos?
 
 **Espacio y forma**
+
 - [ ] ¿Sin bloques vacíos, columnas vacías ni alturas fijas con espacio muerto?
 - [ ] ¿Espaciados, tamaños de letra y radios solo con tokens?
 - [ ] ¿Sin mezcla de radio 0 con el sistema nuevo?
 - [ ] ¿Un solo título display y títulos de tarjeta con `ui-card title`?
 
 **Estados**
+
 - [ ] ¿Cargando, error con Reintentar, vacío con su acción y con datos, en cada zona que carga?
 - [ ] ¿Una sección secundaria que falla no rompe la página?
 - [ ] ¿Solo lectura y sin permiso resueltos?
 
 **Acciones**
+
 - [ ] ¿Solo las acciones válidas para el estado actual?
 - [ ] ¿Una sola primaria; destructivas con confirmación; deshabilitadas con su motivo?
 - [ ] ¿Toast para resultados y aviso en línea para condiciones vigentes?
 
 **Formularios**
+
 - [ ] ¿Catálogos con select o typeahead por nombre?
 - [ ] ¿Etiqueta visible, error junto al campo, envío deshabilitado si es inválido y datos conservados si el backend rechaza?
 
 **Tema claro y oscuro**
+
 - [ ] ¿Revisada completa en los dos temas, incluidos avisos, estados, tablas, diálogos, esqueletos e inputs?
 - [ ] ¿Ningún color fijo (tampoco `white`, `black`, `rgba` fijo ni respaldo en `var()`)?
 - [ ] ¿Transparencias con `color-mix` sobre tokens y superficies separadas con borde, no solo sombra?
@@ -710,6 +719,7 @@ Antes de dar una pantalla por terminada:
 - [ ] ¿Contraste suficiente en los dos temas y desplegables nativos sin colores forzados?
 
 **Plataformas**
+
 - [ ] ¿Revisada en 1366×768 al 125 % y en 1920×1080?
 - [ ] ¿Teclado: `Enter`, `Esc`, `Tab` y foco visible?
 - [ ] ¿Sin recursos por CDN; funciona igual en el `.exe`?
@@ -721,16 +731,20 @@ Antes de dar una pantalla por terminada:
 
 Registro de lo que hoy no cumple este documento. Se corrige al tocar la pantalla o cuando se ordene; al corregirse, se borra la fila.
 
-| ID | Defecto | Dónde | Regla |
-|---|---|---|---|
-| V1 | La sección "Escala de precios" de un producto sin precios muestra un rectángulo gris grande sin texto | Catálogo → detalle de producto | 5.2 y 9: vacío compacto con "Agregar precio", o esqueleto que termina |
-| V2 | "Tipo de cliente (id)" es un campo de texto para escribir un id, con la ayuda "No hay catálogo de tipos de cliente — usa el id que corresponda" | Catálogo → Agregar precio | 8.1 y 11.1: select con los nombres del catálogo |
-| V3 | **Activar** y **Desactivar** se muestran a la vez | Catálogo → detalle de producto | 13.1: solo la acción válida para el estado |
-| V4 | El diálogo "Agregar precio" se ve sin velo sobre la página y con radio 0, mientras sus campos tienen 10 px (a verificar en `ui-modal`) | `shared/ui/modal` | 10.5 y 4.5 |
-| V5 | Respaldo con id cuando falta un nombre: `#${id}` en la condición de pago y `Producto #${productId}` en devoluciones | `orders/order-detail.ts` | 8.1: respaldo `—` |
-| V6 | Color fijo como respaldo: `var(--st-vencida, #d13b3b)` | `orders/order-detail.ts` | 7.1 |
-| V7 | Avisos y esqueletos repetidos a mano en cada página (`od-alert`, `cof-alert`, `od-skeleton`, `cof-skeleton`) | `orders` y otros | 14.2 |
-| V8 | Títulos de sección con tamaños distintos (15 px en el detalle, 16 px en el carrito), escritos a mano | `orders` | 6 |
-| V9 | Avisos generales con `--st-no-purchase` (estado de visita) | `orders` | 7.3: `--status-warn` |
-| V10 | Separación entre tarjetas de 20 px en un sitio y 24 px en otro | `orders` | 5.1 |
-| V11 | Dos familias de iconos posibles (`material-icons` y Material Symbols) | Nuevo pedido, menú | 14.3 |
+| ID  | Defecto                                                                                                                                                                                                                                                                                                            | Dónde                                 | Regla                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | ---------------------------------------------------------------------- |
+| V1  | La sección "Escala de precios" de un producto sin precios muestra un rectángulo gris grande sin texto                                                                                                                                                                                                              | Catálogo → detalle de producto        | 5.2 y 9: vacío compacto con "Agregar precio", o esqueleto que termina  |
+| V2  | "Tipo de cliente (id)" es un campo de texto para escribir un id, con la ayuda "No hay catálogo de tipos de cliente — usa el id que corresponda"                                                                                                                                                                    | Catálogo → Agregar precio             | 8.1 y 11.1: select con los nombres del catálogo                        |
+| V3  | **Activar** y **Desactivar** se muestran a la vez                                                                                                                                                                                                                                                                  | Catálogo → detalle de producto        | 13.1: solo la acción válida para el estado                             |
+| V4  | Confirmado en `ui-modal`: `.ui-modal` no tiene `border-radius` (radio 0, sus campos internos sí usan `--radius-control`) y `UiDialogService` abre el overlay con `backdropClass: 'ui-dialog-backdrop'`, pero esa clase no tiene ninguna regla CSS en todo el proyecto — el velo existe en el DOM pero es invisible | `shared/ui/modal`, `shared/ui/dialog` | 10.5 y 4.5: `--radius-card` y un fondo real para `.ui-dialog-backdrop` |
+| V5  | Respaldo con id cuando falta un nombre: `#${id}` en la condición de pago y `Producto #${productId}` en devoluciones                                                                                                                                                                                                | `orders/order-detail.ts`              | 8.1: respaldo `—`                                                      |
+| V6  | Color fijo como respaldo: `var(--st-vencida, #d13b3b)`                                                                                                                                                                                                                                                             | `orders/order-detail.ts`              | 7.1                                                                    |
+| V7  | Avisos y esqueletos repetidos a mano en cada página (`od-alert`, `cof-alert`, `od-skeleton`, `cof-skeleton`)                                                                                                                                                                                                       | `orders` y otros                      | 14.2                                                                   |
+| V8  | Títulos de sección con tamaños distintos (15 px en el detalle, 16 px en el carrito), escritos a mano                                                                                                                                                                                                               | `orders`                              | 6                                                                      |
+| V9  | Avisos generales con `--st-no-purchase` (estado de visita)                                                                                                                                                                                                                                                         | `orders`                              | 7.3: `--status-warn`                                                   |
+| V10 | Separación entre tarjetas de 20 px en un sitio y 24 px en otro                                                                                                                                                                                                                                                     | `orders`                              | 5.1                                                                    |
+| V11 | El ícono (`material-icons`) se carga desde Google Fonts por CDN, no empaquetado                                                                                                                                                                                                                                    | `index.html`                          | 2 y 14.3: se ve roto en el `.exe` sin internet                         |
+| V12 | El borde de error de `ui-field` usa `var(--st-vencida, #d13b3b)` (gris, y con color fijo de respaldo) y el texto de error usa `--accent-ink`                                                                                                                                                                       | `shared/ui/field`                     | 7.3: `--status-danger`                                                 |
+| V13 | Casillas nativas con tamaños fijos en px                                                                                                                                                                                                                                                                           | Notificaciones → Nuevo envío          | 11.1 y sección 11.2 del doc 38                                         |
+| V14 | La campana muestra un punto rojo fijo aunque no haya nada pendiente                                                                                                                                                                                                                                                | Barra superior                        | 13.2                                                                   |
+| V15 | "Activar mantenimiento" y "Desactivar" a la vez, y estado "Desconocido"                                                                                                                                                                                                                                            | Mantenimiento                         | 13.1 y 9                                                               |

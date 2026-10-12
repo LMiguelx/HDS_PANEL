@@ -156,14 +156,14 @@ let nextId = 0;
         color: var(--ink);
       }
       .ui-field-error .ui-input {
-        border-color: var(--st-vencida, #d13b3b);
+        border-color: var(--status-danger);
       }
       .ui-field-hint {
         font-size: 12px;
         color: var(--ink-muted);
       }
       .ui-field-error-text {
-        color: var(--accent-ink);
+        color: var(--status-danger);
       }
     `,
   ],

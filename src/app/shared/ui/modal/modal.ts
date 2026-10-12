@@ -49,7 +49,9 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
         max-height: 90vh;
         background: var(--bg);
         border: 2px solid var(--divider);
+        border-radius: var(--radius-card);
         box-shadow: var(--elev-dialog);
+        overflow: hidden;
       }
       .ui-modal-header {
         display: flex;

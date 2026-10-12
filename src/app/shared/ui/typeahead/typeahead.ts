@@ -182,7 +182,7 @@ let nextId = 0;
         color: var(--ink-muted);
       }
       .ui-field-error-text {
-        color: var(--accent-ink);
+        color: var(--status-danger);
       }
 
       .ui-ta-panel {
@@ -198,7 +198,7 @@ let nextId = 0;
         color: var(--ink-muted);
       }
       .ui-ta-error {
-        color: var(--accent-ink);
+        color: var(--status-danger);
       }
       .ui-ta-option {
         display: flex;
