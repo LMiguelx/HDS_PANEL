@@ -7,6 +7,11 @@ export type UiCardVariant = 'container' | 'section' | 'work';
  * el lienzo de página, radio 14px. `title`/`subtitle` opcionales pintan la
  * cabecera "título + texto de ayuda" que piden las pantallas nuevas; si se
  * omiten, el contenido proyectado ocupa toda la tarjeta como antes.
+ *
+ * Los manejadores de eventos NO devuelven valor a propósito: en Angular, un
+ * manejador que devuelve `false` llama a `preventDefault()`, y eso cancelaba
+ * los clics y el Enter de todo lo que hubiera dentro de la tarjeta
+ * (checkboxes, enlaces, saltos de línea en un textarea).
  */
 @Component({
   selector: 'ui-card',
@@ -16,8 +21,8 @@ export type UiCardVariant = 'container' | 'section' | 'work';
       [class]="hostClass()"
       [attr.role]="clickable() ? 'button' : null"
       [attr.tabindex]="clickable() ? 0 : null"
-      (click)="clickable() && cardClick.emit()"
-      (keydown.enter)="clickable() && cardClick.emit()"
+      (click)="onClick()"
+      (keydown.enter)="onEnter($event)"
     >
       @if (title()) {
         <div class="ui-card-head">
@@ -105,4 +110,13 @@ export class UiCard {
     if (this.saving()) classes.push('ui-card-saving');
     return classes.join(' ');
   });
+
+  protected onClick(): void {
+    if (this.clickable()) this.cardClick.emit();
+  }
+
+  /** Solo con el foco en la tarjeta misma: un Enter dentro de un campo es del campo. */
+  protected onEnter(event: Event): void {
+    if (this.clickable() && event.target === event.currentTarget) this.cardClick.emit();
+  }
 }

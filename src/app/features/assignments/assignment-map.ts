@@ -55,7 +55,12 @@ const ORPHAN_FILL = '#9a958f';
 const MAX_VENDORS = 10;
 const DEFAULT_CENTER: [number, number] = [-16.409, -71.537];
 
-function parseIds(raw: string): number[] {
+/**
+ * "4,6,7" → [4, 6, 7]. Un query param ausente llega como `undefined`
+ * (no como el valor por defecto del input), por eso se acepta null/undefined.
+ */
+function parseUserIds(raw: string | null | undefined): number[] {
+  if (!raw) return [];
   return raw
     .split(',')
     .map((s) => Number(s.trim()))
@@ -864,7 +869,7 @@ export class AssignmentMapPage {
       const orphansRaw = this.orphansOnly();
       const dateRaw = this.dateParam();
       untracked(() => {
-        const ids = parseIds(idsRaw);
+        const ids = parseUserIds(idsRaw);
         const orphansOnly = orphansRaw === 'true';
         if (ids.length > 0 || orphansOnly) {
           this.orphansOnlyToggle.set(orphansOnly);
