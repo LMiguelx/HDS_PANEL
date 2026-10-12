@@ -1,5 +1,18 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable, ReplaySubject, share } from 'rxjs';
+
+/** Memoriza el primer resultado exitoso para el resto de la sesión; un error no queda pegado (se reintenta en la próxima llamada). */
+function cacheForSession<T>(source$: Observable<T>): Observable<T> {
+  return source$.pipe(
+    share({
+      connector: () => new ReplaySubject(1),
+      resetOnError: true,
+      resetOnComplete: false,
+      resetOnRefCountZero: false,
+    }),
+  );
+}
 import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
 import {
@@ -29,6 +42,9 @@ export class NotificationAdminService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/notifications`;
 
+  private rolesCache$: Observable<RecipientRoleView[]> | null = null;
+  private allRecipientsCache$: Observable<RecipientView[]> | null = null;
+
   /** notification.view_all o notification.send — sección 9.2. */
   recipientRoles() {
     return this.http.get<RecipientRoleView[]>(`${this.base}/recipient-roles`);
@@ -39,6 +55,22 @@ export class NotificationAdminService {
     return this.http.get<RecipientView[]>(`${this.base}/recipients`, {
       params: toParams({ roleCode }),
     });
+  }
+
+  /**
+   * `recipientRoles()` memorizado para el resto de la sesión: Del equipo y
+   * Nuevo envío lo piden cada uno al abrir, y sin esto salía dos veces en
+   * la pestaña Red (doc 38, sección 9, punto 6).
+   */
+  cachedRoles(): Observable<RecipientRoleView[]> {
+    this.rolesCache$ ??= cacheForSession(this.recipientRoles());
+    return this.rolesCache$;
+  }
+
+  /** Igual que `cachedRoles()`, para la lista completa de personas (sin `roleCode`). */
+  cachedAllRecipients(): Observable<RecipientView[]> {
+    this.allRecipientsCache$ ??= cacheForSession(this.recipients());
+    return this.allRecipientsCache$;
   }
 
   /** notification.view_all — sección 9.4. */

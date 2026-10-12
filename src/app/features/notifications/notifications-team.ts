@@ -245,7 +245,7 @@ export class NotificationsTeamPage {
   ]);
 
   constructor() {
-    this.notificationSvc.recipientRoles().subscribe({
+    this.notificationSvc.cachedRoles().subscribe({
       next: (roles) => {
         this.roleOptions.set([
           { value: '', label: 'Todos los roles' },
@@ -280,7 +280,10 @@ export class NotificationsTeamPage {
   });
 
   private loadRecipients(roleCode: string) {
-    this.notificationSvc.recipients(roleCode || undefined).subscribe({
+    const recipients$ = roleCode
+      ? this.notificationSvc.recipients(roleCode)
+      : this.notificationSvc.cachedAllRecipients();
+    recipients$.subscribe({
       next: (list) => {
         this.userOptions.set([
           { value: '', label: 'Todos' },

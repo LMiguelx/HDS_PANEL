@@ -27,6 +27,7 @@ let nextId = 0;
       @if (hint()) {
         <span class="ui-checkbox-hint">{{ hint() }}</span>
       }
+      <ng-content select="[trailing]"></ng-content>
     </label>
   `,
   styles: [
