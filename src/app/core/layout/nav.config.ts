@@ -1,5 +1,7 @@
-﻿// Menú de navegación. Cada ítem declara qué permiso(s) lo habilitan; el shell
-// filtra por permisos (archivo 03). Ítems sin permisos (anyOf: []) siempre salen.
+// Menú de navegación. Cada ítem declara qué permiso(s) lo habilitan; el shell
+// filtra por permisos (archivo 03) y agrupa por `group` (doc 38, sección 5).
+// Fuente de verdad única: no se repiten rutas ni permisos a mano en otro
+// archivo (ARCHITECTURE_PANEL.md, regla 7).
 
 export interface NavItem {
   label: string;
@@ -14,6 +16,20 @@ export interface NavItem {
 /** Permisos que ya dan acceso a alguna pantalla del módulo de Promociones. */
 export const PROMO_ANY_PERMISSION = ['promo.create', 'promo.approve', 'promo.allocate'];
 
+/**
+ * Ícono del grupo cuando está cerrado o expandido (solo el grupo lleva
+ * ícono — doc 38, sección 5.2). Independiente de qué entradas sobrevivan
+ * al filtro de permisos, para que un grupo reducido a una sola entrada
+ * (enlace directo) conserve el ícono de su grupo.
+ */
+export const NAV_GROUP_ICONS: Record<string, string> = {
+  Clientes: 'store',
+  Ventas: 'shopping_cart',
+  Promociones: 'local_offer',
+  'Reparto y facturación': 'local_shipping',
+  Administración: 'shield',
+};
+
 export const NAV: NavItem[] = [
   { label: 'Inicio', icon: 'home', route: '/dashboard', anyOf: [] },
 
@@ -24,7 +40,6 @@ export const NAV: NavItem[] = [
     route: '/clientes',
     anyOf: ['customer.view'],
     group: 'Clientes',
-    comingSoon: true,
   },
   {
     label: 'Aprobaciones',
@@ -32,7 +47,6 @@ export const NAV: NavItem[] = [
     route: '/aprobaciones',
     anyOf: ['customer.approve'],
     group: 'Clientes',
-    comingSoon: true,
   },
   {
     label: 'Asignaciones',
@@ -41,15 +55,6 @@ export const NAV: NavItem[] = [
     anyOf: ['customer.assign'],
     group: 'Clientes',
   },
-  {
-    label: 'Segmentos',
-    icon: 'group_work',
-    route: '/segmentos',
-    anyOf: ['segments.manage'],
-    group: 'Clientes',
-    comingSoon: true,
-  },
-
   // Ventas
   {
     label: 'Pedidos',
@@ -57,7 +62,13 @@ export const NAV: NavItem[] = [
     route: '/pedidos',
     anyOf: ['order.view_all', 'order.create'],
     group: 'Ventas',
-    comingSoon: true,
+  },
+  {
+    label: 'Nuevo pedido',
+    icon: 'add_shopping_cart',
+    route: '/pedidos/nuevo',
+    anyOf: ['order.manage'],
+    group: 'Ventas',
   },
   {
     label: 'Bonificaciones pendientes',
@@ -65,69 +76,109 @@ export const NAV: NavItem[] = [
     route: '/pedidos/bonificaciones-pendientes',
     anyOf: ['order.view_all'],
     group: 'Ventas',
-    comingSoon: true,
+  },
+  {
+    label: 'Reportes de ventas',
+    icon: 'bar_chart',
+    route: '/reportes-ventas',
+    anyOf: ['order.view_all'],
+    group: 'Ventas',
   },
 
-  // Promos — módulo rediseñado, una sola entrada para las 5 pantallas
+  // Promociones — grupo propio, es el que más va a crecer (doc 38, 5.1)
   {
     label: 'Promociones',
     icon: 'local_offer',
     route: '/promociones',
     anyOf: PROMO_ANY_PERMISSION,
-    group: 'Promos',
+    group: 'Promociones',
+  },
+  {
+    label: 'Simular pedido',
+    icon: 'science',
+    route: '/promociones/simular',
+    anyOf: ['order.manage'],
+    group: 'Promociones',
+  },
+  {
+    label: 'Segmentos',
+    icon: 'group_work',
+    route: '/segmentos',
+    anyOf: ['segment.manage'],
+    group: 'Promociones',
   },
 
-  // Reparto
+  // Reparto y facturación
   {
     label: 'Reparto',
     icon: 'local_shipping',
     route: '/reparto',
     anyOf: ['delivery.deliver', 'delivery.settle'],
-    group: 'Reparto',
-    comingSoon: true,
+    group: 'Reparto y facturación',
   },
   {
     label: 'Flota',
     icon: 'directions_car',
     route: '/flota',
     anyOf: ['delivery.settle'],
-    group: 'Reparto',
-    comingSoon: true,
+    group: 'Reparto y facturación',
   },
-
-  // Facturación
+  {
+    label: 'Validación de pedidos',
+    icon: 'fact_check',
+    route: '/validacion-facturacion',
+    anyOf: ['order.send_to_billing'],
+    group: 'Reparto y facturación',
+  },
   {
     label: 'Facturas',
     icon: 'description',
     route: '/facturas',
     anyOf: ['invoice.reconcile'],
-    group: 'Facturación',
-    comingSoon: true,
+    group: 'Reparto y facturación',
   },
 
   // Administración
   {
-    label: 'Precios',
+    label: 'Catálogo y precios',
     icon: 'sell',
     route: '/precios',
-    anyOf: ['price.view'],
+    anyOf: ['price.view', 'product.edit'],
     group: 'Administración',
-    comingSoon: true,
+  },
+  {
+    label: 'Productos sin precio',
+    icon: 'production_quantity_limits',
+    route: '/precios/sin-precio',
+    anyOf: ['product.edit'],
+    group: 'Administración',
   },
   {
     label: 'Inventario',
     icon: 'inventory',
     route: '/inventario',
-    anyOf: ['report.view'],
+    anyOf: ['report.view', 'config.edit', 'stock.advance'],
     group: 'Administración',
-    comingSoon: true,
+  },
+  {
+    label: 'Usuarios',
+    icon: 'group',
+    route: '/usuarios',
+    anyOf: ['user.manage'],
+    group: 'Administración',
   },
   {
     label: 'Empresa',
     icon: 'business',
     route: '/empresa',
-    anyOf: ['config.edit'],
+    anyOf: ['config.edit', 'system.maintenance.manage'],
     group: 'Administración',
-    comingSoon: true,
+  },
+  {
+    label: 'Notificaciones',
+    icon: 'notifications',
+    route: '/notificaciones',
+    anyOf: ['notification.view_all', 'notification.send'],
+    group: 'Administración',
   },
 ];

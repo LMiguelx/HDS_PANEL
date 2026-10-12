@@ -48,23 +48,35 @@ let nextId = 0;
                  sin esto el navegador pinta la primera opción aunque el
                  valor esté vacío, y el formulario parece lleno sin estarlo. -->
             @for (opt of options(); track opt.value) {
-              <option [value]="opt.value" [selected]="opt.value === value()">{{ opt.label }}</option>
+              <option [value]="opt.value" [selected]="opt.value === value()">
+                {{ opt.label }}
+              </option>
             }
           </select>
         }
         @default {
-          <input
-            [id]="id"
-            class="ui-input"
-            [type]="type()"
-            [placeholder]="placeholder()"
-            [disabled]="disabled()"
-            [readOnly]="readonly()"
-            [attr.aria-invalid]="!!error()"
-            [attr.aria-describedby]="hint() || error() ? id + '-hint' : null"
-            [value]="value()"
-            (input)="onInput($event)"
-          />
+          <div class="ui-field-input-wrap">
+            @if (icon()) {
+              <span class="material-icons ui-field-icon" aria-hidden="true">{{ icon() }}</span>
+            } @else if (prefix()) {
+              <span class="ui-field-prefix" aria-hidden="true">{{ prefix() }}</span>
+            }
+            <input
+              [id]="id"
+              class="ui-input"
+              [class.ui-input-icon]="!!icon() || !!prefix()"
+              [class.ui-input-suffix]="hasSuffix()"
+              [type]="type()"
+              [placeholder]="placeholder()"
+              [disabled]="disabled()"
+              [readOnly]="readonly()"
+              [attr.aria-invalid]="!!error()"
+              [attr.aria-describedby]="hint() || error() ? id + '-hint' : null"
+              [value]="value()"
+              (input)="onInput($event)"
+            />
+            <ng-content select="[fieldSuffix]"></ng-content>
+          </div>
         }
       }
 
@@ -87,17 +99,45 @@ let nextId = 0;
         font-weight: 600;
         color: var(--ink);
       }
+      .ui-field-input-wrap {
+        position: relative;
+      }
+      .ui-field-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 20px;
+        color: var(--ink-muted);
+        pointer-events: none;
+      }
+      .ui-field-prefix {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--fs-dense);
+        font-weight: 700;
+        color: var(--ink-muted);
+        pointer-events: none;
+      }
       .ui-input {
         font-family: var(--font-sans);
         font-size: 15px;
         color: var(--ink);
         background: var(--surface-sunk);
         border: 1px solid var(--divider);
-        border-radius: 0;
+        border-radius: var(--radius-control, 0);
         min-height: var(--touch-min);
         padding: 0 12px;
         width: 100%;
         box-sizing: border-box;
+      }
+      .ui-input-icon {
+        padding-left: 40px;
+      }
+      .ui-input-suffix {
+        padding-right: 40px;
       }
       textarea.ui-input {
         padding: 10px 12px;
@@ -120,15 +160,22 @@ let nextId = 0;
       .ui-input:read-only {
         background: transparent;
       }
+      /* El popup nativo del <select> no siempre hereda color-scheme del
+         documento (varía por navegador); sin esto el texto queda claro
+         sobre fondo claro del sistema al usar el tema oscuro de la app. */
+      select.ui-input option {
+        background-color: var(--surface-sunk);
+        color: var(--ink);
+      }
       .ui-field-error .ui-input {
-        border-color: var(--st-vencida, #d13b3b);
+        border-color: var(--status-danger);
       }
       .ui-field-hint {
         font-size: 12px;
         color: var(--ink-muted);
       }
       .ui-field-error-text {
-        color: var(--accent-ink);
+        color: var(--status-danger);
       }
     `,
   ],
@@ -143,6 +190,12 @@ export class UiField {
   readonly = input(false);
   rows = input(3);
   options = input<UiFieldOption[]>([]);
+  /** Ícono (ligadura de Material Icons) a la izquierda del input. Opcional. */
+  icon = input('');
+  /** Texto corto a la izquierda del input en vez de un ícono (p. ej. "S/"). Se ignora si también hay `icon`. */
+  prefix = input('');
+  /** Reserva espacio a la derecha para contenido proyectado con `fieldSuffix` (p. ej. el botón de mostrar/ocultar contraseña). */
+  hasSuffix = input(false);
 
   value = model<string>('');
 

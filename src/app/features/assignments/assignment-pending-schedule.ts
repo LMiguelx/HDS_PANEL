@@ -7,13 +7,13 @@ import { AssignmentModuleTabs } from './ui/module-tabs';
 import { ScheduleDialog } from './ui/schedule-dialog';
 import { AssignmentAdminService } from './assignment-admin';
 import { IncompleteScheduleView } from '../../shared/models/assignment-admin.models';
-import { resolveNames } from './assignment-format';
 
 /**
  * Asignaciones vigentes con weekdays y/o weeksOfCycle sin completar — el
  * motivo por el que un cliente asignado igual no aparece en ningún DayPlan.
  * No confundir con huérfanos: acá el cliente sí tiene vendedor, le falta el
- * horario.
+ * horario. Pagina sin total (SliceResponse/hasNext): es una cola de trabajo
+ * que se encoge mientras el supervisor la resuelve.
  */
 @Component({
   selector: 'app-assignment-pending-schedule',
@@ -25,6 +25,9 @@ import { resolveNames } from './assignment-format';
         <h1>Horario incompleto</h1>
         <p class="aps-sub">{{ countText() }}</p>
       </div>
+      <p class="aps-banner">
+        Estos clientes no aparecen en la ruta de ningún vendedor hasta que completes su horario.
+      </p>
 
       <ui-table
         [loading]="loading()"
@@ -54,9 +57,19 @@ import { resolveNames } from './assignment-format';
           <tbody>
             @for (item of items(); track item.assignmentId) {
               <tr>
-                <td class="aps-cell-strong">{{ item.customerName }}</td>
-                <td>{{ vendorName(item.userId) }}</td>
-                <td class="aps-muted">{{ missingText(item) }}</td>
+                <td class="aps-cell-strong">
+                  {{ item.customerName }}
+                  <div class="aps-muted">{{ item.customerCode }}</div>
+                </td>
+                <td>{{ item.userName }}</td>
+                <td class="aps-muted">
+                  @if (!item.hasWeekdays) {
+                    <span class="aps-badge">Faltan días</span>
+                  }
+                  @if (!item.hasWeeksOfCycle) {
+                    <span class="aps-badge">Faltan semanas</span>
+                  }
+                </td>
                 <td class="aps-row-action">
                   <button uiButton variant="secondary" size="sm" (click)="complete(item)">
                     Completar horario
@@ -71,7 +84,7 @@ import { resolveNames } from './assignment-format';
           @for (item of items(); track item.assignmentId) {
             <div class="aps-card-mobile">
               <div class="aps-card-mobile-name">{{ item.customerName }}</div>
-              <div class="aps-muted">Vendedor: {{ vendorName(item.userId) }}</div>
+              <div class="aps-muted">{{ item.customerCode }} · Vendedor: {{ item.userName }}</div>
               <div class="aps-muted">Le falta: {{ missingText(item) }}</div>
               <button
                 uiButton
@@ -86,6 +99,30 @@ import { resolveNames } from './assignment-format';
           }
         </div>
       </ui-table>
+
+      @if (!loading() && !error() && items().length > 0) {
+        <div class="aps-pager">
+          <button
+            uiButton
+            variant="secondary"
+            size="sm"
+            [disabled]="page() === 0"
+            (click)="prevPage()"
+          >
+            Anterior
+          </button>
+          <span class="aps-pager-label">Página {{ page() + 1 }}</span>
+          <button
+            uiButton
+            variant="secondary"
+            size="sm"
+            [disabled]="!hasNext()"
+            (click)="nextPage()"
+          >
+            Siguiente
+          </button>
+        </div>
+      }
     </section>
   `,
   styles: [
@@ -105,6 +142,22 @@ import { resolveNames } from './assignment-format';
         color: var(--ink-muted);
         font-size: 14px;
       }
+      .aps-banner {
+        margin: 16px 0 0;
+        padding: 12px 16px;
+        border: 1px solid var(--hairline);
+        background: var(--faint);
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+      .aps-badge {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--st-pendiente);
+        white-space: nowrap;
+        margin-right: 8px;
+      }
       .aps-cell-strong {
         font-weight: 800;
       }
@@ -114,6 +167,18 @@ import { resolveNames } from './assignment-format';
       }
       .aps-row-action {
         text-align: right;
+      }
+      .aps-pager {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        margin-top: 24px;
+      }
+      .aps-pager-label {
+        font-size: 13px;
+        color: var(--ink-muted);
+        font-variant-numeric: var(--tnum);
       }
       .aps-cards-mobile {
         display: none;
@@ -153,9 +218,10 @@ export class AssignmentPendingSchedulePage {
   private dialog = inject(UiDialogService);
 
   protected items = signal<IncompleteScheduleView[]>([]);
+  protected page = signal(0);
+  protected hasNext = signal(false);
   protected loading = signal(true);
   protected error = signal(false);
-  private vendorNames = signal<Map<number, string>>(new Map());
 
   constructor() {
     this.load();
@@ -163,14 +229,10 @@ export class AssignmentPendingSchedulePage {
 
   protected countText(): string {
     const n = this.items().length;
-    if (n === 0) return 'Sin pendientes.';
+    if (n === 0) return 'Sin pendientes en esta página.';
     return n === 1
       ? '1 asignación con horario incompleto'
       : `${n} asignaciones con horario incompleto`;
-  }
-
-  protected vendorName(id: number): string {
-    return this.vendorNames().get(id) ?? `Vendedor #${id}`;
   }
 
   protected missingText(item: IncompleteScheduleView): string {
@@ -180,21 +242,25 @@ export class AssignmentPendingSchedulePage {
     return missing.join(' y ') || '—';
   }
 
+  protected prevPage() {
+    if (this.page() === 0) return;
+    this.page.update((p) => p - 1);
+    this.load();
+  }
+  protected nextPage() {
+    if (!this.hasNext()) return;
+    this.page.update((p) => p + 1);
+    this.load();
+  }
+
   load() {
     this.loading.set(true);
     this.error.set(false);
-    this.assignmentSvc.pendingSchedule().subscribe({
-      next: (items) => {
-        this.items.set(items);
+    this.assignmentSvc.pendingSchedule({ page: this.page(), size: 20 }).subscribe({
+      next: (result) => {
+        this.items.set(result.content ?? []);
+        this.hasNext.set(result.hasNext);
         this.loading.set(false);
-        // El DTO no trae userName (solo customerName) — se resuelve con el
-        // mismo truco de GET /map que usa el listado general.
-        const userIds = items.map((i) => i.userId);
-        if (userIds.length > 0) {
-          resolveNames(this.assignmentSvc, userIds).subscribe(({ vendors }) =>
-            this.vendorNames.set(vendors),
-          );
-        }
       },
       error: () => {
         this.loading.set(false);
@@ -215,6 +281,10 @@ export class AssignmentPendingSchedulePage {
         width: '480px',
       })
       .afterClosed()
-      .subscribe((saved) => saved && this.load());
+      .subscribe((saved) => {
+        // Al completar una fila, la página actual puede quedar corta —
+        // recargar la misma página trae el siguiente pendiente hacia arriba.
+        if (saved) this.load();
+      });
   }
 }

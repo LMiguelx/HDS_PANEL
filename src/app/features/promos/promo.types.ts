@@ -36,5 +36,6 @@ export type PendingChoiceView = components['schemas']['PendingChoiceView'];
 export type ChoiceOptionView = components['schemas']['ChoiceOptionView'];
 export type PendingCountView = components['schemas']['PendingCountView'];
 export type ResolveChoiceCommand = components['schemas']['ResolveChoiceCommand'];
+export type ApplicationView = components['schemas']['ApplicationView'];
 
 export type LookupItem = components['schemas']['LookupItem'];
