@@ -178,7 +178,6 @@ function inputNumber(input: HTMLInputElement): number {
         <div class="cof-grid">
           <div class="cof-left">
             <ui-card
-              class="cof-card-stack"
               title="{{ editMode() ? 'Pedido' : 'Cliente' }}"
               subtitle="{{
                 editMode()
@@ -186,106 +185,107 @@ function inputNumber(input: HTMLInputElement): number {
                   : 'Busca y selecciona a quién se le registra el pedido.'
               }}"
             >
-              @if (editMode()) {
-                @if (originalOrder(); as o) {
-                  <div class="cof-order-meta">
-                    <div class="cof-field-readonly">
-                      <span class="cof-label">Cliente</span>
-                      <span class="cof-value">{{ o.customerName }}</span>
+              <div class="cof-stack">
+                @if (editMode()) {
+                  @if (originalOrder(); as o) {
+                    <div class="cof-order-meta">
+                      <div class="cof-field-readonly">
+                        <span class="cof-label">Cliente</span>
+                        <span class="cof-value">{{ o.customerName }}</span>
+                      </div>
+                      <div class="cof-field-readonly">
+                        <span class="cof-label">Vendedor</span>
+                        <span>{{ o.salespersonName }}</span>
+                      </div>
+                      <div class="cof-field-readonly">
+                        <span class="cof-label">Fecha del pedido</span>
+                        <span>{{ dateTimeText(o.orderDate) }}</span>
+                      </div>
+                      <div class="cof-field-readonly">
+                        <span class="cof-label">Canal</span>
+                        <span>{{ o.salesChannelName || '—' }}</span>
+                      </div>
+                      <div class="cof-field-readonly">
+                        <span class="cof-label">Origen</span>
+                        <span>{{ originName(o.originCode) }}</span>
+                      </div>
                     </div>
-                    <div class="cof-field-readonly">
-                      <span class="cof-label">Vendedor</span>
-                      <span>{{ o.salespersonName }}</span>
-                    </div>
-                    <div class="cof-field-readonly">
-                      <span class="cof-label">Fecha del pedido</span>
-                      <span>{{ dateTimeText(o.orderDate) }}</span>
-                    </div>
-                    <div class="cof-field-readonly">
-                      <span class="cof-label">Canal</span>
-                      <span>{{ o.salesChannelName || '—' }}</span>
-                    </div>
-                    <div class="cof-field-readonly">
-                      <span class="cof-label">Origen</span>
-                      <span>{{ originName(o.originCode) }}</span>
-                    </div>
-                  </div>
-                }
-              } @else if (!customer()) {
-                <ui-typeahead
-                  label="Razón social o código"
-                  icon="search"
-                  placeholder="Busca por razón social o código"
-                  [clearOnPick]="false"
-                  [search]="searchCustomers"
-                  [(selected)]="customer"
-                  (picked)="onCustomerPicked($event)"
-                />
-              } @else {
-                <div class="cof-customer-card">
-                  <span class="cof-customer-avatar">{{ initials(customer()!.name) }}</span>
-                  <div class="cof-customer-info">
-                    <span class="cof-customer-name">{{ customer()!.name }}</span>
-                    <span class="cof-customer-code"
-                      >Código {{ customer()!.code || customer()!.id }}</span
-                    >
-                  </div>
-                  <button uiButton variant="ghost" size="sm" (click)="changeCustomer()">
-                    Cambiar
-                  </button>
-                </div>
-              }
-
-              @if (contextLoading()) {
-                <span class="cof-muted">Cargando datos del cliente…</span>
-              }
-
-              @if (context(); as ctx) {
-                @if (!ctx.active) {
-                  <div class="cof-alert">Este cliente está inactivo.</div>
-                }
-                @if (ctx.blockReason) {
-                  <div class="cof-alert">{{ ctx.blockReason }}</div>
-                }
-                @if (ctx.todayOrder && !editMode()) {
-                  <div class="cof-alert">
-                    Ya tiene un pedido registrado hoy (#{{ ctx.todayOrder.orderId }}).
-                  </div>
-                }
-
-                @if (!editMode() && ctx.salesAssignment) {
-                  <div class="cof-attribution">
-                    <span class="cof-label">Atribuir venta a</span>
-                    <div class="cof-attribution-options">
-                      <ui-option-card
-                        [selected]="attributeTo() === 'salesperson'"
-                        (pick)="attributeTo.set('salesperson')"
-                      >
-                        {{ ctx.salesAssignment.salespersonName }}
-                      </ui-option-card>
-                      <ui-option-card
-                        [selected]="attributeTo() === 'counter'"
-                        (pick)="attributeTo.set('counter')"
-                      >
-                        Mostrador (yo)
-                      </ui-option-card>
-                    </div>
-                  </div>
-                }
-
-                @if (!editMode() && (attributeTo() === 'counter' || !ctx.salesAssignment)) {
-                  <ui-field
-                    label="Canal de venta"
-                    type="select"
-                    [(value)]="salesChannelId"
-                    [options]="channelOptions()"
+                  }
+                } @else if (!customer()) {
+                  <ui-typeahead
+                    label="Razón social o código"
+                    icon="search"
+                    placeholder="Busca por razón social o código"
+                    [clearOnPick]="false"
+                    [search]="searchCustomers"
+                    [(selected)]="customer"
+                    (picked)="onCustomerPicked($event)"
                   />
+                } @else {
+                  <div class="cof-customer-card">
+                    <span class="cof-customer-avatar">{{ initials(customer()!.name) }}</span>
+                    <div class="cof-customer-info">
+                      <span class="cof-customer-name">{{ customer()!.name }}</span>
+                      <span class="cof-customer-code"
+                        >Código {{ customer()!.code || customer()!.id }}</span
+                      >
+                    </div>
+                    <button uiButton variant="ghost" size="sm" (click)="changeCustomer()">
+                      Cambiar
+                    </button>
+                  </div>
                 }
-              }
+
+                @if (contextLoading()) {
+                  <span class="cof-muted">Cargando datos del cliente…</span>
+                }
+
+                @if (context(); as ctx) {
+                  @if (!ctx.active) {
+                    <div class="cof-alert">Este cliente está inactivo.</div>
+                  }
+                  @if (ctx.blockReason) {
+                    <div class="cof-alert">{{ ctx.blockReason }}</div>
+                  }
+                  @if (ctx.todayOrder && !editMode()) {
+                    <div class="cof-alert">
+                      Ya tiene un pedido registrado hoy (#{{ ctx.todayOrder.orderId }}).
+                    </div>
+                  }
+
+                  @if (!editMode() && ctx.salesAssignment) {
+                    <div class="cof-attribution">
+                      <span class="cof-label">Atribuir venta a</span>
+                      <div class="cof-attribution-options">
+                        <ui-option-card
+                          [selected]="attributeTo() === 'salesperson'"
+                          (pick)="attributeTo.set('salesperson')"
+                        >
+                          {{ ctx.salesAssignment.salespersonName }}
+                        </ui-option-card>
+                        <ui-option-card
+                          [selected]="attributeTo() === 'counter'"
+                          (pick)="attributeTo.set('counter')"
+                        >
+                          Mostrador (yo)
+                        </ui-option-card>
+                      </div>
+                    </div>
+                  }
+
+                  @if (!editMode() && (attributeTo() === 'counter' || !ctx.salesAssignment)) {
+                    <ui-field
+                      label="Canal de venta"
+                      type="select"
+                      [(value)]="salesChannelId"
+                      [options]="channelOptions()"
+                    />
+                  }
+                }
+              </div>
             </ui-card>
 
             <ui-card
-              class="cof-card-stack"
               title="Condiciones de venta"
               subtitle="{{
                 editMode()
@@ -293,106 +293,109 @@ function inputNumber(input: HTMLInputElement): number {
                   : 'Define cómo se paga y si la entrega es inmediata.'
               }}"
             >
-              <ui-field
-                label="Condición de pago"
-                type="select"
-                [(value)]="paymentConditionId"
-                [options]="paymentConditionOptions()"
-              />
+              <div class="cof-stack">
+                <ui-field
+                  label="Condición de pago"
+                  type="select"
+                  [(value)]="paymentConditionId"
+                  [options]="paymentConditionOptions()"
+                />
 
-              @if (!editMode()) {
-                <div class="cof-mostrador-box" [class.cof-mostrador-on]="deliverNow()">
-                  <div class="cof-mostrador-text">
-                    <span class="cof-mostrador-title"
-                      >El cliente se lo lleva ahora (mostrador)</span
-                    >
-                    <span class="cof-muted"
-                      >Se registra como entregado en mostrador y no pasa a reparto.</span
-                    >
+                @if (!editMode()) {
+                  <div class="cof-mostrador-box" [class.cof-mostrador-on]="deliverNow()">
+                    <div class="cof-mostrador-text">
+                      <span class="cof-mostrador-title"
+                        >El cliente se lo lleva ahora (mostrador)</span
+                      >
+                      <span class="cof-muted"
+                        >Se registra como entregado en mostrador y no pasa a reparto.</span
+                      >
+                    </div>
+                    <ui-toggle [(checked)]="deliverNow" />
                   </div>
-                  <ui-toggle [(checked)]="deliverNow" />
-                </div>
-                <ui-field label="Nota (opcional)" type="textarea" [(value)]="note" />
-              }
+                  <ui-field label="Nota (opcional)" type="textarea" [(value)]="note" />
+                }
+              </div>
             </ui-card>
 
             @if (canEditCart()) {
               <ui-card
-                class="cof-card-stack"
                 title="Agregar productos"
                 subtitle="Busca en el catálogo, revisa lo sugerido o aplica una promoción."
               >
-                <ui-tabs [items]="tabs" [(value)]="activeTab" />
+                <div class="cof-stack">
+                  <ui-tabs [items]="tabs" [(value)]="activeTab" />
 
-                <div class="cof-tab-content">
-                  @switch (activeTab()) {
-                    @case ('catalogo') {
-                      <ui-typeahead
-                        label=""
-                        icon="search"
-                        placeholder="Busca por nombre o código"
-                        [clearOnPick]="true"
-                        [search]="searchProducts"
-                        (picked)="addProduct($event)"
-                      />
-                    }
-                    @case ('sugerido') {
-                      @if (suggestedLoading()) {
-                        <p class="cof-muted">Cargando sugeridos…</p>
-                      } @else if (suggested().length === 0) {
-                        <ui-empty
-                          title="Sin sugeridos"
-                          body="Este cliente todavía no tiene historial suficiente."
+                  <div class="cof-tab-content">
+                    @switch (activeTab()) {
+                      @case ('catalogo') {
+                        <ui-typeahead
+                          label=""
+                          icon="search"
+                          placeholder="Busca por nombre o código"
+                          [clearOnPick]="true"
+                          [search]="searchProducts"
+                          (picked)="addProduct($event)"
                         />
-                      } @else {
-                        <div class="cof-suggested-list cof-scroll-list">
-                          @for (item of suggested(); track item.productId) {
-                            <div class="cof-suggested-row">
-                              <div>
-                                <div class="cof-suggested-name">{{ item.productName }}</div>
-                                <div class="cof-muted">
-                                  Comprado {{ item.purchaseCount }}
-                                  {{ item.purchaseCount === 1 ? 'vez' : 'veces' }}
+                      }
+                      @case ('sugerido') {
+                        @if (suggestedLoading()) {
+                          <p class="cof-muted">Cargando sugeridos…</p>
+                        } @else if (suggested().length === 0) {
+                          <ui-empty
+                            title="Sin sugeridos"
+                            body="Este cliente todavía no tiene historial suficiente."
+                          />
+                        } @else {
+                          <div class="cof-suggested-list cof-scroll-list">
+                            @for (item of suggested(); track item.productId) {
+                              <div class="cof-suggested-row">
+                                <div>
+                                  <div class="cof-suggested-name">{{ item.productName }}</div>
+                                  <div class="cof-muted">
+                                    Comprado {{ item.purchaseCount }}
+                                    {{ item.purchaseCount === 1 ? 'vez' : 'veces' }}
+                                  </div>
                                 </div>
+                                <button
+                                  uiButton
+                                  variant="secondary"
+                                  size="sm"
+                                  [disabled]="hasLine(item.productId)"
+                                  (click)="addSuggested(item)"
+                                >
+                                  {{ hasLine(item.productId) ? 'Agregado' : 'Agregar' }}
+                                </button>
                               </div>
-                              <button
-                                uiButton
-                                variant="secondary"
-                                size="sm"
-                                [disabled]="hasLine(item.productId)"
-                                (click)="addSuggested(item)"
-                              >
-                                {{ hasLine(item.productId) ? 'Agregado' : 'Agregar' }}
-                              </button>
-                            </div>
-                          }
-                        </div>
+                            }
+                          </div>
+                        }
+                      }
+                      @case ('promociones') {
+                        @if (availablePromos().length === 0) {
+                          <ui-empty
+                            title="Sin promociones"
+                            body="No hay promociones vigentes para este cliente y canal."
+                          />
+                        } @else {
+                          <div class="cof-promo-list cof-scroll-list">
+                            @for (p of availablePromos(); track p.promoId) {
+                              <div class="cof-promo-card">
+                                <div class="cof-promo-name">{{ p.name }}</div>
+                                <div class="cof-muted">{{ p.requirementText }}</div>
+                                <div class="cof-muted">{{ p.rewardText }}</div>
+                                <div class="cof-promo-valid">{{ p.validUntilText }}</div>
+                              </div>
+                            }
+                          </div>
+                        }
                       }
                     }
-                    @case ('promociones') {
-                      @if (availablePromos().length === 0) {
-                        <ui-empty
-                          title="Sin promociones"
-                          body="No hay promociones vigentes para este cliente y canal."
-                        />
-                      } @else {
-                        <div class="cof-promo-list cof-scroll-list">
-                          @for (p of availablePromos(); track p.promoId) {
-                            <div class="cof-promo-card">
-                              <div class="cof-promo-name">{{ p.name }}</div>
-                              <div class="cof-muted">{{ p.requirementText }}</div>
-                              <div class="cof-muted">{{ p.rewardText }}</div>
-                              <div class="cof-promo-valid">{{ p.validUntilText }}</div>
-                            </div>
-                          }
-                        </div>
-                      }
-                    }
-                  }
+                  </div>
                 </div>
               </ui-card>
 
-              <ui-card class="cof-card-stack">
+              <ui-card>
                 <h3 class="cof-cart-title">
                   Carrito
                   @if (lines().length > 0) {
@@ -784,12 +787,14 @@ function inputNumber(input: HTMLInputElement): number {
         font-size: 14px;
         color: var(--ink);
       }
-      /* ui-card no espacia su contenido solo (ver DESIGN.md): cada tarjeta
-         con más de un campo apilado pide esta clase en su host. */
-      .cof-card-stack {
-        display: flex;
-        flex-direction: column;
-        gap: var(--sp-5);
+      /* ui-card no espacia su contenido solo. La separación va en un
+         contenedor DENTRO de la tarjeta: una clase en el host <ui-card> no
+         sirve, porque el contenido proyectado vive en el div interno de
+         ui-card y el gap del host solo separaría ese único div. */
+      .cof-stack {
+        display: grid;
+        gap: var(--sp-4);
+        min-width: 0;
       }
       .cof-grid {
         display: grid;
