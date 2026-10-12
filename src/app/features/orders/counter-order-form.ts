@@ -756,7 +756,7 @@ function inputNumber(input: HTMLInputElement): number {
       }
       .cof-left {
         display: grid;
-        gap: 20px;
+        gap: var(--sp-6);
         align-content: start;
         min-width: 0;
         max-width: var(--card-w-lg);
@@ -769,7 +769,7 @@ function inputNumber(input: HTMLInputElement): number {
         background: var(--surface-sunk);
         border: 1px solid var(--hairline);
         border-radius: var(--radius-control);
-        padding: var(--sp-3) var(--sp-4);
+        padding: var(--sp-4);
       }
       .cof-mostrador-box.cof-mostrador-on {
         border-color: var(--accent);
@@ -789,7 +789,7 @@ function inputNumber(input: HTMLInputElement): number {
       .cof-card-stack {
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: var(--sp-5);
       }
       .cof-grid {
         display: grid;

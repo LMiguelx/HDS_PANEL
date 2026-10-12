@@ -98,7 +98,7 @@ import { dateTimeText } from '../assignments/assignment-format';
         max-width: var(--card-w-sm);
         display: flex;
         flex-direction: column;
-        gap: var(--sp-4);
+        gap: var(--sp-5);
       }
       .sys-help {
         margin: 0;
@@ -138,6 +138,7 @@ import { dateTimeText } from '../assignments/assignment-format';
       }
       .sys-actions {
         display: flex;
+        margin: var(--sp-2) 0;
       }
       .sys-error {
         margin: 0;
