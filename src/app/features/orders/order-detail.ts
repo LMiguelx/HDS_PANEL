@@ -308,19 +308,20 @@ import { formatSoles } from '../../shared/pipes/money';
 
             <ui-card>
               <h2 class="od-section-title">Reparto</h2>
-              @if (!o.deliveryStatus) {
+              <!-- El backend siempre envía deliveryStatus; sin planilla llega con statusCode null. -->
+              @if (!o.deliveryStatus?.statusCode) {
                 <ui-empty
                   title="Sin información de reparto"
                   body="Este pedido todavía no tiene planilla asociada."
                 />
               } @else {
                 <div class="od-delivery">
-                  <ui-status [label]="deliveryName(o.deliveryStatus.statusCode)" />
-                  @if (o.deliveryStatus.returnedLines.length === 0) {
+                  <ui-status [label]="deliveryName(o.deliveryStatus!.statusCode)" />
+                  @if (o.deliveryStatus!.returnedLines.length === 0) {
                     <p class="od-muted od-delivery-note">Sin líneas devueltas.</p>
                   } @else {
                     <div class="od-returns">
-                      @for (line of o.deliveryStatus.returnedLines; track line.productId) {
+                      @for (line of o.deliveryStatus!.returnedLines; track line.productId) {
                         <div class="od-return-row">
                           <span>{{ productName(line) }}</span>
                           <span class="od-muted">

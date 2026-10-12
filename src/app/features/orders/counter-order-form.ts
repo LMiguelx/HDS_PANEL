@@ -1,7 +1,17 @@
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { Subject, of } from 'rxjs';
-import { catchError, debounceTime, map, switchMap } from 'rxjs/operators';
+import { catchError, debounceTime, filter, map, switchMap, tap } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiToggle } from '../../shared/ui/toggle/toggle';
@@ -42,8 +52,9 @@ import {
 import { AllocationView } from '../../shared/models/allocation.models';
 import { formatSoles } from '../../shared/pipes/money';
 import { quantityText } from '../sales-reports/sales-report-format';
-import { dateText } from '../assignments/assignment-format';
-import { round2 } from '../../shared/utils/quantity';
+import { dateText, dateTimeText } from '../assignments/assignment-format';
+import { originName } from './order-format';
+import { isWholeQuantity, toWholeQuantity } from '../../shared/utils/quantity';
 
 interface AllocationRow {
   allocationId: number;
@@ -84,6 +95,11 @@ function initials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
+/** Valor de un input numérico: NaN si quedó vacío (Number('') sería 0). */
+function inputNumber(input: HTMLInputElement): number {
+  return input.value.trim() === '' ? Number.NaN : Number(input.value);
+}
+
 /**
  * Pedido de mostrador — doc 30, secciones 2 y 7. Mismo formulario sirve
  * para registrar (sin orderId) y para editar un pedido OPEN existente
@@ -94,6 +110,11 @@ function initials(name: string): string {
  * para "Atribuir venta a" y resumen fijo de 360px. El stepper es solo
  * indicador — no oculta contenido, el formulario sigue siendo una sola
  * página con scroll.
+ *
+ * Edición: el pedido se carga desde el input `orderId` (que llega después
+ * del constructor), con una sola petición vigente — ARCHITECTURE_PANEL,
+ * sección 8.1. Editar no exige jornada abierta: la jornada solo hace
+ * falta para registrar un pedido nuevo.
  */
 @Component({
   selector: 'app-counter-order-form',
@@ -138,14 +159,16 @@ function initials(name: string): string {
           actionLabel="Abrir jornada"
           (action)="routeStore.start()"
         />
-      } @else if (editMode() && loadingOrder()) {
-        <div class="cof-skeleton" role="status" aria-label="Cargando"></div>
-      } @else if (editMode() && !originalOrder()) {
+      } @else if (editMode() && orderError()) {
         <ui-empty
           variant="error"
           title="No pudimos cargar el pedido"
           body="Intenta de nuevo en unos segundos."
+          actionLabel="Reintentar"
+          (action)="retryLoadOrder()"
         />
+      } @else if (editMode() && !originalOrder()) {
+        <div class="cof-skeleton" role="status" aria-label="Cargando"></div>
       } @else if (editMode() && originalOrder()?.statusCode !== 'OPEN') {
         <ui-empty
           title="Este pedido ya no se puede editar"
@@ -156,14 +179,38 @@ function initials(name: string): string {
           <div class="cof-left">
             <ui-card
               class="cof-card-stack"
-              title="Cliente"
-              subtitle="Busca y selecciona a quién se le registra el pedido."
+              title="{{ editMode() ? 'Pedido' : 'Cliente' }}"
+              subtitle="{{
+                editMode()
+                  ? 'Cliente, vendedor y canal no se cambian al editar.'
+                  : 'Busca y selecciona a quién se le registra el pedido.'
+              }}"
             >
               @if (editMode()) {
-                <div class="cof-field-readonly">
-                  <span class="cof-label">Cliente</span>
-                  <span class="cof-value">{{ originalOrder()?.customerName }}</span>
-                </div>
+                @if (originalOrder(); as o) {
+                  <div class="cof-order-meta">
+                    <div class="cof-field-readonly">
+                      <span class="cof-label">Cliente</span>
+                      <span class="cof-value">{{ o.customerName }}</span>
+                    </div>
+                    <div class="cof-field-readonly">
+                      <span class="cof-label">Vendedor</span>
+                      <span>{{ o.salespersonName }}</span>
+                    </div>
+                    <div class="cof-field-readonly">
+                      <span class="cof-label">Fecha del pedido</span>
+                      <span>{{ dateTimeText(o.orderDate) }}</span>
+                    </div>
+                    <div class="cof-field-readonly">
+                      <span class="cof-label">Canal</span>
+                      <span>{{ o.salesChannelName || '—' }}</span>
+                    </div>
+                    <div class="cof-field-readonly">
+                      <span class="cof-label">Origen</span>
+                      <span>{{ originName(o.originCode) }}</span>
+                    </div>
+                  </div>
+                }
               } @else if (!customer()) {
                 <ui-typeahead
                   label="Razón social o código"
@@ -240,7 +287,11 @@ function initials(name: string): string {
             <ui-card
               class="cof-card-stack"
               title="Condiciones de venta"
-              subtitle="Define cómo se paga y si la entrega es inmediata."
+              subtitle="{{
+                editMode()
+                  ? 'Define cómo se paga el pedido.'
+                  : 'Define cómo se paga y si la entrega es inmediata.'
+              }}"
             >
               <ui-field
                 label="Condición de pago"
@@ -283,8 +334,8 @@ function initials(name: string): string {
                         <input
                           class="cof-line-qty"
                           type="number"
-                          min="0.001"
-                          step="0.01"
+                          min="1"
+                          step="1"
                           [value]="line.quantity"
                           (change)="updateQuantity(line, $event)"
                         />
@@ -349,7 +400,7 @@ function initials(name: string): string {
                                 type="number"
                                 min="0"
                                 [max]="row.max"
-                                step="0.01"
+                                step="1"
                                 [value]="allocationQuantity(row)"
                                 (change)="setAllocationQuantity(row, $event)"
                               />
@@ -454,6 +505,10 @@ function initials(name: string): string {
               <ui-card title="Resumen" class="cof-sim-card">
                 @if (editMode()) {
                   <div class="cof-change-summary">
+                    <div class="cof-estimate">
+                      <ui-badge tone="warning">Estimado</ui-badge>
+                      <span class="cof-muted">El total final se confirma al guardar.</span>
+                    </div>
                     <p class="cof-muted">
                       @if (saleChangeCount() === 0 && allocationChangeCount() === 0) {
                         Todavía no hay cambios.
@@ -553,10 +608,17 @@ function initials(name: string): string {
                     Registrar pedido
                   </button>
                 } @else {
+                  @if (lines().length === 0) {
+                    <div class="cof-alert">
+                      El pedido debe conservar al menos una línea de venta. Si el cliente ya no
+                      lleva nada, anula el pedido desde su detalle.
+                    </div>
+                  }
                   <button
                     uiButton
                     variant="primary"
                     class="ui-btn-block"
+                    [disabled]="!canSaveEdit()"
                     [loading]="submitting()"
                     (click)="submitEdit()"
                   >
@@ -604,9 +666,16 @@ function initials(name: string): string {
         height: 240px;
         background: var(--faint);
       }
+      .cof-order-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 14px 20px;
+      }
       .cof-field-readonly {
         display: grid;
         gap: 4px;
+        font-size: 14px;
+        color: var(--ink);
       }
       .cof-label {
         font-size: var(--fs-label);
@@ -829,6 +898,12 @@ function initials(name: string): string {
         display: grid;
         gap: 4px;
       }
+      .cof-estimate {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
       .cof-right {
         position: sticky;
         top: var(--sp-6);
@@ -916,7 +991,7 @@ function initials(name: string): string {
     `,
   ],
 })
-export class CounterOrderFormPage {
+export class CounterOrderFormPage implements OnInit {
   private counterOrderSvc = inject(CounterOrderAdminService);
   private orderSvc = inject(OrderAdminService);
   private allocationSvc = inject(AllocationService);
@@ -936,6 +1011,9 @@ export class CounterOrderFormPage {
   protected formatSoles = formatSoles;
   protected quantityText = quantityText;
   protected initials = initials;
+  protected dateText = dateText;
+  protected dateTimeText = dateTimeText;
+  protected originName = originName;
   protected tabs = TABS;
 
   protected editMode = computed(() => !!this.orderId());
@@ -943,8 +1021,14 @@ export class CounterOrderFormPage {
     () => !!this.routeStore.route() && !this.routeStore.route()!.endTime,
   );
 
+  // — Pedido a editar: cada id nuevo o cada "Reintentar" dispara UNA carga vigente.
   protected originalOrder = signal<OrderDetail | null>(null);
-  protected loadingOrder = signal(false);
+  protected orderError = signal(false);
+  private orderRetry = signal(0);
+  private orderRequest = computed(() => ({
+    orderId: Number(this.orderId()) || 0,
+    attempt: this.orderRetry(),
+  }));
 
   protected customer = signal<UiLookupItem | null>(null);
   protected context = signal<CounterCustomerContext | null>(null);
@@ -1040,6 +1124,9 @@ export class CounterOrderFormPage {
   );
   protected saleChangeCount = computed(() => this.buildSaleItemChanges().length);
 
+  /** Un pedido debe conservar al menos una línea de venta (doc 37, sección 7.6). */
+  protected canSaveEdit = computed(() => !this.submitting() && this.lines().length > 0);
+
   private idempotencyKey = signal(newIdempotencyKey());
   private simTrigger$ = new Subject<void>();
 
@@ -1070,49 +1157,35 @@ export class CounterOrderFormPage {
     this.lookupSvc.products(q).pipe(map((items) => toUiLookup(items)));
 
   constructor() {
-    this.routeStore.refresh();
-    this.counterSession.ensureLoaded();
-
+    // Las condiciones de pago se usan en los dos modos.
     this.catalogSvc.paymentConditions().subscribe((list) => {
       this.paymentConditions.set(
         list.map((p) => ({ value: String(p.paymentConditionId), label: p.name })),
       );
     });
-    this.lookupSvc.salesChannels().subscribe((list) => {
-      this.channelOptions.set([
-        { value: '', label: 'Sin canal' },
-        ...list.map((i) => ({ value: String(i.id), label: i.name ?? '' })),
-      ]);
-    });
 
-    if (this.orderId()) {
-      this.loadingOrder.set(true);
-      this.orderSvc.detail(Number(this.orderId())).subscribe({
-        next: (detail) => {
-          this.originalOrder.set(detail);
-          this.loadingOrder.set(false);
-          this.paymentConditionId.set(String(detail.paymentConditionId));
-          // Solo las líneas de venta son editables aquí — promoción y
-          // dotación tienen su propio trato (doc 36, sección 6.3).
-          this.lines.set(
-            detail.items
-              .filter((i) => !i.bonus)
-              .map((i) => ({
-                productId: i.productId,
-                productName: i.productName,
-                quantity: i.quantity,
-              })),
-          );
-          if (detail.originCode === 'FIELD' && this.canManageAllocations()) {
-            this.allocationSvc.byUser(detail.salespersonId).subscribe({
-              next: (list) => this.vendorAllocations.set(list),
-              error: () => this.vendorAllocations.set([]),
-            });
-          }
-        },
-        error: () => this.loadingOrder.set(false),
+    // `orderId` llega por la ruta DESPUÉS del constructor: se lee de forma
+    // reactiva. switchMap deja una sola petición vigente (ARCHITECTURE_PANEL 8.1).
+    toObservable(this.orderRequest)
+      .pipe(
+        filter((req) => req.orderId > 0),
+        tap(() => {
+          this.orderError.set(false);
+          this.originalOrder.set(null);
+        }),
+        switchMap((req) =>
+          this.orderSvc.detail(req.orderId).pipe(
+            catchError(() => {
+              this.orderError.set(true);
+              return of(null);
+            }),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((detail) => {
+        if (detail) this.applyOrder(detail);
       });
-    }
 
     this.simTrigger$
       .pipe(
@@ -1123,6 +1196,7 @@ export class CounterOrderFormPage {
           this.simulating.set(true);
           return this.simulationSvc.simulateOrder(cmd).pipe(catchError(() => of(null)));
         }),
+        takeUntilDestroyed(),
       )
       .subscribe((result) => {
         this.simulating.set(false);
@@ -1138,6 +1212,52 @@ export class CounterOrderFormPage {
       this.originalOrder();
       untracked(() => this.simTrigger$.next());
     });
+  }
+
+  /**
+   * Aquí los inputs de la ruta ya tienen valor. La jornada, el almacén de
+   * la sede y los canales solo los necesita Nuevo pedido (doc 30, sección 6):
+   * editar no pide jornada abierta.
+   */
+  ngOnInit() {
+    if (this.editMode()) return;
+    this.routeStore.refresh();
+    this.counterSession.ensureLoaded();
+    this.lookupSvc.salesChannels().subscribe((list) => {
+      this.channelOptions.set([
+        { value: '', label: 'Sin canal' },
+        ...list.map((i) => ({ value: String(i.id), label: i.name ?? '' })),
+      ]);
+    });
+  }
+
+  protected retryLoadOrder() {
+    this.orderRetry.update((n) => n + 1);
+  }
+
+  /** Deja el formulario con el pedido recién cargado. */
+  private applyOrder(detail: OrderDetail) {
+    this.originalOrder.set(detail);
+    this.paymentConditionId.set(String(detail.paymentConditionId));
+    this.allocationQuantities.set(new Map());
+    // Solo las líneas de venta son editables aquí — promoción y
+    // dotación tienen su propio trato (doc 36, sección 6.3).
+    this.lines.set(
+      detail.items
+        .filter((i) => !i.bonus)
+        .map((i) => ({
+          productId: i.productId,
+          productName: i.productName,
+          quantity: i.quantity,
+        })),
+    );
+    this.vendorAllocations.set([]);
+    if (detail.originCode === 'FIELD' && this.canManageAllocations()) {
+      this.allocationSvc.byUser(detail.salespersonId).subscribe({
+        next: (list) => this.vendorAllocations.set(list),
+        error: () => this.vendorAllocations.set([]),
+      });
+    }
   }
 
   protected canEditCart(): boolean {
@@ -1229,17 +1349,31 @@ export class CounterOrderFormPage {
 
   protected addSuggested(item: SuggestedItem) {
     if (this.hasLine(item.productId)) return;
+    // El promedio histórico puede venir con decimales: se vende en unidades enteras.
+    const quantity = toWholeQuantity(item.avgQuantity, 1) ?? 1;
     this.lines.update((list) => [
       ...list,
-      { productId: item.productId, productName: item.productName, quantity: item.avgQuantity || 1 },
+      { productId: item.productId, productName: item.productName, quantity },
     ]);
   }
 
+  /** Cantidad de venta: entero, mínimo 1. Para quitar el producto está el botón ✕. */
   protected updateQuantity(line: CartLine, ev: Event) {
-    const value = Number((ev.target as HTMLInputElement).value);
-    if (!(value > 0)) return;
+    const input = ev.target as HTMLInputElement;
+    const raw = inputNumber(input);
+    const value = toWholeQuantity(raw, 1);
+    if (value == null) {
+      input.value = String(line.quantity);
+      return;
+    }
+    if (raw < 1) {
+      this.toast.info('La cantidad mínima es 1. Para quitar el producto usa ✕.');
+    } else if (!isWholeQuantity(raw)) {
+      this.toast.info(`Las cantidades van en unidades enteras: se dejó ${value}.`);
+    }
+    input.value = String(value);
     this.lines.update((list) =>
-      list.map((l) => (l.productId === line.productId ? { ...l, quantity: round2(value) } : l)),
+      list.map((l) => (l.productId === line.productId ? { ...l, quantity: value } : l)),
     );
   }
 
@@ -1344,19 +1478,21 @@ export class CounterOrderFormPage {
     () => this.originalOrder()?.items.filter((i) => i.bonus && i.allocationId == null) ?? [],
   );
 
-  protected dateText = dateText;
-
   protected allocationQuantity(row: AllocationRow): number {
     return this.allocationQuantities().get(row.allocationId) ?? row.originalQuantity;
   }
 
+  /** Cantidad final de dotación: entero entre 0 (quitar) y el máximo de la fila. */
   protected setAllocationQuantity(row: AllocationRow, ev: Event) {
-    const raw = Number((ev.target as HTMLInputElement).value);
-    const value = Number.isFinite(raw)
-      ? round2(Math.max(0, Math.min(raw, row.max)))
-      : row.originalQuantity;
-    this.allocationQuantities.update((map) => {
-      const next = new Map(map);
+    const input = ev.target as HTMLInputElement;
+    const raw = inputNumber(input);
+    const value = toWholeQuantity(raw, 0, row.max) ?? this.allocationQuantity(row);
+    if (Number.isFinite(raw) && !isWholeQuantity(raw)) {
+      this.toast.info(`Las cantidades van en unidades enteras: se dejó ${value}.`);
+    }
+    input.value = String(value);
+    this.allocationQuantities.update((current) => {
+      const next = new Map(current);
       next.set(row.allocationId, value);
       return next;
     });
@@ -1365,6 +1501,12 @@ export class CounterOrderFormPage {
   protected submitEdit() {
     const order = this.originalOrder();
     if (!order) return;
+    if (this.lines().length === 0) {
+      this.toast.error(
+        'El pedido debe conservar al menos una línea de venta. Si el cliente ya no lleva nada, anúlalo.',
+      );
+      return;
+    }
     const catalogItems = this.buildSaleItemChanges();
     const allocationItems = this.buildAllocationChanges();
     const paymentConditionChanged = Number(this.paymentConditionId()) !== order.paymentConditionId;
@@ -1384,6 +1526,9 @@ export class CounterOrderFormPage {
       parts.push(
         `${allocationItems.length} dotación${allocationItems.length === 1 ? '' : 'es'} cambia${allocationItems.length === 1 ? '' : 'n'}`,
       );
+    }
+    if (paymentConditionChanged) {
+      parts.push('cambia la condición de pago');
     }
     const message = `${parts.join(' y ')}. Las promociones se vuelven a calcular al guardar. ¿Guardar cambios?`;
 
@@ -1432,8 +1577,9 @@ export class CounterOrderFormPage {
   }
 
   protected cancel() {
-    if (this.editMode() && this.originalOrder()) {
-      this.router.navigate(['/pedidos/detalle', this.originalOrder()!.orderId]);
+    // En edición vuelve al detalle aunque el pedido no haya cargado.
+    if (this.editMode()) {
+      this.router.navigate(['/pedidos/detalle', this.orderId()]);
     } else {
       this.router.navigate(['/pedidos']);
     }
