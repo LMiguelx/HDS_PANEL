@@ -16,7 +16,7 @@ export interface UiStep {
   selector: 'ui-stepper',
   template: `
     <ol class="ui-stepper">
-      @for (step of steps(); track step.label; let i = $index; let last = $last) {
+      @for (step of steps(); track step.label; let i = $index) {
         <li class="ui-step" [class]="'ui-step-' + step.state">
           <span class="ui-step-dot">
             @if (step.state === 'complete') {
@@ -26,9 +26,6 @@ export interface UiStep {
             }
           </span>
           <span class="ui-step-label">{{ step.label }}</span>
-          @if (!last) {
-            <span class="ui-step-line"></span>
-          }
         </li>
       }
     </ol>
@@ -42,27 +39,32 @@ export interface UiStep {
         margin: 0;
         padding: 0;
         flex-wrap: wrap;
-        gap: 4px;
+        gap: var(--sp-2);
       }
       .ui-step {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--sp-2);
+        padding: 6px var(--sp-4) 6px 6px;
+        border-radius: var(--radius-pill);
+        border: 1.5px solid var(--divider);
+        background: var(--surface);
       }
       .ui-step-dot {
         flex: none;
-        width: 26px;
-        height: 26px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
         display: grid;
         place-items: center;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         border: 2px solid var(--divider);
         color: var(--ink-muted);
+        background: var(--surface);
       }
       .ui-step-dot .material-icons {
-        font-size: 16px;
+        font-size: 15px;
       }
       .ui-step-label {
         font-size: 13px;
@@ -70,11 +72,8 @@ export interface UiStep {
         color: var(--ink-muted);
         white-space: nowrap;
       }
-      .ui-step-line {
-        width: 28px;
-        height: 2px;
-        background: var(--divider);
-        margin: 0 4px;
+      .ui-step-current {
+        border-color: var(--accent);
       }
       .ui-step-current .ui-step-dot {
         border-color: var(--accent);
@@ -87,7 +86,8 @@ export interface UiStep {
       }
       .ui-step-complete .ui-step-dot {
         border-color: var(--success);
-        color: var(--success);
+        background: var(--success);
+        color: var(--on-accent);
       }
       .ui-step-complete .ui-step-label {
         color: var(--ink);
@@ -96,6 +96,9 @@ export interface UiStep {
       @media (max-width: 599px) {
         .ui-step-label {
           display: none;
+        }
+        .ui-step {
+          padding: 6px;
         }
       }
     `,

@@ -301,15 +301,97 @@ function inputNumber(input: HTMLInputElement): number {
               />
 
               @if (!editMode()) {
-                <ui-toggle
-                  label="El cliente se lo lleva ahora (mostrador)"
-                  [(checked)]="deliverNow"
-                />
+                <div class="cof-mostrador-box" [class.cof-mostrador-on]="deliverNow()">
+                  <div class="cof-mostrador-text">
+                    <span class="cof-mostrador-title"
+                      >El cliente se lo lleva ahora (mostrador)</span
+                    >
+                    <span class="cof-muted"
+                      >Se registra como entregado en mostrador y no pasa a reparto.</span
+                    >
+                  </div>
+                  <ui-toggle [(checked)]="deliverNow" />
+                </div>
                 <ui-field label="Nota (opcional)" type="textarea" [(value)]="note" />
               }
             </ui-card>
 
             @if (canEditCart()) {
+              <ui-card
+                class="cof-card-stack"
+                title="Agregar productos"
+                subtitle="Busca en el catálogo, revisa lo sugerido o aplica una promoción."
+              >
+                <ui-tabs [items]="tabs" [(value)]="activeTab" />
+
+                <div class="cof-tab-content">
+                  @switch (activeTab()) {
+                    @case ('catalogo') {
+                      <ui-typeahead
+                        label=""
+                        icon="search"
+                        placeholder="Busca por nombre o código"
+                        [clearOnPick]="true"
+                        [search]="searchProducts"
+                        (picked)="addProduct($event)"
+                      />
+                    }
+                    @case ('sugerido') {
+                      @if (suggestedLoading()) {
+                        <p class="cof-muted">Cargando sugeridos…</p>
+                      } @else if (suggested().length === 0) {
+                        <ui-empty
+                          title="Sin sugeridos"
+                          body="Este cliente todavía no tiene historial suficiente."
+                        />
+                      } @else {
+                        <div class="cof-suggested-list cof-scroll-list">
+                          @for (item of suggested(); track item.productId) {
+                            <div class="cof-suggested-row">
+                              <div>
+                                <div class="cof-suggested-name">{{ item.productName }}</div>
+                                <div class="cof-muted">
+                                  Comprado {{ item.purchaseCount }}
+                                  {{ item.purchaseCount === 1 ? 'vez' : 'veces' }}
+                                </div>
+                              </div>
+                              <button
+                                uiButton
+                                variant="secondary"
+                                size="sm"
+                                [disabled]="hasLine(item.productId)"
+                                (click)="addSuggested(item)"
+                              >
+                                {{ hasLine(item.productId) ? 'Agregado' : 'Agregar' }}
+                              </button>
+                            </div>
+                          }
+                        </div>
+                      }
+                    }
+                    @case ('promociones') {
+                      @if (availablePromos().length === 0) {
+                        <ui-empty
+                          title="Sin promociones"
+                          body="No hay promociones vigentes para este cliente y canal."
+                        />
+                      } @else {
+                        <div class="cof-promo-list cof-scroll-list">
+                          @for (p of availablePromos(); track p.promoId) {
+                            <div class="cof-promo-card">
+                              <div class="cof-promo-name">{{ p.name }}</div>
+                              <div class="cof-muted">{{ p.requirementText }}</div>
+                              <div class="cof-muted">{{ p.rewardText }}</div>
+                              <div class="cof-promo-valid">{{ p.validUntilText }}</div>
+                            </div>
+                          }
+                        </div>
+                      }
+                    }
+                  }
+                </div>
+              </ui-card>
+
               <ui-card class="cof-card-stack">
                 <h3 class="cof-cart-title">
                   Carrito
@@ -318,14 +400,7 @@ function inputNumber(input: HTMLInputElement): number {
                   }
                 </h3>
                 @if (lines().length === 0) {
-                  <div class="cof-cart-empty">
-                    <span class="material-icons cof-cart-empty-icon" aria-hidden="true"
-                      >shopping_cart</span
-                    >
-                    <p class="cof-muted">
-                      Todavía no agregaste productos. Búscalos en Catálogo o Sugerido.
-                    </p>
-                  </div>
+                  <p class="cof-cart-empty cof-muted">Todavía no agregaste productos.</p>
                 } @else {
                   <div class="cof-lines">
                     @for (line of lines(); track line.productId) {
@@ -426,77 +501,6 @@ function inputNumber(input: HTMLInputElement): number {
                   }
                 </ui-card>
               }
-
-              <ui-card class="cof-card-stack">
-                <ui-tabs [items]="tabs" [(value)]="activeTab" />
-
-                <div class="cof-tab-content">
-                  @switch (activeTab()) {
-                    @case ('catalogo') {
-                      <ui-typeahead
-                        label="Agregar producto"
-                        icon="search"
-                        placeholder="Busca por nombre"
-                        [clearOnPick]="true"
-                        [search]="searchProducts"
-                        (picked)="addProduct($event)"
-                      />
-                    }
-                    @case ('sugerido') {
-                      @if (suggestedLoading()) {
-                        <p class="cof-muted">Cargando sugeridos…</p>
-                      } @else if (suggested().length === 0) {
-                        <ui-empty
-                          title="Sin sugeridos"
-                          body="Este cliente todavía no tiene historial suficiente."
-                        />
-                      } @else {
-                        <div class="cof-suggested-list cof-scroll-list">
-                          @for (item of suggested(); track item.productId) {
-                            <div class="cof-suggested-row">
-                              <div>
-                                <div class="cof-suggested-name">{{ item.productName }}</div>
-                                <div class="cof-muted">
-                                  Comprado {{ item.purchaseCount }}
-                                  {{ item.purchaseCount === 1 ? 'vez' : 'veces' }}
-                                </div>
-                              </div>
-                              <button
-                                uiButton
-                                variant="secondary"
-                                size="sm"
-                                [disabled]="hasLine(item.productId)"
-                                (click)="addSuggested(item)"
-                              >
-                                {{ hasLine(item.productId) ? 'Agregado' : 'Agregar' }}
-                              </button>
-                            </div>
-                          }
-                        </div>
-                      }
-                    }
-                    @case ('promociones') {
-                      @if (availablePromos().length === 0) {
-                        <ui-empty
-                          title="Sin promociones"
-                          body="No hay promociones vigentes para este cliente y canal."
-                        />
-                      } @else {
-                        <div class="cof-promo-list cof-scroll-list">
-                          @for (p of availablePromos(); track p.promoId) {
-                            <div class="cof-promo-card">
-                              <div class="cof-promo-name">{{ p.name }}</div>
-                              <div class="cof-muted">{{ p.requirementText }}</div>
-                              <div class="cof-muted">{{ p.rewardText }}</div>
-                              <div class="cof-promo-valid">{{ p.validUntilText }}</div>
-                            </div>
-                          }
-                        </div>
-                      }
-                    }
-                  }
-                </div>
-              </ui-card>
             }
           </div>
 
@@ -582,7 +586,7 @@ function inputNumber(input: HTMLInputElement): number {
                     </div>
                   </div>
                 } @else {
-                  <p class="cof-muted">Agrega un cliente y productos para ver el cálculo.</p>
+                  <p class="cof-muted">{{ summaryHelp() }}</p>
                   <div class="cof-sim-totals">
                     <div class="cof-sim-total-row">
                       <span>Subtotal</span><span>{{ formatSoles(0) }}</span>
@@ -607,6 +611,9 @@ function inputNumber(input: HTMLInputElement): number {
                   >
                     Registrar pedido
                   </button>
+                  @if (!canSubmit() && submitDisabledReason()) {
+                    <p class="cof-submit-hint">{{ submitDisabledReason() }}</p>
+                  }
                 } @else {
                   @if (lines().length === 0) {
                     <div class="cof-alert">
@@ -752,6 +759,30 @@ function inputNumber(input: HTMLInputElement): number {
         gap: 20px;
         align-content: start;
         min-width: 0;
+        max-width: var(--card-w-lg);
+      }
+      .cof-mostrador-box {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-4);
+        background: var(--surface-sunk);
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-control);
+        padding: var(--sp-3) var(--sp-4);
+      }
+      .cof-mostrador-box.cof-mostrador-on {
+        border-color: var(--accent);
+        background: var(--accent-wash);
+      }
+      .cof-mostrador-text {
+        display: grid;
+        gap: 2px;
+      }
+      .cof-mostrador-title {
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--ink);
       }
       /* ui-card no espacia su contenido solo (ver DESIGN.md): cada tarjeta
          con más de un campo apilado pide esta clase en su host. */
@@ -776,20 +807,12 @@ function inputNumber(input: HTMLInputElement): number {
         color: var(--ink);
       }
       .cof-cart-empty {
-        display: grid;
-        justify-items: center;
-        gap: 10px;
-        padding: 28px 0;
-        text-align: center;
-      }
-      .cof-cart-empty-icon {
-        font-size: 32px;
-        color: var(--ink-muted);
-        opacity: 0.6;
+        margin: 0;
+        padding: var(--sp-2) 0;
       }
       .cof-tab-content {
         display: grid;
-        gap: 12px;
+        gap: var(--sp-4);
       }
       .cof-scroll-list {
         max-height: 360px;
@@ -969,6 +992,12 @@ function inputNumber(input: HTMLInputElement): number {
         font-weight: 700;
         color: var(--ink);
         margin-top: 2px;
+      }
+      .cof-submit-hint {
+        margin: var(--sp-2) 0 0;
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
+        text-align: center;
       }
 
       @media (max-width: 900px) {
@@ -1274,6 +1303,23 @@ export class CounterOrderFormPage implements OnInit {
       this.lines().length > 0
     );
   }
+
+  /** Lo único que falta para poder calcular o registrar, en orden: cliente → condición de pago → productos. */
+  protected summaryHelp = computed(() => {
+    if (this.editMode()) return 'Agrega productos para ver el cálculo.';
+    if (!this.customer()) return 'Elige un cliente';
+    if (!this.paymentConditionId()) return 'Elige la condición de pago';
+    if (this.lines().length === 0) return 'Agrega productos';
+    return 'Agrega un cliente y productos para ver el cálculo.';
+  });
+
+  protected submitDisabledReason = computed(() => {
+    if (!this.customer()) return 'Elige un cliente';
+    if (!this.context()?.canCreateOrder) return 'Este cliente no puede recibir un pedido ahora.';
+    if (!this.paymentConditionId()) return 'Elige la condición de pago';
+    if (this.lines().length === 0) return 'Agrega productos';
+    return '';
+  });
 
   protected hasLine(productId: number): boolean {
     return this.lines().some((l) => l.productId === productId);
