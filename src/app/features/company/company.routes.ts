@@ -10,4 +10,8 @@ export const COMPANY_ROUTES: Routes = [
     path: 'configuracion',
     loadComponent: () => import('./config-list').then((m) => m.ConfigListPage),
   },
+  {
+    path: 'sistema',
+    loadComponent: () => import('./system-tab').then((m) => m.SystemTabPage),
+  },
 ];

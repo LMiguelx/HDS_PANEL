@@ -136,7 +136,7 @@ export const routes: Routes = [
       },
       {
         path: 'empresa',
-        canActivate: [permissionGuard('config.edit')],
+        canActivate: [permissionGuard('config.edit', 'system.maintenance.manage')],
         loadChildren: () =>
           import('./features/company/company.routes').then((m) => m.COMPANY_ROUTES),
       },
@@ -153,13 +153,8 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/inventory/inventory.routes').then((m) => m.INVENTORY_ROUTES),
       },
-      // Mantenimiento — rediseñado
-      {
-        path: 'mantenimiento',
-        canActivate: [permissionGuard('config.edit')],
-        loadComponent: () =>
-          import('./features/maintenance/maintenance-page').then((m) => m.MaintenancePage),
-      },
+      // Mantenimiento se mudó a Empresa → Sistema (doc 38, sección 10).
+      { path: 'mantenimiento', redirectTo: 'empresa/sistema' },
     ],
   },
   { path: '**', redirectTo: 'dashboard' },

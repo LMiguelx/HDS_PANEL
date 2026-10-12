@@ -8,6 +8,7 @@ import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../ui/toast';
 import { ProblemDetail } from '../../shared/models/api.models';
+import { MaintenanceBlockState } from './maintenance-block.state';
 
 /**
  * Marca una petición cuyo error es esperado y ya se maneja en la pantalla
@@ -32,9 +33,20 @@ function cleanDetail(detail: string | undefined): string | null {
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
+  const maintenanceBlock = inject(MaintenanceBlockState);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
+      // 503 de mantenimiento: pantalla completa propia, no toast ni cierre
+      // de sesión (doc 38, sección 10.4). Quien tiene `system.maintenance.manage`
+      // no debería recibir este 503 nunca (el backend lo exime).
+      if (
+        err.status === 503 &&
+        (err.error as ProblemDetail | undefined)?.title?.includes('mantenimiento')
+      ) {
+        maintenanceBlock.block((err.error as ProblemDetail).detail ?? null);
+        return throwError(() => err);
+      }
       // El 401 lo maneja el authInterceptor (refresh). No mostramos toast ahí.
       if (err.status !== 401 && !req.context.get(SKIP_ERROR_TOAST)) {
         const problem = err.error as ProblemDetail | undefined;

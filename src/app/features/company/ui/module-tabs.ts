@@ -1,14 +1,21 @@
 import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission';
 
 /** Pestañas del módulo de Empresa, mismo patrón que los demás módulos. */
 @Component({
   selector: 'app-company-module-tabs',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, HasPermissionDirective],
   template: `
     <nav class="cmp-tabs">
       <a routerLink="/empresa/sedes" routerLinkActive="active">Sedes</a>
       <a routerLink="/empresa/configuracion" routerLinkActive="active">Configuración</a>
+      <a
+        routerLink="/empresa/sistema"
+        routerLinkActive="active"
+        *hasPermission="'system.maintenance.manage'"
+        >Sistema</a
+      >
     </nav>
   `,
   styles: [

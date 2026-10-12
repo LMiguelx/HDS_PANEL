@@ -337,7 +337,11 @@ const ROLE_AVATAR_COLORS = [
           <span class="home-tile-name">Aprobaciones</span>
           <span class="home-tile-note">Solicitudes de creación, cambio de campo y cierre.</span>
         </a>
-        <a class="home-tile is-ready" routerLink="/mantenimiento" *hasPermission="'config.edit'">
+        <a
+          class="home-tile is-ready"
+          routerLink="/empresa/sistema"
+          *hasPermission="['config.edit', 'system.maintenance.manage']"
+        >
           <span class="home-tile-name">Mantenimiento</span>
           <span class="home-tile-note">Activa o desactiva el modo mantenimiento del sistema.</span>
         </a>

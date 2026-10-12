@@ -80,9 +80,9 @@ src/app/
 └── shared/     components/, directives/ (has-permission), models/, pipes/ (money), utils/, ui/ (design system)
 ```
 
-### 2.2 Features existentes (19)
+### 2.2 Features existentes (18)
 
-`assignments`, `auth`, `billing`, `catalog`, `company`, `customer-requests`, `customers`, `dashboard`, `delivery`, `fleet`, `inventory`, `maintenance`, `notifications`, `orders`, `promos`, `sales` (solo `allocation.ts`), `sales-reports`, `segments`, `users`.
+`assignments`, `auth`, `billing`, `catalog`, `company`, `customer-requests`, `customers`, `dashboard`, `delivery`, `fleet`, `inventory`, `notifications`, `orders`, `promos`, `sales` (solo `allocation.ts`), `sales-reports`, `segments`, `users`. `maintenance` se fusionó dentro de `company` (doc 38, sección 10): su pantalla es ahora la pestaña Sistema.
 
 ### 2.3 Convención actual dentro de un feature (carpeta plana)
 
@@ -191,7 +191,7 @@ features/<dominio>/
     └── <x>.ts
 ```
 
-Un feature **pequeño** (menos de ~8 archivos, ej. `maintenance`, `company`) puede quedarse plano, pero con los sufijos de la sección 6.
+Un feature **pequeño** (menos de ~8 archivos, ej. `company`) puede quedarse plano, pero con los sufijos de la sección 6.
 
 ### 5.2 Responsabilidades
 
@@ -465,27 +465,26 @@ Mientras no se decidan, el agente usa el valor por defecto.
 
 Estado de cada feature. Cambia a **Parcial** cuando un feature tiene archivos nuevos en la estructura nueva, y a **Migrado** cuando ya no tiene archivos legacy planos.
 
-| Feature           | Estado         | Notas                                                                           |
-| ----------------- | -------------- | ------------------------------------------------------------------------------- |
-| assignments       | Legacy (plano) | 17 archivos; `module-tabs`; importa `customers` y `promos/lookup`               |
-| auth              | Legacy (plano) | `login`, `splash`                                                               |
-| billing           | Legacy (plano) | Posible división en dos features                                                |
-| catalog           | Legacy (plano) |                                                                                 |
-| company           | Legacy (plano) | Pequeño; puede quedarse plano                                                   |
-| customer-requests | Legacy (plano) |                                                                                 |
-| customers         | Legacy (plano) |                                                                                 |
-| dashboard         | Legacy (plano) | D2, D7, D8, D11, D12                                                            |
-| delivery          | Legacy (plano) |                                                                                 |
-| fleet             | Legacy (plano) |                                                                                 |
-| inventory         | Legacy (plano) |                                                                                 |
-| maintenance       | Legacy (plano) | Pequeño; puede quedarse plano                                                   |
-| notifications     | Legacy (plano) | Convive con `core/notifications`                                                |
-| orders            | Legacy (plano) | D2, D3, D4; candidato a feature piloto                                          |
-| promos            | Legacy (plano) | Aloja `LookupService` (debería estar en `shared`)                               |
-| sales             | Legacy (plano) | Solo `allocation.ts`; la dotación está repartida con `promos` y `shared/models` |
-| sales-reports     | Legacy (plano) |                                                                                 |
-| segments          | Legacy (plano) | `segment.models.ts` duplicado                                                   |
-| users             | Legacy (plano) |                                                                                 |
+| Feature           | Estado         | Notas                                                                                              |
+| ----------------- | -------------- | -------------------------------------------------------------------------------------------------- |
+| assignments       | Legacy (plano) | 17 archivos; `module-tabs`; importa `customers` y `promos/lookup`                                  |
+| auth              | Legacy (plano) | `login`, `splash`                                                                                  |
+| billing           | Legacy (plano) | Posible división en dos features                                                                   |
+| catalog           | Legacy (plano) |                                                                                                    |
+| company           | Legacy (plano) | Pequeño; puede quedarse plano. Absorbió `maintenance` (doc 38, sección 10) como la pestaña Sistema |
+| customer-requests | Legacy (plano) |                                                                                                    |
+| customers         | Legacy (plano) |                                                                                                    |
+| dashboard         | Legacy (plano) | D2, D7, D8, D11, D12                                                                               |
+| delivery          | Legacy (plano) |                                                                                                    |
+| fleet             | Legacy (plano) |                                                                                                    |
+| inventory         | Legacy (plano) |                                                                                                    |
+| notifications     | Legacy (plano) | Convive con `core/notifications`                                                                   |
+| orders            | Legacy (plano) | D2, D3, D4; candidato a feature piloto                                                             |
+| promos            | Legacy (plano) | Aloja `LookupService` (debería estar en `shared`)                                                  |
+| sales             | Legacy (plano) | Solo `allocation.ts`; la dotación está repartida con `promos` y `shared/models`                    |
+| sales-reports     | Legacy (plano) |                                                                                                    |
+| segments          | Legacy (plano) | `segment.models.ts` duplicado                                                                      |
+| users             | Legacy (plano) |                                                                                                    |
 
 ### Fase final: migración completa (todavía no autorizada)
 

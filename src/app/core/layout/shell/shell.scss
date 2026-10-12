@@ -17,6 +17,36 @@
   overflow: hidden;
 }
 
+// ---- Bloqueo de pantalla completa (503 de mantenimiento, doc 38 10.4) ----
+.maintenance-block {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-8);
+}
+.maintenance-block-card {
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.maintenance-block-icon {
+  font-size: 40px;
+  color: var(--status-warn);
+}
+.maintenance-block-card h1 {
+  font: var(--fw-h1) var(--fs-h1) / var(--lh-h1) var(--font-sans);
+  margin: 0;
+  color: var(--ink);
+}
+.maintenance-block-card p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
 // ---- Cabecera ----
 .topbar {
   display: flex;

@@ -27,6 +27,7 @@ import { AssignmentAlertStore } from '../../../features/assignments/assignment-a
 import { RouteStore } from '../../../features/orders/route-store';
 import { UserSelfService } from '../../../features/users/user-self';
 import { MaintenanceService } from '../../maintenance/maintenance.service';
+import { MaintenanceBlockState } from '../../http/maintenance-block.state';
 import { timeText } from '../../../features/assignments/assignment-format';
 
 const SIDEBAR_COLLAPSED_KEY = 'hds.sidebarCollapsed';
@@ -59,6 +60,7 @@ export class ShellComponent {
   readonly routeStore = inject(RouteStore);
   readonly userSelf = inject(UserSelfService);
   readonly maintenance = inject(MaintenanceService);
+  readonly maintenanceBlock = inject(MaintenanceBlockState);
 
   readonly user = this.auth.currentUser;
   readonly drawerOpen = signal(false);
@@ -318,6 +320,11 @@ export class ShellComponent {
     if (!this.userMenuOpen()) return;
     const target = ev.target as HTMLElement;
     if (!target.closest('.user-menu-wrap')) this.userMenuOpen.set(false);
+  }
+
+  /** Recarga la app entera: el bloqueo no sabe qué pedido falló, así que vuelve a intentar todo desde cero. */
+  protected retryAfterMaintenance() {
+    window.location.reload();
   }
 
   protected closeJornada() {

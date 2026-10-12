@@ -171,7 +171,7 @@ export const NAV: NavItem[] = [
     label: 'Empresa',
     icon: 'business',
     route: '/empresa',
-    anyOf: ['config.edit'],
+    anyOf: ['config.edit', 'system.maintenance.manage'],
     group: 'Administración',
   },
   {
