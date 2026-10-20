@@ -22,6 +22,11 @@ export class CustomerService {
     return this.http.get<CustomerSummary[]>(`${this.base}/portfolio`);
   }
 
+  /** Clientes que cubre hoy por ausencia de otro vendedor — doc 42, sección 6.1. */
+  portfolioCoverage() {
+    return this.http.get<CustomerSummary[]>(`${this.base}/portfolio/coverage`);
+  }
+
   /** Búsqueda paginada (cartera del vendedor logueado). */
   search(query: string, page = 0, size = 20) {
     return this.http.get<PageResponse<CustomerSummary>>(this.base, {

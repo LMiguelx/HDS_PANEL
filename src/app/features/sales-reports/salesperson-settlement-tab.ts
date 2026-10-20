@@ -20,6 +20,7 @@ function todayIso(): string {
 const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
   { value: '', label: 'Todos' },
   { value: 'FIELD', label: 'Campo' },
+  { value: 'TELESALES', label: 'Televentas' },
   { value: 'COUNTER', label: 'Mostrador' },
 ];
 
@@ -61,21 +62,38 @@ const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
                 <div class="sst-bar-row">
                   <span class="sst-bar-label">{{ row.salespersonName }}</span>
                   <div class="sst-bar-track">
-                    <div
-                      class="sst-bar-fill sst-bar-fill-field"
-                      [style.width.%]="barPct(r, row.fieldNetAmount)"
-                    ></div>
-                    <div
-                      class="sst-bar-fill sst-bar-fill-counter"
-                      [style.width.%]="barPct(r, row.counterNetAmount)"
-                    ></div>
+                    @if (showFieldCols()) {
+                      <div
+                        class="sst-bar-fill sst-bar-fill-field"
+                        [style.width.%]="barPct(r, row.fieldNetAmount)"
+                      ></div>
+                    }
+                    @if (showTelesalesCols()) {
+                      <div
+                        class="sst-bar-fill sst-bar-fill-telesales"
+                        [style.width.%]="barPct(r, row.telesalesNetAmount)"
+                      ></div>
+                    }
+                    @if (showCounterCols()) {
+                      <div
+                        class="sst-bar-fill sst-bar-fill-counter"
+                        [style.width.%]="barPct(r, row.counterNetAmount)"
+                      ></div>
+                    }
                   </div>
                   <span class="sst-bar-value">{{ formatSoles(row.netAmount) }}</span>
                 </div>
               }
               <div class="sst-bar-legend">
-                <span><span class="sst-legend-dot sst-legend-field"></span> Campo</span>
-                <span><span class="sst-legend-dot sst-legend-counter"></span> Mostrador</span>
+                @if (showFieldCols()) {
+                  <span><span class="sst-legend-dot sst-legend-field"></span> Campo</span>
+                }
+                @if (showTelesalesCols()) {
+                  <span><span class="sst-legend-dot sst-legend-telesales"></span> Televentas</span>
+                }
+                @if (showCounterCols()) {
+                  <span><span class="sst-legend-dot sst-legend-counter"></span> Mostrador</span>
+                }
               </div>
             </div>
           }
@@ -90,14 +108,26 @@ const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
                   }
                   <th>Código</th>
                   <th>Vendedor</th>
-                  <th>Ped. campo</th>
-                  <th>Venta campo</th>
-                  <th>Ped. mostrador</th>
-                  <th>Venta mostrador</th>
-                  <th>Peso</th>
+                  @if (showFieldCols()) {
+                    <th>Ped. campo</th>
+                    <th>Venta campo</th>
+                  }
+                  @if (showTelesalesCols()) {
+                    <th>Ped. televentas</th>
+                    <th>Venta televentas S/</th>
+                  }
+                  @if (showCounterCols()) {
+                    <th>Ped. mostrador</th>
+                    <th>Venta mostrador</th>
+                  }
+                  @if (showWeightHours()) {
+                    <th>Peso</th>
+                  }
                   <th>Venta total</th>
-                  <th>Hora Inicio</th>
-                  <th>Hora Fin</th>
+                  @if (showWeightHours()) {
+                    <th>Hora Inicio</th>
+                    <th>Hora Fin</th>
+                  }
                 </tr>
               </thead>
               <tbody>
@@ -109,27 +139,51 @@ const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
                     }
                     <td class="sst-muted">{{ row.salespersonCode }}</td>
                     <td>{{ row.salespersonName }}</td>
-                    <td class="sst-muted">{{ row.fieldOrderCount }}</td>
-                    <td class="sst-muted">{{ formatSoles(row.fieldNetAmount) }}</td>
-                    <td class="sst-muted">{{ row.counterOrderCount }}</td>
-                    <td class="sst-muted">{{ formatSoles(row.counterNetAmount) }}</td>
-                    <td class="sst-muted">{{ weightText(row.weightKg) }}</td>
+                    @if (showFieldCols()) {
+                      <td class="sst-muted">{{ row.fieldOrderCount }}</td>
+                      <td class="sst-muted">{{ formatSoles(row.fieldNetAmount) }}</td>
+                    }
+                    @if (showTelesalesCols()) {
+                      <td class="sst-muted">{{ row.telesalesOrderCount }}</td>
+                      <td class="sst-muted">{{ amountOrDash(row.telesalesNetAmount) }}</td>
+                    }
+                    @if (showCounterCols()) {
+                      <td class="sst-muted">{{ row.counterOrderCount }}</td>
+                      <td class="sst-muted">{{ formatSoles(row.counterNetAmount) }}</td>
+                    }
+                    @if (showWeightHours()) {
+                      <td class="sst-muted">{{ weightText(row.weightKg) }}</td>
+                    }
                     <td class="sst-cell-strong">{{ formatSoles(row.netAmount) }}</td>
-                    <td class="sst-muted">{{ timeText(row.firstOrderAt) }}</td>
-                    <td class="sst-muted">{{ timeText(row.lastOrderAt) }}</td>
+                    @if (showWeightHours()) {
+                      <td class="sst-muted">{{ timeText(row.firstOrderAt) }}</td>
+                      <td class="sst-muted">{{ timeText(row.lastOrderAt) }}</td>
+                    }
                   </tr>
                 }
               </tbody>
               <tfoot>
                 <tr>
                   <td [attr.colspan]="isSingleDay() ? 3 : 4" class="sst-cell-strong">Sumas</td>
-                  <td class="sst-cell-strong">{{ r.totalFieldOrders }}</td>
-                  <td class="sst-cell-strong">{{ formatSoles(r.totalFieldNetAmount) }}</td>
-                  <td class="sst-cell-strong">{{ r.totalCounterOrders }}</td>
-                  <td class="sst-cell-strong">{{ formatSoles(r.totalCounterNetAmount) }}</td>
-                  <td class="sst-cell-strong">{{ weightText(r.totalWeightKg) }}</td>
+                  @if (showFieldCols()) {
+                    <td class="sst-cell-strong">{{ r.totalFieldOrders }}</td>
+                    <td class="sst-cell-strong">{{ formatSoles(r.totalFieldNetAmount) }}</td>
+                  }
+                  @if (showTelesalesCols()) {
+                    <td class="sst-cell-strong">{{ r.totalTelesalesOrders }}</td>
+                    <td class="sst-cell-strong">{{ amountOrDash(r.totalTelesalesNetAmount) }}</td>
+                  }
+                  @if (showCounterCols()) {
+                    <td class="sst-cell-strong">{{ r.totalCounterOrders }}</td>
+                    <td class="sst-cell-strong">{{ formatSoles(r.totalCounterNetAmount) }}</td>
+                  }
+                  @if (showWeightHours()) {
+                    <td class="sst-cell-strong">{{ weightText(r.totalWeightKg) }}</td>
+                  }
                   <td class="sst-cell-strong">{{ formatSoles(r.totalNetAmount) }}</td>
-                  <td colspan="2"></td>
+                  @if (showWeightHours()) {
+                    <td colspan="2"></td>
+                  }
                 </tr>
               </tfoot>
             </table>
@@ -193,6 +247,9 @@ const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
       .sst-bar-fill-field {
         background: var(--accent);
       }
+      .sst-bar-fill-telesales {
+        background: var(--st-telesales);
+      }
       .sst-bar-fill-counter {
         background: var(--st-counter-delivered);
       }
@@ -218,6 +275,9 @@ const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
       }
       .sst-legend-field {
         background: var(--accent);
+      }
+      .sst-legend-telesales {
+        background: var(--st-telesales);
       }
       .sst-legend-counter {
         background: var(--st-counter-delivered);
@@ -276,6 +336,22 @@ export class SalespersonSettlementTab {
   protected error = signal('');
 
   protected isSingleDay = computed(() => this.from() === this.to());
+
+  /** Doc 42, sección 12.2: qué columnas se ocultan según el filtro de origen. */
+  protected showFieldCols = computed(
+    () => this.originFilter() === '' || this.originFilter() === 'FIELD',
+  );
+  protected showTelesalesCols = computed(
+    () => this.originFilter() === '' || this.originFilter() === 'TELESALES',
+  );
+  protected showCounterCols = computed(
+    () => this.originFilter() === '' || this.originFilter() === 'COUNTER',
+  );
+  protected showWeightHours = computed(() => this.originFilter() !== 'COUNTER');
+
+  protected amountOrDash(amount: number): string {
+    return amount > 0 ? this.formatSoles(amount) : '—';
+  }
 
   private loadEffect = effect(() => {
     this.from();

@@ -3,10 +3,11 @@ import { RouteAdminService } from './route-admin';
 import { RouteView } from '../../shared/models/counter-order.models';
 
 /**
- * Estado de la jornada de mostrador del supervisor, compartido entre el
- * indicador del shell y Nuevo pedido — sección 6 del doc 30. GET /today
- * responde error si no hay jornada abierta: cualquier respuesta no exitosa
- * se trata como "sin jornada" (null), no como error de carga.
+ * Estado de la jornada, compartido entre el indicador del shell y Nuevo
+ * pedido de mostrador (doc 30, sección 6) y de televentas (doc 42, sección
+ * 5): es la misma jornada del usuario en los dos modos. GET /today responde
+ * error si no hay jornada abierta: cualquier respuesta no exitosa se trata
+ * como "sin jornada" (null), no como error de carga.
  */
 @Injectable({ providedIn: 'root' })
 export class RouteStore {

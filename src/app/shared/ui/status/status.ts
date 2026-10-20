@@ -28,6 +28,14 @@ const NORMALIZED_MAP: Record<string, string> = {
   'enviado a facturación': 'sent-to-billing',
   'entregado en mostrador': 'counter-delivered',
   anulado: 'cancelled',
+  // Visita (customer_visit_status) — doc 42, secciones 3.3 y 6.4. "Pendiente"
+  // a secas no se mapea acá: choca con el "Pendiente" de Promoción
+  // (--st-pendiente, otro color) — una visita pendiente siempre fuerza
+  // `[status]="'pending-visit'"` en vez de confiar en el label.
+  atendido: 'attended',
+  'no compró': 'no-purchase',
+  cerrado: 'closed',
+  'pendiente de visitar': 'pending-visit',
 };
 
 function normalize(text: string): string {

@@ -72,6 +72,7 @@ export interface MapStopView {
   offPlan: boolean;
   lastVisitAt: string | null;
   lastVisitUserId: number | null; // si ≠ vendedor, la hizo otro
+  lastVisitRemote: boolean; // NUEVO (doc 42, sección 12.3) — su última visita fue una llamada
 }
 
 /** Una fila de la bitácora — sección 6.2. */
@@ -93,6 +94,7 @@ export interface MapLogEntryView {
   minutesSincePrevious: number | null;
   offPlan: boolean;
   alerts: MapAlertType[];
+  remote: boolean; // NUEVO (doc 42, sección 12.3) — fue una llamada, no una visita en el lugar
 }
 
 export type MapPathPointKind = 'START' | 'VISIT' | 'END';
@@ -233,6 +235,7 @@ export interface MapCustomerVisitView {
   orderStatusCode: string | null;
   orderStatusName: string | null; // "Abierto, editable", "Anulado"…
   distanceMeters: number | null;
+  remote: boolean; // NUEVO (doc 42, sección 12.3) — "Por llamada"; distanceMeters llega null
 }
 
 export interface MapCustomerPopupView {

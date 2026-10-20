@@ -72,12 +72,15 @@ export function vendorPointIcon(
 /**
  * Marcador de la vista de un vendedor (sección 3.3): el color dice el
  * resultado y el número el orden de visita. `number = null` cuando la
- * última visita la hizo otro vendedor (sin número propio).
+ * última visita la hizo otro vendedor (sin número propio). `remote`
+ * (doc 42, sección 12.3) agrega un ícono de teléfono pequeño en la esquina
+ * cuando esa última visita fue una llamada.
  */
 export function stopPointIcon(
   status: MapPointStatus,
   number: number | null,
   offPlan: boolean,
+  remote = false,
 ): L.DivIcon {
   const pending = status === 'PENDING';
   const colorVar = mapStatusColorVar(status);
@@ -95,13 +98,21 @@ export function stopPointIcon(
           offPlan ? 'transform:rotate(-45deg);' : ''
         }display:block;color:#fff;font-weight:800;font-size:${Math.max(10, Math.round(size * 0.42))}px;">${number}</span>`
       : '';
+  const badgeOffset = size / 2 - 3;
+  const remoteBadge = remote
+    ? `<div style="position:absolute;top:50%;left:50%;transform:translate(calc(-50% + ${badgeOffset}px), calc(-50% - ${badgeOffset}px));
+        width:12px;height:12px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 1.5px #fff;
+        display:flex;align-items:center;justify-content:center;">
+        <span class="material-icons" style="font-size:9px;color:#fff;line-height:1;">call</span>
+      </div>`
+    : '';
   return L.divIcon({
     className: 'map-stop-point',
     html: `<div style="position:absolute;top:50%;left:50%;width:${size}px;height:${size}px;
       border-radius:${shapeRadius};${fillStyle}${rotate}
       box-sizing:border-box;box-shadow:0 0 0 1.5px #fff;
       ${offPlan ? 'outline:1.5px solid var(--map-off-plan);outline-offset:2px;' : ''}
-      display:flex;align-items:center;justify-content:center;">${numberHtml}</div>`,
+      display:flex;align-items:center;justify-content:center;">${numberHtml}</div>${remoteBadge}`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],

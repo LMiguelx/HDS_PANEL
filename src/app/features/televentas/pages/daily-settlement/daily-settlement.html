@@ -1,0 +1,117 @@
+<section class="ds-page">
+  <div class="ds-head">
+    <div>
+      <p class="ds-eyebrow">Televentas</p>
+      <h1>Liquidación del día</h1>
+    </div>
+    <ui-field type="date" label="Fecha" [(value)]="date" class="ds-date" />
+  </div>
+
+  @if (loading() && !summary()) {
+    <div class="ds-skeleton" role="status" aria-label="Cargando"></div>
+  } @else if (error()) {
+    <ui-empty
+      variant="error"
+      title="No pudimos cargar la liquidación"
+      body="Intenta de nuevo en unos segundos."
+      actionLabel="Reintentar"
+      (action)="retry()"
+    />
+  } @else if (summary(); as s) {
+    <div class="ds-kpis">
+      <div class="ds-kpi">
+        <span class="ds-kpi-label">Pedidos</span>
+        <span class="ds-kpi-value">{{ s.totalOrders }}</span>
+      </div>
+      <div class="ds-kpi">
+        <span class="ds-kpi-label">Bruto</span>
+        <span class="ds-kpi-value">{{ formatSoles(s.totalAmount) }}</span>
+      </div>
+      <div class="ds-kpi">
+        <span class="ds-kpi-label">Descuento</span>
+        <span class="ds-kpi-value">{{ formatSoles(s.totalDiscountAmount) }}</span>
+      </div>
+      <div class="ds-kpi ds-kpi-strong">
+        <span class="ds-kpi-label">Neto</span>
+        <span class="ds-kpi-value ds-kpi-amount">{{ formatSoles(s.totalNetAmount) }}</span>
+      </div>
+      <div class="ds-kpi">
+        <span class="ds-kpi-label">Bonificaciones</span>
+        <span class="ds-kpi-value">{{ s.totalBonusLines }}</span>
+        <span class="ds-kpi-detail">{{ s.totalBonusUnits }} unidades</span>
+      </div>
+    </div>
+
+    @if (originBreakdown().length > 0) {
+      <p class="ds-origin-line">
+        @for (o of originBreakdown(); track o.code; let last = $last) {
+          <span
+            ><strong>{{ o.label }}:</strong> {{ o.orderCount }} pedidos ·
+            {{ formatSoles(o.netAmount) }}</span
+          >
+          @if (!last) {
+            <span class="ds-origin-sep"> · </span>
+          }
+        }
+      </p>
+    }
+
+    <h2 class="ds-section-title">Por marca</h2>
+    @if (s.salesByBrand.length === 0) {
+      <ui-empty title="Sin ventas por marca" body="No hubo ventas en esta fecha." />
+    } @else {
+      <table class="ui-table-grid ds-table">
+        <thead>
+          <tr>
+            <th>Marca</th>
+            <th class="ds-num">Bruto</th>
+            <th class="ds-num">Descuento</th>
+            <th class="ds-num">Neto</th>
+            <th class="ds-num">Unid. bonificadas</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (b of s.salesByBrand; track b.brandId) {
+            <tr>
+              <td>{{ b.brandName }}</td>
+              <td class="ds-num">{{ formatSoles(b.grossAmount) }}</td>
+              <td class="ds-num">{{ formatSoles(b.discountAmount) }}</td>
+              <td class="ds-num">{{ formatSoles(b.netAmount) }}</td>
+              <td class="ds-num">{{ b.bonusUnits || '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <h2 class="ds-section-title">Pedidos del día</h2>
+    @if (s.orders.length === 0) {
+      <ui-empty title="Sin pedidos" body="No registraste pedidos en esta fecha." />
+    } @else {
+      <table class="ui-table-grid ds-table">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+            <th>Origen</th>
+            <th class="ds-num">Neto</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (o of s.orders; track o.orderId) {
+            <tr class="ds-row" (click)="goToOrder(o.orderId)">
+              <td>{{ o.customerName }}</td>
+              <td class="ds-muted">{{ dateTimeText(o.orderDate) }}</td>
+              <td><ui-status [label]="orderStatusName(o.statusCode)" /></td>
+              <td class="ds-muted">{{ originName(o.originCode) }}</td>
+              <td class="ds-num">{{ formatSoles(o.netAmount) }}</td>
+              <td class="ds-row-action">Ver detalle</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  }
+</section>

@@ -5,6 +5,7 @@
   --st-sent-to-billing: light-dark(#1a8f4c, #5ed98a); // Enviado a facturación
   --st-counter-delivered: light-dark(#7c3aed, #c4a2ff); // Entregado en mostrador
   --st-cancelled: light-dark(#d13b3b, #ff8a80); // Cancelado
+  --st-telesales: light-dark(#0e7490, #67e8f9); // Origen Televentas (doc 42)
   // Planilla
   --st-in-route: light-dark(#e07d1a, #ffb865); // En ruta
   --st-settled: light-dark(#1a8f4c, #5ed98a); // Liquidada
@@ -22,6 +23,7 @@
   --st-attended: light-dark(#1a8f4c, #5ed98a); // Atendido
   --st-closed: light-dark(#6b7280, #b6bcc6); // Cerrado
   --st-no-purchase: light-dark(#e07d1a, #ffb865); // No compró
+  --st-pending-visit: light-dark(#6b7280, #b6bcc6); // Pendiente de visitar (doc 42)
 
   // Semáforo genérico (home) — mismos valores que --st-sent-to-billing /
   // --st-in-route / --st-cancelled, con nombre neutro para uso fuera de un

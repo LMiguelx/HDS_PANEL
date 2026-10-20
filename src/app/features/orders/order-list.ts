@@ -151,8 +151,12 @@ function lastDayOfMonth(month: string): string {
                   }
                 </td>
                 <td>
-                  @if (o.originCode === 'COUNTER') {
-                    <span class="ord-origin-tag">{{ originName(o.originCode) }}</span>
+                  @if (o.originCode === 'COUNTER' || o.originCode === 'TELESALES') {
+                    <span
+                      class="ord-origin-tag"
+                      [class.ord-origin-telesales]="o.originCode === 'TELESALES'"
+                      >{{ originName(o.originCode) }}</span
+                    >
                   }
                 </td>
                 <td class="ord-muted">{{ dateTimeText(o.orderDate) }}</td>
@@ -191,8 +195,13 @@ function lastDayOfMonth(month: string): string {
               </div>
               <div class="ord-muted">
                 {{ o.salespersonName }} · {{ dateTimeText(o.orderDate) }}
-                @if (o.originCode === 'COUNTER') {
-                  · <span class="ord-origin-tag">{{ originName(o.originCode) }}</span>
+                @if (o.originCode === 'COUNTER' || o.originCode === 'TELESALES') {
+                  ·
+                  <span
+                    class="ord-origin-tag"
+                    [class.ord-origin-telesales]="o.originCode === 'TELESALES'"
+                    >{{ originName(o.originCode) }}</span
+                  >
                 }
               </div>
               <div class="ord-muted">
@@ -317,6 +326,10 @@ function lastDayOfMonth(month: string): string {
         border: 1px solid var(--st-counter-delivered);
         padding: 1px 6px;
         white-space: nowrap;
+      }
+      .ord-origin-telesales {
+        color: var(--st-telesales);
+        border-color: var(--st-telesales);
       }
       .ord-row-action {
         text-align: right;

@@ -3,14 +3,26 @@
 
 import { UbigeoView } from './customer-request.models';
 
+/**
+ * Cartera del vendedor logueado (GET /customers/portfolio, GET
+ * /customers/portfolio/coverage) — doc 42, sección 6.1. `visitStatusCode`
+ * es el de HOY (`PENDING` si no hubo visita); `hasOrderInCycle`, si ya
+ * compró en las 4 semanas del ciclo en curso.
+ */
 export interface CustomerSummary {
   customerId: number;
+  code: string;
   businessName: string;
   documentNumber: string;
   address: string | null;
-  customerTypeId?: number | null;
-  customerTypeName: string | null;
-  active: boolean;
+  phone: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  routeSequence: number | null;
+  visitStatusCode: string | null;
+  visitStatusName: string | null;
+  rating: number | null;
+  hasOrderInCycle: boolean;
 }
 
 /** Ver 13-panel-admin-clientes-solicitudes-cobertura-mapa.md — mismo GET /api/customers/{id} que usa el detalle de cartera y el clic en un punto del mapa de Asignaciones. */

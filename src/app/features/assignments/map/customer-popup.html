@@ -85,7 +85,12 @@
             @for (v of d.visits; track v.visitId) {
               <div class="cp-visit">
                 <div class="cp-visit-top">
-                  <span>{{ timeText(v.visitedAt) }} · {{ v.userName }}</span>
+                  <span
+                    >{{ timeText(v.visitedAt) }} · {{ v.userName }}
+                    @if (v.remote) {
+                      · Por llamada
+                    }
+                  </span>
                   <span>{{ pointStatusInfo(v.status).label }}</span>
                 </div>
                 @if (v.orderId) {

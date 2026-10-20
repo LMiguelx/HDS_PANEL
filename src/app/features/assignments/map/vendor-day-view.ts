@@ -323,7 +323,7 @@ export class MapVendorDayView {
       seen.add(s.customerId);
       const foreignVisit = s.lastVisitUserId != null && s.lastVisitUserId !== d.vendor.userId;
       const number = foreignVisit ? null : (numbers.get(s.customerId) ?? null);
-      const icon = stopPointIcon(s.status, number, s.offPlan || foreignVisit);
+      const icon = stopPointIcon(s.status, number, s.offPlan || foreignVisit, s.lastVisitRemote);
       let marker = this.markerByCustomer.get(s.customerId);
       if (marker) {
         marker.setIcon(icon);
@@ -403,7 +403,14 @@ export class MapVendorDayView {
       const foreignVisit = s.lastVisitUserId != null && s.lastVisitUserId !== d.vendor.userId;
       const status = visitedBefore ? s.status : 'PENDING';
       const number = visitedBefore && !foreignVisit ? (numbers.get(s.customerId) ?? null) : null;
-      marker.setIcon(stopPointIcon(status, number, visitedBefore && (s.offPlan || foreignVisit)));
+      marker.setIcon(
+        stopPointIcon(
+          status,
+          number,
+          visitedBefore && (s.offPlan || foreignVisit),
+          visitedBefore && s.lastVisitRemote,
+        ),
+      );
     }
   }
 

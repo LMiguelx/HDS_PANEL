@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
 import { permissionGuard } from './core/auth/permission-guard';
+import { telesalesRouteGuard } from './core/auth/telesales-guard';
 
 export const routes: Routes = [
   {
@@ -15,6 +16,7 @@ export const routes: Routes = [
   {
     path: '',
     canActivate: [authGuard],
+    canActivateChild: [telesalesRouteGuard],
     loadComponent: () => import('./core/layout/shell/shell').then((m) => m.ShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
@@ -27,6 +29,13 @@ export const routes: Routes = [
       {
         path: 'mi-perfil',
         loadComponent: () => import('./features/users/my-profile').then((m) => m.MyProfilePage),
+      },
+      // Modo televentas (doc 42) — el guard de arriba restringe el resto del
+      // panel cuando aplica; esta ruta no repite permiso, el modo ya decide.
+      {
+        path: 'televentas',
+        loadChildren: () =>
+          import('./features/televentas/televentas.routes').then((m) => m.TELEVENTAS_ROUTES),
       },
 
       // Clientes (módulo 2) — rediseñado

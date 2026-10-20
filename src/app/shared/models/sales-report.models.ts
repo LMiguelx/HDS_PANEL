@@ -10,12 +10,14 @@ export interface SalespersonSettlementRow {
   orderCount: number;
   weightKg: number; // 1 decimal
   netAmount: number;
-  firstOrderAt: string | null; // "Hora Inicio" — null si ese día solo tuvo mostrador
+  firstOrderAt: string | null; // "Hora Inicio" — campo y televentas; null si ese día solo tuvo mostrador
   lastOrderAt: string | null; // "Hora Fin"
-  fieldOrderCount: number;
+  fieldOrderCount: number; // NUEVO (doc 42): ahora solo campo, antes incluía todo lo que no era mostrador
   fieldNetAmount: number;
   counterOrderCount: number;
   counterNetAmount: number;
+  telesalesOrderCount: number; // NUEVO (doc 42, sección 12.2)
+  telesalesNetAmount: number;
 }
 
 export interface SalespersonSettlementReport {
@@ -26,11 +28,13 @@ export interface SalespersonSettlementReport {
   totalNetAmount: number;
   lastOrderAt: string | null; // último pedido del período; null si no hubo pedidos
   rows: SalespersonSettlementRow[];
-  originCode: string | null; // el filtro aplicado; null = ambos
+  originCode: string | null; // el filtro aplicado (FIELD | TELESALES | COUNTER); null = todos
   totalFieldOrders: number;
   totalFieldNetAmount: number;
   totalCounterOrders: number;
   totalCounterNetAmount: number;
+  totalTelesalesOrders: number; // NUEVO (doc 42, sección 12.2)
+  totalTelesalesNetAmount: number;
 }
 
 export interface ProductSalesRow {

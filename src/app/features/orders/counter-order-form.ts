@@ -1085,16 +1085,22 @@ export class CounterOrderFormPage implements OnInit {
   protected simulating = signal(false);
   protected submitting = signal(false);
 
-  // — Dotación del vendedor (doc 36, sección 6) — solo en edición de pedidos de campo.
+  // — Dotación del vendedor (doc 36, sección 6; doc 42, sección 9.4) — en
+  // edición de pedidos de campo o de televentas, nunca de mostrador.
   protected vendorAllocations = signal<AllocationView[]>([]);
   protected allocationQuantities = signal<Map<number, number>>(new Map());
-  protected canManageAllocations = computed(() =>
-    this.auth.hasAny('order.manage', 'promo.allocate'),
+
+  /** El propio vendedor editando su pedido: usa su cupo por self-service (`/mobile/allocations/mine`). */
+  protected isOwnOrder = computed(
+    () => this.originalOrder()?.salespersonId === this.auth.currentUser()?.userId,
+  );
+  protected canManageAllocations = computed(
+    () => this.auth.hasAny('order.manage', 'promo.allocate') || this.isOwnOrder(),
   );
   protected showAllocationBlock = computed(
     () =>
       this.editMode() &&
-      this.originalOrder()?.originCode === 'FIELD' &&
+      this.originalOrder()?.originCode !== 'COUNTER' &&
       this.canManageAllocations(),
   );
 
@@ -1286,8 +1292,12 @@ export class CounterOrderFormPage implements OnInit {
         })),
     );
     this.vendorAllocations.set([]);
-    if (detail.originCode === 'FIELD' && this.canManageAllocations()) {
-      this.allocationSvc.byUser(detail.salespersonId).subscribe({
+    if (detail.originCode !== 'COUNTER' && this.canManageAllocations()) {
+      const ownOrder = detail.salespersonId === this.auth.currentUser()?.userId;
+      const allocations$ = ownOrder
+        ? this.allocationSvc.mine()
+        : this.allocationSvc.byUser(detail.salespersonId);
+      allocations$.subscribe({
         next: (list) => this.vendorAllocations.set(list),
         error: () => this.vendorAllocations.set([]),
       });

@@ -15,7 +15,7 @@ import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { filter, map } from 'rxjs';
 import { AuthService } from '../../auth/auth';
 import { MobileDrawerState } from '../mobile-drawer.state';
-import { NAV, NAV_GROUP_ICONS, NavItem, PROMO_ANY_PERMISSION } from '../nav.config';
+import { NAV, NAV_GROUP_ICONS, NavItem, PROMO_ANY_PERMISSION, TELEVENTAS_NAV } from '../nav.config';
 import { PendingCountStore } from '../../../features/promos/pending-count';
 import { AssignmentAlertStore } from '../../../features/assignments/assignment-alerts';
 
@@ -73,14 +73,23 @@ export class ShellSidebar {
     { initialValue: this.router.url },
   );
 
+  /**
+   * Modo televentas (doc 42, sección 1.1): reemplaza el menú entero por
+   * `TELEVENTAS_NAV`, sin mezclar con el resto aunque algún permiso suelto
+   * coincida con otra pantalla.
+   */
+  private navSource = computed<NavItem[]>(() =>
+    this.auth.isTelesalesMode() ? TELEVENTAS_NAV : NAV,
+  );
+
   /** Ítems sin grupo (hoy solo "Inicio"): enlace directo, sin flecha ni ícono de grupo. */
   readonly directItems = computed(() =>
-    NAV.filter((i) => !i.group && this.auth.hasAny(...i.anyOf)),
+    this.navSource().filter((i) => !i.group && this.auth.hasAny(...i.anyOf)),
   );
 
   /** Ítems agrupados visibles por permiso, con el ícono fijo de su grupo. */
   readonly groups = computed<NavGroupVm[]>(() => {
-    const visible = NAV.filter((i) => i.group && this.auth.hasAny(...i.anyOf));
+    const visible = this.navSource().filter((i) => i.group && this.auth.hasAny(...i.anyOf));
     const byGroup = new Map<string, NavItem[]>();
     for (const item of visible) {
       const key = item.group!;

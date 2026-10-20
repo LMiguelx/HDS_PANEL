@@ -28,7 +28,52 @@ export const NAV_GROUP_ICONS: Record<string, string> = {
   Promociones: 'local_offer',
   'Reparto y facturación': 'local_shipping',
   Administración: 'shield',
+  Televentas: 'call',
 };
+
+/**
+ * Menú del modo televentas (doc 42, sección 1.2): reemplaza a `NAV` entero
+ * mientras `AuthService.isTelesalesMode()` — no se filtra ni se mezcla con
+ * el resto, aunque algún permiso suelto del vendedor coincida con otra
+ * pantalla (sección 1.1).
+ */
+export const TELEVENTAS_NAV: NavItem[] = [
+  {
+    label: 'Mi día',
+    icon: 'today',
+    route: '/televentas',
+    anyOf: ['visit.register'],
+    group: 'Televentas',
+  },
+  {
+    label: 'Nuevo pedido',
+    icon: 'add_shopping_cart',
+    route: '/televentas/nuevo-pedido',
+    anyOf: ['order.create'],
+    group: 'Televentas',
+  },
+  {
+    label: 'Mis pedidos',
+    icon: 'receipt',
+    route: '/televentas/mis-pedidos',
+    anyOf: ['order.create'],
+    group: 'Televentas',
+  },
+  {
+    label: 'Liquidación del día',
+    icon: 'payments',
+    route: '/televentas/liquidacion',
+    anyOf: ['order.create'],
+    group: 'Televentas',
+  },
+  {
+    label: 'Stock',
+    icon: 'inventory_2',
+    route: '/televentas/stock',
+    anyOf: [],
+    group: 'Televentas',
+  },
+];
 
 export const NAV: NavItem[] = [
   { label: 'Inicio', icon: 'home', route: '/dashboard', anyOf: [] },

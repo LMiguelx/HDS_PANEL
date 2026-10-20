@@ -5,9 +5,10 @@ import { RouteView } from '../../shared/models/counter-order.models';
 import { SKIP_ERROR_TOAST } from '../../core/http/error-interceptor';
 
 /**
- * Jornada de mostrador (RouteController, /api/routes) — mismo mecanismo de
- * "ruta" del vendedor, sin ubicación. Sin ella no se pueden registrar
- * pedidos de mostrador. `order.manage`.
+ * Jornada (RouteController, /api/routes) — es del usuario, no del
+ * dispositivo: la misma que abre o cierra el vendedor desde la app (doc 42,
+ * sección 5). Sin ella no se pueden registrar pedidos de mostrador ni de
+ * televentas. El panel nunca envía ubicación. `visit.register`.
  */
 @Injectable({ providedIn: 'root' })
 export class RouteAdminService {

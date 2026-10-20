@@ -50,7 +50,9 @@ export class ShellTopbar {
   readonly maintenance = inject(MaintenanceService);
 
   readonly user = this.auth.currentUser;
-  readonly showJornada = computed(() => this.auth.hasAny('order.manage'));
+  readonly showJornada = computed(
+    () => this.auth.hasAny('order.manage') || this.auth.isTelesalesMode(),
+  );
   readonly canManageMaintenance = computed(() => this.auth.hasAny('system.maintenance.manage'));
   readonly userMenuOpen = signal(false);
 

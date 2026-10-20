@@ -11,10 +11,11 @@ export const ORDER_STATUS_OPTIONS: StatusOption[] = [
   { code: 'CANCELLED', name: 'Anulado' },
 ];
 
-/** order_origin — doc 30, sección 3.2. */
+/** order_origin — doc 30, sección 3.2; TELESALES — doc 42, sección 3.1. */
 export const ORDER_ORIGIN_OPTIONS: StatusOption[] = [
   { code: 'FIELD', name: 'Campo' },
   { code: 'COUNTER', name: 'Mostrador' },
+  { code: 'TELESALES', name: 'Televentas' },
 ];
 
 /** delivery_status — mismo catálogo que ya usa el módulo de Reparto para

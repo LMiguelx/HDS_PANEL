@@ -55,6 +55,8 @@ import { formatSoles } from '../../shared/pipes/money';
               <ui-status [label]="statusName(o.statusCode)" />
               @if (o.originCode === 'COUNTER') {
                 <span class="od-origin-tag">Mostrador</span>
+              } @else if (o.originCode === 'TELESALES') {
+                <span class="od-origin-tag od-origin-telesales">Televentas</span>
               }
             </div>
             <h1>Pedido #{{ o.orderId }}</h1>
@@ -125,6 +127,12 @@ import { formatSoles } from '../../shared/pipes/money';
             }
           </div>
         </div>
+
+        @if (counterReadonlyNotice(o)) {
+          <div class="od-readonly-note">
+            Pedido registrado por supervisión: solo supervisión puede editarlo o anularlo.
+          </div>
+        }
 
         @if (o.note) {
           <div class="od-note">{{ o.note }}</div>
@@ -430,6 +438,10 @@ import { formatSoles } from '../../shared/pipes/money';
         padding: 1px 6px;
         white-space: nowrap;
       }
+      .od-origin-telesales {
+        color: var(--st-telesales);
+        border-color: var(--st-telesales);
+      }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
         margin: 6px 0 4px;
@@ -476,6 +488,14 @@ import { formatSoles } from '../../shared/pipes/money';
         display: flex;
         gap: 8px;
         margin-top: 10px;
+      }
+      .od-readonly-note {
+        margin-top: 16px;
+        padding: 12px 16px;
+        border-radius: var(--radius-control);
+        background: var(--faint);
+        font-size: 13px;
+        color: var(--ink-muted);
       }
       .od-choice-card {
         margin-top: 10px;
@@ -798,8 +818,17 @@ export class OrderDetailPage {
     return this.order()?.items.find((i) => i.productId === line.productId)?.productName ?? '—';
   }
 
+  /**
+   * Un pedido de mostrador abierto por supervisión no lo edita el vendedor
+   * desde Mis pedidos (doc 42, sección 9.2); quien SÍ puede operarlo
+   * (`order.manage`) lo sigue viendo editable, igual que antes.
+   */
+  private editableOrigin(o: OrderDetail): boolean {
+    return o.originCode !== 'COUNTER' || this.auth.hasAny('order.manage');
+  }
+
   protected canEdit(o: OrderDetail): boolean {
-    return o.statusCode === 'OPEN';
+    return o.statusCode === 'OPEN' && this.editableOrigin(o);
   }
 
   protected canDeliver(o: OrderDetail): boolean {
@@ -811,7 +840,12 @@ export class OrderDetailPage {
   }
 
   protected canCancel(o: OrderDetail): boolean {
-    return o.statusCode === 'OPEN';
+    return o.statusCode === 'OPEN' && this.editableOrigin(o);
+  }
+
+  /** Doc 42, sección 9.2: por qué no hay Editar/Anular en un OPEN de mostrador ajeno. */
+  protected counterReadonlyNotice(o: OrderDetail): boolean {
+    return o.statusCode === 'OPEN' && o.originCode === 'COUNTER' && !this.editableOrigin(o);
   }
 
   protected deliverAtCounter(o: OrderDetail) {

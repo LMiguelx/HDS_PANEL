@@ -6,13 +6,14 @@ export interface OrderSummary {
   customerId: number;
   customerName: string;
   orderDate: string; // ISO datetime
-  statusCode: string; // OPEN | SENT_TO_BILLING | CANCELLED
+  statusCode: string; // OPEN | SENT_TO_BILLING | COUNTER_DELIVERED | CANCELLED
   totalAmount: number;
   discountAmount: number;
   netAmount: number; // totalAmount - discountAmount
   paymentConditionId: number;
   bonusLines: number;
   deliveryStatusCode: string | null; // IN_ROUTE | DELIVERED | PARTIAL | REJECTED
+  originCode: string; // FIELD | COUNTER | TELESALES — doc 42, sección 3.1
 }
 
 /**
@@ -30,7 +31,6 @@ export interface OrderSummary {
 export interface AdminOrderSummary extends OrderSummary {
   salespersonId: number;
   salespersonName: string;
-  originCode: string; // FIELD | COUNTER
   createdById: number;
   createdByName: string;
   sentToBillingAt: string | null;
@@ -44,7 +44,7 @@ export interface OrderListFilters {
   from?: string; // yyyy-MM-dd, inclusive
   to?: string; // yyyy-MM-dd, inclusive
   statusCode?: string;
-  originCode?: string; // FIELD | COUNTER — doc 30, sección 9.1
+  originCode?: string; // FIELD | COUNTER | TELESALES — doc 30, sección 9.1; doc 42, sección 3.1
   page?: number;
   size?: number;
 }
@@ -93,7 +93,7 @@ export interface OrderDetail {
   items: OrderItemView[];
   deliveryStatus: DeliveryStatusView | null;
   salespersonName: string;
-  originCode: string; // FIELD | COUNTER
+  originCode: string; // FIELD | COUNTER | TELESALES — doc 42, sección 3.1
   createdById: number;
   createdByName: string;
   salesChannelId: number | null;

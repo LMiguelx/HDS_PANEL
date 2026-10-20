@@ -206,6 +206,11 @@ Colores de datos sobre el lienzo del mapa: fijos, iguales en los dos temas (no `
 
 Todo marcador sobre el mapa lleva borde blanco (1,5–2 px) para separarse de las teselas.
 
+### 4.9 Modo televentas (doc 42)
+
+- **Origen Televentas:** etiqueta cian `--st-telesales`, mismo patrón visual que la etiqueta morada de Mostrador (borde + texto del color, sin relleno) — ver `.ord-origin-tag` / `.od-origin-tag` en `orders`. El origen Campo no lleva etiqueta.
+- **Visita remota (llamada):** ícono `material-icons` `call` junto a la hora, nunca como único portador de la información — siempre acompañado del texto ("Llamada" en listas y bitácora del mapa, "Por llamada" en el historial del cliente).
+
 ---
 
 ## 5. Espaciado y densidad
@@ -286,32 +291,34 @@ Reglas:
 
 ### 7.2 Catálogo de tokens de estado
 
-| Dominio                            | Estado                     | Token                                               |
-| ---------------------------------- | -------------------------- | --------------------------------------------------- |
-| Pedido                             | Abierto                    | `--st-open`                                         |
-|                                    | Enviado a facturación      | `--st-sent-to-billing`                              |
-|                                    | Entregado en mostrador     | `--st-counter-delivered`                            |
-|                                    | Anulado                    | `--st-cancelled`                                    |
-| Planilla                           | En ruta                    | `--st-in-route`                                     |
-|                                    | Liquidada                  | `--st-settled`                                      |
-| Comprobante de planilla            | Pendiente                  | `--st-pending`                                      |
-|                                    | Entregado                  | `--st-delivered`                                    |
-|                                    | Parcial                    | `--st-partial`                                      |
-|                                    | Rechazado                  | `--st-rejected`                                     |
-| Conciliación de factura            | Sin conciliar              | `--st-unmatched`                                    |
-|                                    | Conciliada (auto)          | `--st-matched-auto`                                 |
-|                                    | Conciliada (manual)        | `--st-matched-manual`                               |
-|                                    | Diferencia                 | `--st-mismatch`                                     |
-| Visita                             | Atendido                   | `--st-attended`                                     |
-|                                    | Cerrado                    | `--st-closed`                                       |
-|                                    | No compró                  | `--st-no-purchase`                                  |
-| Promoción                          | Vigente                    | `--st-vigente`                                      |
-|                                    | Programada                 | `--st-programada`                                   |
-|                                    | Vencida                    | `--st-vencida`                                      |
-|                                    | Apagada                    | `--st-apagada`                                      |
-|                                    | Pendiente                  | `--st-pendiente`                                    |
-|                                    | Sin stock                  | `--st-sin-stock`                                    |
-| Genérico (salud, semáforo, avisos) | Bien / Atención / Problema | `--status-ok` / `--status-warn` / `--status-danger` |
+| Dominio                            | Estado                     | Token                                                                  |
+| ---------------------------------- | -------------------------- | ---------------------------------------------------------------------- |
+| Pedido                             | Abierto                    | `--st-open`                                                            |
+|                                    | Enviado a facturación      | `--st-sent-to-billing`                                                 |
+|                                    | Entregado en mostrador     | `--st-counter-delivered`                                               |
+|                                    | Anulado                    | `--st-cancelled`                                                       |
+|                                    | Origen Televentas          | `--st-telesales` (doc 42)                                              |
+| Planilla                           | En ruta                    | `--st-in-route`                                                        |
+|                                    | Liquidada                  | `--st-settled`                                                         |
+| Comprobante de planilla            | Pendiente                  | `--st-pending`                                                         |
+|                                    | Entregado                  | `--st-delivered`                                                       |
+|                                    | Parcial                    | `--st-partial`                                                         |
+|                                    | Rechazado                  | `--st-rejected`                                                        |
+| Conciliación de factura            | Sin conciliar              | `--st-unmatched`                                                       |
+|                                    | Conciliada (auto)          | `--st-matched-auto`                                                    |
+|                                    | Conciliada (manual)        | `--st-matched-manual`                                                  |
+|                                    | Diferencia                 | `--st-mismatch`                                                        |
+| Visita                             | Atendido                   | `--st-attended`                                                        |
+|                                    | Cerrado                    | `--st-closed`                                                          |
+|                                    | No compró                  | `--st-no-purchase`                                                     |
+|                                    | Pendiente de visitar       | `--st-pending-visit` (doc 42; "Pendiente" a secas usa el de Promoción) |
+| Promoción                          | Vigente                    | `--st-vigente`                                                         |
+|                                    | Programada                 | `--st-programada`                                                      |
+|                                    | Vencida                    | `--st-vencida`                                                         |
+|                                    | Apagada                    | `--st-apagada`                                                         |
+|                                    | Pendiente                  | `--st-pendiente`                                                       |
+|                                    | Sin stock                  | `--st-sin-stock`                                                       |
+| Genérico (salud, semáforo, avisos) | Bien / Atención / Problema | `--status-ok` / `--status-warn` / `--status-danger`                    |
 
 `--st-pending` (comprobante) y `--st-pendiente` (promoción) son tokens distintos: se usa el de su dominio.
 

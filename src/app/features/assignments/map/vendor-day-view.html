@@ -163,12 +163,18 @@
                 <div class="vd-log-main">
                   <div class="vd-log-top">
                     <span class="vd-log-name"
-                      >{{ line.entry.customerName }} · {{ line.entry.customerCode }}</span
-                    >
+                      >{{ line.entry.customerName }} · {{ line.entry.customerCode }}
+                      @if (line.entry.remote) {
+                        <span class="material-icons vd-remote-icon" title="Llamada">call</span>
+                      }
+                    </span>
                     <span class="vd-log-time">{{ timeText(line.entry.visitedAt) }}</span>
                   </div>
                   <div class="vd-log-sub">
                     {{ pointStatusInfo(line.entry.status).longLabel }}
+                    @if (line.entry.remote) {
+                      · Llamada
+                    }
                     @if (line.entry.minutesSincePrevious != null) {
                       · +{{ minutesText(line.entry.minutesSincePrevious) }} desde la anterior
                     }
