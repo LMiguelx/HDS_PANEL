@@ -163,4 +163,39 @@
   --dur-slow: 320ms; /* transición entre pasos del wizard */
   --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* — Mapa de asignaciones (doc 40) — colores de datos sobre el lienzo del
+     mapa: fijos en los dos temas (no light-dark()), igual que --brand-*. — */
+  --map-vendor-01: #2563eb;
+  --map-vendor-02: #ea580c;
+  --map-vendor-03: #16a34a;
+  --map-vendor-04: #dc2626;
+  --map-vendor-05: #7c3aed;
+  --map-vendor-06: #0891b2;
+  --map-vendor-07: #db2777;
+  --map-vendor-08: #ca8a04;
+  --map-vendor-09: #4d7c0f;
+  --map-vendor-10: #9333ea;
+  --map-vendor-11: #0f766e;
+  --map-vendor-12: #b45309;
+  --map-vendor-13: #1e3a8a;
+  --map-vendor-14: #be123c;
+  --map-vendor-15: #65a30d;
+  --map-vendor-16: #0369a1;
+  --map-vendor-17: #c2410c;
+  --map-vendor-18: #4338ca;
+  --map-vendor-19: #059669;
+  --map-vendor-20: #a21caf;
+  --map-vendor-21: #92400e;
+  --map-vendor-22: #0e7490;
+  --map-vendor-23: #d97706;
+  --map-vendor-24: #475569;
+  --map-vendor-25: #e11d48;
+  --map-vendor-none: #9ca3af; // mapColor = null
+  --map-status-pending: #94a3b8;
+  --map-status-ordered: #15803d;
+  --map-status-no-order: #ea580c;
+  --map-status-closed: #475569;
+  --map-status-idle: #cbd5e1; // vista global: sin actividad hoy
+  --map-off-plan: #6d28d9; // contorno de "fuera de plan"
 }

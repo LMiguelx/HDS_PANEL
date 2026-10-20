@@ -15,8 +15,6 @@ import {
   IncompleteScheduleView,
   ImportCoverageParams,
   ImportCoverageResult,
-  MapQuery,
-  MapResponse,
   OrphanCustomerView,
   PendingScheduleFilters,
   UpdateScheduleCommand,
@@ -49,21 +47,6 @@ export class AssignmentAdminService {
 
   vendorsWithoutRouteToday() {
     return this.http.get<VendorOnRouteView[]>(`${this.base}/vendors-without-route-today`);
-  }
-
-  /** El endpoint nunca debe llamarse sin filtro: exige userIds no vacío u orphansOnly. */
-  map(query: MapQuery) {
-    let params = new HttpParams();
-    for (const id of query.userIds ?? []) {
-      params = params.append('userIds', String(id));
-    }
-    if (query.orphansOnly) {
-      params = params.set('orphansOnly', 'true');
-    }
-    if (query.date) {
-      params = params.set('date', query.date);
-    }
-    return this.http.get<MapResponse>(`${this.base}/map`, { params });
   }
 
   create(cmd: CreateAssignmentCommand) {

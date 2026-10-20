@@ -1,0 +1,222 @@
+@if (loading() && !data()) {
+  <div class="vd-skeleton" role="status" aria-label="Cargando"></div>
+} @else if (error() && !data()) {
+  <ui-empty
+    variant="error"
+    title="No pudimos cargar el mapa"
+    body="Intenta de nuevo en unos segundos."
+    actionLabel="Reintentar"
+    (action)="refresh()"
+  />
+} @else if (data(); as d) {
+  @if (d.stops.length === 0) {
+    <ui-empty title="Este vendedor no tiene clientes programados para esta fecha" />
+  } @else {
+    <div class="vd-kpis">
+      <div class="vd-kpi">
+        <span class="vd-kpi-label">Programados</span>
+        <span class="vd-kpi-value">{{ d.vendor.counters.planned }}</span>
+      </div>
+      <div class="vd-kpi">
+        <span class="vd-kpi-label">Visitados</span>
+        <span class="vd-kpi-value">{{ d.vendor.counters.visited }}</span>
+        <span class="vd-kpi-detail">{{ visitedPercent() }}%</span>
+      </div>
+      <div class="vd-kpi">
+        <span class="vd-kpi-label">Pendientes</span>
+        <span class="vd-kpi-value">{{ d.vendor.counters.pending }}</span>
+      </div>
+      <div class="vd-kpi vd-kpi-ok">
+        <span class="vd-kpi-label">Con pedido</span>
+        <span class="vd-kpi-value">{{ d.vendor.counters.ordered }}</span>
+      </div>
+      <div class="vd-kpi vd-kpi-warn">
+        <span class="vd-kpi-label">No compró</span>
+        <span class="vd-kpi-value">{{ d.vendor.counters.noOrder }}</span>
+      </div>
+      <div class="vd-kpi">
+        <span class="vd-kpi-label">Cerrado</span>
+        <span class="vd-kpi-value">{{ d.vendor.counters.closed }}</span>
+      </div>
+      <div class="vd-kpi">
+        <span class="vd-kpi-label">Vendido hoy</span>
+        <span class="vd-kpi-value vd-kpi-amount">{{
+          formatSoles(d.vendor.counters.orderAmount)
+        }}</span>
+      </div>
+    </div>
+
+    <div class="vd-body">
+      <div class="vd-map-wrap">
+        <div class="vd-map" #mapEl></div>
+        <div class="vd-legend">
+          <span class="vd-legend-title">COLOR = RESULTADO · NÚMERO = ORDEN DE VISITA</span>
+          <div class="vd-legend-items">
+            <span class="vd-legend-item"
+              ><span class="vd-legend-mark vd-mark-pending"></span>Pendiente</span
+            >
+            <span class="vd-legend-item"
+              ><span class="vd-legend-mark vd-mark-ordered">12</span>Atendido</span
+            >
+            <span class="vd-legend-item"
+              ><span class="vd-legend-mark vd-mark-no-order">13</span>No compró</span
+            >
+            <span class="vd-legend-item"
+              ><span class="vd-legend-mark vd-mark-closed">14</span>Cerrado</span
+            >
+            <span class="vd-legend-item"
+              ><span class="vd-legend-mark vd-mark-offplan">17</span>Fuera de plan</span
+            >
+            <span class="vd-legend-item">— Recorrido real</span>
+          </div>
+        </div>
+
+        <app-map-customer-popup
+          [data]="popupData()"
+          [loading]="popupLoading()"
+          [error]="popupError()"
+          [position]="popupPosition()"
+          [trackingExtra]="popupTrackingExtra()"
+          [distanceThresholdMeters]="d.thresholds.farFromCustomerMeters"
+          (close)="closePopup()"
+        />
+      </div>
+
+      <div class="vd-log">
+        <div class="vd-log-head">
+          <span class="vd-log-title">Bitácora del recorrido</span>
+          <span class="vd-log-count">{{ d.log.length }} registros</span>
+        </div>
+        <p class="vd-alert-summary">⚠ {{ alertSummaryText(d.alerts) }}</p>
+        @if (d.idleAlert && d.currentPauseMinutes != null) {
+          <div class="vd-idle-banner">
+            ⚠ Sin registrar visitas hace {{ minutesText(d.currentPauseMinutes) }}
+          </div>
+        }
+
+        <div class="vd-log-filter">
+          <button
+            type="button"
+            class="vd-filter-btn"
+            [class.on]="alertFilter() === 'all'"
+            (click)="alertFilter.set('all')"
+          >
+            Todo
+          </button>
+          <button
+            type="button"
+            class="vd-filter-btn"
+            [class.on]="alertFilter() === 'alerts'"
+            (click)="alertFilter.set('alerts')"
+          >
+            Alertas
+          </button>
+        </div>
+
+        <div class="vd-log-lines">
+          @for (line of filteredBitacoraLines(); track $index) {
+            @if (line.kind === 'start') {
+              <div class="vd-log-line vd-log-flag">
+                ⚑ Inicio de ruta
+                <span class="vd-log-time">{{ timeText(d.vendor.routeStartedAt) }}</span>
+                <span class="vd-log-sub">{{
+                  d.path[0]?.kind === 'START' ? 'GPS capturado' : 'Sin GPS al iniciar'
+                }}</span>
+              </div>
+            } @else if (line.kind === 'pause') {
+              <div class="vd-log-line vd-log-pause">
+                ⋯ Sin registros por {{ minutesText(line.minutes) }}
+              </div>
+            } @else if (line.kind === 'end') {
+              <div class="vd-log-line vd-log-flag">
+                ● {{ closingLabel() }}
+                @if (d.vendor.routeStatus === 'IN_ROUTE' && pendingStops().length > 0) {
+                  <button
+                    type="button"
+                    class="vd-pending-btn"
+                    (click)="showPendingList.set(!showPendingList())"
+                  >
+                    Ver pendientes
+                  </button>
+                }
+              </div>
+              @if (showPendingList()) {
+                <div class="vd-pending-list">
+                  @for (s of pendingStops(); track s.customerId) {
+                    <button type="button" class="vd-pending-row" (click)="focusPendingStop(s)">
+                      {{ s.customerName }} · {{ s.code }}
+                    </button>
+                  }
+                </div>
+              }
+            } @else {
+              <button
+                type="button"
+                class="vd-log-line vd-log-visit"
+                (click)="focusLogEntry(line.entry)"
+              >
+                <span
+                  class="vd-log-number"
+                  [style.background]="'var(' + pointStatusInfo(line.entry.status).tone + ')'"
+                  >{{ line.number }}</span
+                >
+                <div class="vd-log-main">
+                  <div class="vd-log-top">
+                    <span class="vd-log-name"
+                      >{{ line.entry.customerName }} · {{ line.entry.customerCode }}</span
+                    >
+                    <span class="vd-log-time">{{ timeText(line.entry.visitedAt) }}</span>
+                  </div>
+                  <div class="vd-log-sub">
+                    {{ pointStatusInfo(line.entry.status).longLabel }}
+                    @if (line.entry.minutesSincePrevious != null) {
+                      · +{{ minutesText(line.entry.minutesSincePrevious) }} desde la anterior
+                    }
+                  </div>
+                  @if (line.entry.visitReasonName) {
+                    <div class="vd-log-sub">Motivo: {{ line.entry.visitReasonName }}</div>
+                  }
+                  @if (line.entry.alerts.length > 0) {
+                    <div class="vd-log-alerts">
+                      @for (a of line.entry.alerts; track a) {
+                        <span class="vd-alert-tag">{{ alertLabel(a, line.entry) }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              </button>
+            }
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="vd-playback">
+      <button uiButton variant="ghost" size="sm" (click)="seekToStart()">⏮ Volver al inicio</button>
+      <div class="vd-timeline">
+        @if (timelineBounds(); as b) {
+          <input
+            type="range"
+            class="vd-range"
+            [min]="b.start"
+            [max]="b.end"
+            [value]="effectivePlayheadMs()"
+            (input)="onScrub($event)"
+          />
+          <div class="vd-ticks">
+            @for (t of visitTicks(); track $index) {
+              <span
+                class="vd-tick"
+                [style.left.%]="t.pct"
+                [style.background]="t.colorVar"
+                [class.vd-tick-alert]="t.hasAlert"
+              ></span>
+            }
+          </div>
+          <span class="vd-timeline-hint">Mueve la barra para recorrer el día</span>
+        }
+      </div>
+      <button uiButton variant="ghost" size="sm" (click)="seekToEnd()">Ir al final ⏭</button>
+    </div>
+  }
+}

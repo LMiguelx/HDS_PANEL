@@ -1,0 +1,138 @@
+@if (loading() && !data()) {
+  <div class="gv-skeleton" role="status" aria-label="Cargando"></div>
+} @else if (error() && !data()) {
+  <ui-empty
+    variant="error"
+    title="No pudimos cargar el mapa"
+    body="Intenta de nuevo en unos segundos."
+    actionLabel="Reintentar"
+  />
+} @else if (data(); as d) {
+  <div class="gv-kpis">
+    <div class="gv-kpi">
+      <span class="gv-kpi-label">Vendido hoy</span>
+      <span class="gv-kpi-value gv-kpi-amount">{{ formatSoles(d.totals.orderAmount) }}</span>
+      <span class="gv-kpi-detail"
+        >{{ d.totals.orderCount }} pedidos · ticket {{ formatSoles(ticketAvg()) }}</span
+      >
+    </div>
+    <div class="gv-kpi gv-kpi-ok">
+      <span class="gv-kpi-label">Clientes atendidos</span>
+      <span class="gv-kpi-value">{{ d.totals.ordered }}</span>
+    </div>
+    <div class="gv-kpi gv-kpi-warn">
+      <span class="gv-kpi-label">No compró</span>
+      <span class="gv-kpi-value">{{ d.totals.noOrder }}</span>
+    </div>
+    <div class="gv-kpi">
+      <span class="gv-kpi-label">Cerrados</span>
+      <span class="gv-kpi-value">{{ d.totals.closed }}</span>
+    </div>
+    <div class="gv-kpi">
+      <span class="gv-kpi-label">Programados pendientes</span>
+      <span class="gv-kpi-value">{{ d.totals.scheduledPending }}</span>
+      <span class="gv-kpi-detail">de {{ d.totals.scheduled }} programados hoy</span>
+    </div>
+    <div class="gv-kpi">
+      <span class="gv-kpi-label">Vendedores en ruta</span>
+      <span class="gv-kpi-value">{{ vendorsInRoute().inRoute }}</span>
+      <span class="gv-kpi-detail">de {{ vendorsInRoute().withPlan }} con plan hoy</span>
+    </div>
+  </div>
+
+  <div class="gv-filterbar">
+    <div class="gv-layers">
+      <label class="gv-layer-chip">
+        <input
+          type="checkbox"
+          [checked]="layerVisible().ordered"
+          (change)="toggleLayer('ordered')"
+        />
+        <span class="gv-layer-mark gv-mark-ordered"></span>
+        Atendido ({{ layerCounts().ordered }})
+      </label>
+      <label class="gv-layer-chip">
+        <input
+          type="checkbox"
+          [checked]="layerVisible().noOrder"
+          (change)="toggleLayer('noOrder')"
+        />
+        <span class="gv-layer-mark gv-mark-no-order"></span>
+        No compró ({{ layerCounts().noOrder }})
+      </label>
+      <label class="gv-layer-chip">
+        <input type="checkbox" [checked]="layerVisible().closed" (change)="toggleLayer('closed')" />
+        <span class="gv-layer-mark gv-mark-closed"></span>
+        Cerrado ({{ layerCounts().closed }})
+      </label>
+      <label class="gv-layer-chip">
+        <input
+          type="checkbox"
+          [checked]="layerVisible().pending"
+          (change)="toggleLayer('pending')"
+        />
+        <span class="gv-layer-mark gv-mark-pending"></span>
+        Programado pendiente ({{ layerCounts().pending }})
+      </label>
+      <label class="gv-layer-chip" [class.disabled]="onlyActiveToday()">
+        <input
+          type="checkbox"
+          [checked]="layerVisible().idle"
+          [disabled]="onlyActiveToday()"
+          (change)="toggleLayer('idle')"
+        />
+        <span class="gv-layer-mark gv-mark-idle"></span>
+        Sin actividad hoy ({{ layerCounts().idle }})
+      </label>
+    </div>
+    <div class="gv-quickfilter">
+      <button
+        type="button"
+        class="gv-quick-btn"
+        [class.on]="!onlyActiveToday()"
+        (click)="onlyActiveToday.set(false)"
+      >
+        Todos los clientes
+      </button>
+      <button
+        type="button"
+        class="gv-quick-btn"
+        [class.on]="onlyActiveToday()"
+        (click)="onlyActiveToday.set(true)"
+      >
+        Solo con actividad hoy
+      </button>
+    </div>
+  </div>
+
+  <div class="gv-body">
+    <div class="gv-map-wrap">
+      <div class="gv-map" #mapEl></div>
+      @if (drawing()) {
+        <div class="gv-drawing">Dibujando clientes… {{ drawProgress() }}%</div>
+      }
+
+      <app-map-customer-popup
+        [data]="popupData()"
+        [loading]="popupLoading()"
+        [error]="popupError()"
+        [position]="popupPosition()"
+        [trackingExtra]="null"
+        (close)="closePopup()"
+      />
+    </div>
+
+    <div class="gv-ranking">
+      <span class="gv-ranking-title">Ranking de vendedores</span>
+      <div class="gv-ranking-list">
+        @for (v of ranking(); track v.userId) {
+          <button type="button" class="gv-ranking-row" (click)="goToVendor(v.userId)">
+            <span class="gv-ranking-dot" [style.background]="mapVendorColorVar(v.mapColor)"></span>
+            <span class="gv-ranking-name">{{ v.userName }}</span>
+            <span class="gv-ranking-amount">{{ formatSoles(v.counters.orderAmount) }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+}

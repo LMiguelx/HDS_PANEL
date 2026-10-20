@@ -1,0 +1,172 @@
+<app-assignment-module-tabs />
+<section class="map-page">
+  @if (screenMode() === 'vendor-day' || screenMode() === 'vendor-portfolio') {
+    <div class="map-vendor-head">
+      <button type="button" class="map-back-link" (click)="switchToOverview()">
+        ← Todos los vendedores
+      </button>
+      <div class="map-vendor-row">
+        <div class="map-vendor-picker">
+          <button
+            type="button"
+            class="map-vendor-btn"
+            (click)="vendorPickerOpen.set(!vendorPickerOpen())"
+          >
+            @if (vendorFromDirectory(); as v) {
+              <span
+                class="map-vendor-dot"
+                [style.background]="mapVendorColorVar(v.mapColor)"
+              ></span>
+              {{ v.code }} {{ v.userName }}
+            } @else {
+              Vendedor
+            }
+            <span class="material-icons" aria-hidden="true">expand_more</span>
+          </button>
+          @if (vendorPickerOpen()) {
+            <div class="map-vendor-menu">
+              @for (v of vendorDirectory(); track v.userId) {
+                <button type="button" class="map-vendor-option" (click)="goToVendor(v.userId)">
+                  <span
+                    class="map-vendor-dot"
+                    [style.background]="mapVendorColorVar(v.mapColor)"
+                  ></span>
+                  {{ v.code }} {{ v.userName }}
+                </button>
+              }
+            </div>
+          }
+          @if (vendorFromDirectory(); as v) {
+            <span
+              class="map-vendor-jornada"
+              [style.color]="
+                'var(' + routeStatusLabel(v.routeStatus, v.counters.planned > 0).tone + ')'
+              "
+            >
+              {{ routeStatusLabel(v.routeStatus, v.counters.planned > 0).label }}
+              @if (v.routeStatus !== 'NOT_STARTED') {
+                · {{ routeTimeRangeText(v.routeStatus, v.routeStartedAt, v.routeEndedAt) }}
+              }
+            </span>
+          }
+        </div>
+
+        <div class="map-date-quick">
+          <button uiButton variant="ghost" size="sm" (click)="setDate(-1)">Ayer</button>
+          <button uiButton variant="ghost" size="sm" [class.on]="isToday()" (click)="setDate(0)">
+            Hoy
+          </button>
+          <button uiButton variant="ghost" size="sm" (click)="setDate(1)">Mañana</button>
+        </div>
+
+        <div class="map-mode-toggle">
+          <button
+            type="button"
+            class="map-mode-btn"
+            [class.on]="screenMode() === 'vendor-day'"
+            (click)="setVendorMode('day')"
+          >
+            Plan del día
+          </button>
+          <button
+            type="button"
+            class="map-mode-btn"
+            [class.on]="screenMode() === 'vendor-portfolio'"
+            (click)="setVendorMode('portfolio')"
+          >
+            Cartera completa
+          </button>
+        </div>
+
+        <div class="map-vendor-actions">
+          @if (isToday()) {
+            <button uiButton variant="secondary" size="sm" (click)="openCoverage()">
+              Cubrir cartera
+            </button>
+          }
+          <button uiButton variant="secondary" size="sm" (click)="refresh()">
+            <span class="material-icons" aria-hidden="true">refresh</span>
+            Actualizar
+          </button>
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="map-head">
+      <h1>Mapa de asignaciones</h1>
+      <div class="map-view-toggle">
+        <button
+          type="button"
+          class="map-view-btn"
+          [class.on]="screenMode() === 'overview'"
+          (click)="switchToOverview()"
+        >
+          Por vendedor
+        </button>
+        <button
+          type="button"
+          class="map-view-btn"
+          [class.on]="screenMode() === 'global'"
+          (click)="switchToGlobal()"
+        >
+          Día global
+        </button>
+      </div>
+    </div>
+
+    <div class="map-date-head">
+      <span class="map-date-label">{{ headerDateLabel() }}</span>
+      <div class="map-date-quick">
+        <button uiButton variant="ghost" size="sm" (click)="setDate(-1)">Ayer</button>
+        <button uiButton variant="ghost" size="sm" [class.on]="isToday()" (click)="setDate(0)">
+          Hoy
+        </button>
+        <button uiButton variant="ghost" size="sm" (click)="setDate(1)">Mañana</button>
+        <ui-field
+          type="date"
+          label="Fecha"
+          class="map-date-field"
+          [value]="selectedDate()"
+          (valueChange)="onDatePicked($event)"
+        />
+      </div>
+      <span class="map-updated">Actualizado {{ updatedLabel() }}</span>
+      <button
+        uiButton
+        variant="secondary"
+        size="sm"
+        [loading]="overviewLoading()"
+        (click)="refresh()"
+      >
+        <span class="material-icons" aria-hidden="true">refresh</span>
+        Actualizar
+      </button>
+    </div>
+  }
+
+  @switch (screenMode()) {
+    @case ('overview') {
+      <app-map-overview-view
+        [overview]="overview()"
+        [loading]="overviewLoading()"
+        [error]="overviewError()"
+        [date]="selectedDate()"
+        (retry)="refresh()"
+        (selectVendor)="goToVendor($event)"
+      />
+    }
+    @case ('vendor-day') {
+      @if (selectedVendorId(); as userId) {
+        <app-map-vendor-day-view [userId]="userId" [date]="selectedDate()" />
+      }
+    }
+    @case ('vendor-portfolio') {
+      @if (selectedVendorId(); as userId) {
+        <app-map-vendor-portfolio-view [userId]="userId" [date]="selectedDate()" />
+      }
+    }
+    @case ('global') {
+      <app-map-global-view [date]="selectedDate()" [overview]="overview()" />
+    }
+  }
+</section>

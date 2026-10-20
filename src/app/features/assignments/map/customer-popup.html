@@ -1,0 +1,128 @@
+@if (position(); as pos) {
+  <div class="cp-wrap" [style.left.px]="pos.x" [style.top.px]="pos.y">
+    <div class="cp-card">
+      <button type="button" class="cp-close" aria-label="Cerrar" (click)="close.emit()">✕</button>
+
+      @if (loading()) {
+        <div class="cp-skeleton" role="status" aria-label="Cargando"></div>
+      } @else if (error()) {
+        <p class="cp-error">No pudimos cargar este cliente.</p>
+      } @else if (data(); as d) {
+        @if (!d.active) {
+          <div class="cp-inactive-band">Cliente cerrado</div>
+        }
+
+        <div class="cp-head">
+          <h3>{{ d.customerName }}</h3>
+          <span class="cp-status" [style.color]="'var(' + pointStatusInfo(d.status).tone + ')'">
+            ■ {{ pointStatusInfo(d.status).label }}
+          </span>
+        </div>
+        <p class="cp-meta">
+          <span class="cp-mono">{{ d.code }}</span>
+          @if (d.address) {
+            · {{ d.address }}
+          }
+        </p>
+        @if (d.phone) {
+          <p class="cp-phone">☎ {{ d.phone }}</p>
+        }
+
+        <div class="cp-sep"></div>
+
+        <div class="cp-fields">
+          <div class="cp-field">
+            <span class="cp-label">Vendedor</span>
+            @if (d.owner) {
+              <span class="cp-value"
+                ><span
+                  class="cp-dot"
+                  [style.background]="mapVendorColorVar(d.owner.mapColor)"
+                ></span
+                >{{ d.owner.code }} {{ d.owner.userName }}</span
+              >
+            } @else {
+              <span class="cp-warn">Sin vendedor</span>
+            }
+          </div>
+          @if (d.coveringBy) {
+            <div class="cp-field">
+              <span class="cp-label">Cubre hoy</span>
+              <span class="cp-value"
+                ><span
+                  class="cp-dot"
+                  [style.background]="mapVendorColorVar(d.coveringBy.mapColor)"
+                ></span
+                >{{ d.coveringBy.code }} {{ d.coveringBy.userName }}</span
+              >
+            </div>
+          }
+          <div class="cp-field">
+            <span class="cp-label">Horario</span>
+            <span class="cp-value">{{ scheduleText(d.weekdays, d.weeksOfCycle) }}</span>
+          </div>
+        </div>
+
+        @if (!d.scheduledOnDate && d.visits.length === 0) {
+          <p class="cp-note">No estaba programado este día</p>
+        }
+        @if (d.offPlan) {
+          <p class="cp-off-plan">◆ Fuera de plan</p>
+        }
+
+        @if (trackingExtra(); as t) {
+          <div class="cp-sep"></div>
+          <p class="cp-tracking">
+            Distancia al cliente: {{ distanceText(t.distanceMeters) }} · #{{ t.order }} ·
+            {{ t.time }}
+          </p>
+        }
+
+        @if (d.visits.length > 0) {
+          <div class="cp-sep"></div>
+          <h4 class="cp-section-title">Visitas de hoy</h4>
+          <div class="cp-visits">
+            @for (v of d.visits; track v.visitId) {
+              <div class="cp-visit">
+                <div class="cp-visit-top">
+                  <span>{{ timeText(v.visitedAt) }} · {{ v.userName }}</span>
+                  <span>{{ pointStatusInfo(v.status).label }}</span>
+                </div>
+                @if (v.orderId) {
+                  <div class="cp-visit-sub">
+                    Pedido {{ formatSoles(v.orderNetAmount ?? 0) }} ·
+                    {{ orderStatusBadge(v.orderStatusCode) }}
+                    @if (v.distanceMeters != null) {
+                      ·
+                      <span [class.cp-far]="v.distanceMeters > distanceThresholdMeters()">
+                        a {{ distanceText(v.distanceMeters) }}
+                      </span>
+                    }
+                  </div>
+                } @else if (v.visitReasonName) {
+                  <div class="cp-visit-sub">Motivo: {{ v.visitReasonName }}</div>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <div class="cp-sep"></div>
+        <div class="cp-actions">
+          @if (!d.owner) {
+            <button uiButton variant="secondary" size="sm" (click)="assignVendor.emit()">
+              Asignar vendedor
+            </button>
+          } @else if (lastOrderId()) {
+            <button uiButton variant="secondary" size="sm" (click)="viewOrder()">Ver pedido</button>
+          }
+          @if (canViewFicha()) {
+            <a [routerLink]="['/clientes', d.customerId]" class="cp-ficha-link"
+              >Ver ficha del cliente →</a
+            >
+          }
+        </div>
+      }
+    </div>
+  </div>
+}
