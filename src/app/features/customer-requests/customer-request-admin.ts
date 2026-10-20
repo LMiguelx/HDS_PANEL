@@ -5,6 +5,7 @@ import { PageResponse } from '../../shared/models/api.models';
 import {
   ApproveCreationCommand,
   CreationRequestDetail,
+  CreationRequestSummary,
   FieldChangeGroupView,
   RequestListFilters,
   RequestView,
@@ -33,7 +34,7 @@ export class CustomerRequestAdminService {
   }
 
   pendingCreation(filters: RequestListFilters = {}) {
-    return this.http.get<PageResponse<RequestView>>(`${this.base}/creation/pending`, {
+    return this.http.get<PageResponse<CreationRequestSummary>>(`${this.base}/creation/pending`, {
       params: this.paramsFrom(filters),
     });
   }
@@ -43,6 +44,7 @@ export class CustomerRequestAdminService {
     return this.http.get<CreationRequestDetail>(`${this.base}/creation/${requestId}`);
   }
 
+  /** Sin paginar: el panel trae todos los grupos pendientes de una vez. */
   pendingFieldChange() {
     return this.http.get<FieldChangeGroupView[]>(`${this.base}/field-change/pending`);
   }
@@ -61,6 +63,10 @@ export class CustomerRequestAdminService {
     );
   }
 
+  rejectCreation(requestId: number) {
+    return this.http.post<void>(`${this.base}/creation/${requestId}/reject`, {});
+  }
+
   approveFieldChange(groupId: string) {
     return this.http.post<void>(`${this.base}/field-change/${groupId}/approve`, {});
   }
@@ -73,8 +79,7 @@ export class CustomerRequestAdminService {
     return this.http.post<void>(`${this.base}/closure/${requestId}/approve`, {});
   }
 
-  /** Rechaza una solicitud de creación o cierre (cambios de campo usan rejectFieldChange). */
-  reject(type: 'creation' | 'closure', requestId: number) {
-    return this.http.post<void>(`${this.base}/${type}/${requestId}/reject`, {});
+  rejectClosure(requestId: number) {
+    return this.http.post<void>(`${this.base}/closure/${requestId}/reject`, {});
   }
 }

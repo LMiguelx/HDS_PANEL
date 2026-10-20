@@ -376,9 +376,11 @@ export class OrderListPage {
   private orderSvc = inject(OrderAdminService);
   private lookupSvc = inject(LookupService);
 
-  /** Query params opcionales para llegar con filtros ya aplicados (desde Reportes de ventas). */
+  /** Query params opcionales para llegar con filtros ya aplicados (desde Reportes de ventas, Aprobaciones). */
   salespersonIdParam = input('', { alias: 'salespersonId' });
   salespersonNameParam = input('', { alias: 'salespersonName' });
+  customerIdParam = input('', { alias: 'customerId' });
+  customerNameParam = input('', { alias: 'customerName' });
   fromParam = input('', { alias: 'from' });
   statusCodeParam = input('', { alias: 'statusCode' });
   originCodeParam = input('', { alias: 'originCode' });
@@ -427,12 +429,17 @@ export class OrderListPage {
   private seedQueryParamsEffect = effect(() => {
     const salespersonId = this.salespersonIdParam();
     const salespersonName = this.salespersonNameParam();
+    const customerId = this.customerIdParam();
+    const customerName = this.customerNameParam();
     const from = this.fromParam();
     const statusCode = this.statusCodeParam();
     const originCode = this.originCodeParam();
     untracked(() => {
       if (salespersonId && salespersonName) {
         this.salespersonFilter.set({ id: Number(salespersonId), name: salespersonName });
+      }
+      if (customerId && customerName) {
+        this.customerFilter.set({ id: Number(customerId), name: customerName });
       }
       if (from) {
         this.monthFilter.set('');

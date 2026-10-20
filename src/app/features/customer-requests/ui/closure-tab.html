@@ -1,0 +1,144 @@
+@if (rows().length === 0) {
+  <ui-empty
+    variant="al-dia"
+    eyebrow="Al día"
+    title="Sin solicitudes de cierre pendientes"
+    body="Cuando un vendedor pida dar de baja a un cliente, aparece acá."
+  />
+} @else {
+  <ui-approval-tray [detailOpen]="selectedKey() !== null" (back)="select.emit(null)">
+    <div trayFilter>
+      <app-erp-segmented-filter
+        [counts]="filterCounts()"
+        [value]="filterValue()"
+        (valueChange)="filterValue.set($event)"
+      />
+    </div>
+
+    <div trayList>
+      @if (filteredRows().length === 0) {
+        <div class="clo-list-empty">
+          <p class="clo-muted">Ninguna solicitud con este filtro.</p>
+          <button type="button" class="clo-link" (click)="filterValue.set('all')">Ver todas</button>
+        </div>
+      } @else {
+        @for (r of filteredRows(); track r.requestId) {
+          <button
+            type="button"
+            class="clo-row"
+            [class.selected]="selectedKey() === String(r.requestId)"
+            (click)="pick(r.requestId)"
+          >
+            <div class="clo-row-top">
+              <span class="clo-row-name">{{ r.businessName }}</span>
+              <app-erp-badge
+                [label]="erpStatusLabel(r.erpRegistered).label"
+                [tone]="erpStatusLabel(r.erpRegistered).tone"
+              />
+            </div>
+            <div class="clo-row-line">
+              {{ r.customerCode || '—' }} · {{ r.reason || 'Sin motivo' }}
+            </div>
+            <div class="clo-row-line clo-muted">
+              {{ r.requestedByName }} · {{ dateTimeText(r.createdAt) }}
+            </div>
+          </button>
+        }
+      }
+    </div>
+
+    <div trayDetail>
+      @if (!selected()) {
+        <ui-empty title="Elige una solicitud" body="Selecciona una fila para revisarla." />
+      } @else if (selected(); as r) {
+        <div class="clo-detail-head">
+          <div>
+            <h2>{{ r.businessName }} · {{ r.customerCode || '—' }}</h2>
+            <p class="clo-detail-meta">
+              Solicitó {{ r.requestedByName }} · {{ dateTimeText(r.createdAt) }}
+              <a [routerLink]="['/clientes', r.customerId]">Ver ficha ↗</a>
+            </p>
+          </div>
+          <app-erp-badge
+            [label]="erpStatusLabel(r.erpRegistered).label"
+            [tone]="erpStatusLabel(r.erpRegistered).tone"
+          />
+        </div>
+
+        <ui-status-steps [steps]="steps()" class="clo-steps" />
+
+        <h3 class="clo-block-title">Motivo del cierre</h3>
+        <p class="clo-reason">"{{ r.reason || 'Sin motivo' }}"</p>
+
+        <h3 class="clo-block-title">Registro en el ERP</h3>
+        @if (r.erpRegistered) {
+          <p class="clo-value">Dado de baja en el ERP el {{ dateTimeText(r.erpRegisteredAt) }}</p>
+        } @else {
+          <p class="clo-muted">El ERP todavía no da de baja a este cliente.</p>
+        }
+
+        <div class="clo-warning">
+          <span class="material-icons" aria-hidden="true">warning</span>
+          <p>
+            Al aprobar, el cliente queda inactivo: sale de la cartera de su vendedor y no admite
+            pedidos ni solicitudes. Si tiene pedidos abiertos, no se podrá cerrar hasta anularlos o
+            enviarlos a facturación.
+          </p>
+        </div>
+      }
+    </div>
+
+    <div trayFooter>
+      @if (selected(); as r) {
+        @if (!r.erpRegistered) {
+          <p class="clo-footer-reason">
+            <span class="material-icons" aria-hidden="true">info</span>
+            Disponible cuando el ERP dé de baja al cliente.
+          </p>
+        } @else {
+          <p class="clo-footer-reason">
+            <span class="material-icons" aria-hidden="true">info</span>
+            El ERP ya dio de baja al cliente: solo se puede aprobar.
+          </p>
+        }
+        @if (actionError()) {
+          <p class="clo-footer-error">
+            {{ actionError() }}
+            @if (errorHasOpenOrders()) {
+              <a
+                [routerLink]="['/pedidos']"
+                [queryParams]="{
+                  customerId: r.customerId,
+                  customerName: r.businessName,
+                  statusCode: 'OPEN',
+                }"
+                >Ver pedidos del cliente ↗</a
+              >
+            }
+          </p>
+        }
+        <div class="clo-footer-actions">
+          <button
+            uiButton
+            variant="secondary"
+            [disabled]="r.erpRegistered"
+            [loading]="acting()"
+            (click)="reject(r)"
+          >
+            Rechazar
+          </button>
+          <button
+            uiButton
+            variant="primary"
+            class="clo-btn-danger"
+            [disabled]="!r.erpRegistered"
+            [loading]="acting()"
+            (click)="approve(r)"
+          >
+            Aprobar cierre
+          </button>
+        </div>
+      }
+    </div>
+  </ui-approval-tray>
+}

@@ -22,6 +22,7 @@ import {
 import { OrderAdminService } from '../orders/order-admin';
 import { OrderSummary } from '../../shared/models/order.models';
 import { orderStatusName, deliveryStatusName } from '../orders/order-format';
+import { ubigeoText } from '../../shared/utils/ubigeo';
 
 /**
  * Ficha completa del cliente — GET /api/customers/{id}, ahora con la
@@ -68,6 +69,7 @@ import { orderStatusName, deliveryStatusName } from '../orders/order-format';
                 @if (c.address) {
                   · {{ c.address }}
                 }
+                · {{ ubigeoText(c.ubigeo) }}
               </p>
             </div>
           </div>
@@ -569,6 +571,7 @@ export class CustomerDetailPage {
   protected formatSoles = formatSoles;
   protected ratingText = ratingText;
   protected initials = initials;
+  protected ubigeoText = ubigeoText;
   protected dateText = dateText;
   protected dateTimeText = dateTimeText;
   protected weekdaysText = weekdaysText;

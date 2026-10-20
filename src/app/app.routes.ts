@@ -39,10 +39,8 @@ export const routes: Routes = [
       {
         path: 'aprobaciones',
         canActivate: [permissionGuard('customer.approve')],
-        loadChildren: () =>
-          import('./features/customer-requests/customer-requests.routes').then(
-            (m) => m.CUSTOMER_REQUEST_ROUTES,
-          ),
+        loadComponent: () =>
+          import('./features/customer-requests/approvals').then((m) => m.ApprovalsPage),
       },
       // Asignaciones (módulo 2) — rediseñado
       {

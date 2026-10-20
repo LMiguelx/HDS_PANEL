@@ -1,6 +1,8 @@
 ﻿// Contratos de Clientes. Se agrega customerTypeId (lo pide /prices/resolve).
 // Confirma/regenera con openapi-typescript contra el Swagger real.
 
+import { UbigeoView } from './customer-request.models';
+
 export interface CustomerSummary {
   customerId: number;
   businessName: string;
@@ -59,6 +61,8 @@ export interface CustomerDetail {
   metrics: PurchaseMetrics | null;
   /** NUEVO (doc 33) — null si el cliente no tiene vendedor asignado. */
   salesAssignment: CustomerSalesAssignment | null;
+  /** NUEVO (doc 39) — null en clientes anteriores al cambio. */
+  ubigeo: UbigeoView | null;
 }
 
 export interface CustomerInvoiceSummary {
