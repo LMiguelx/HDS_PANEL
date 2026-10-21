@@ -7,9 +7,33 @@ import type { components } from '../../shared/models/api';
  */
 export type PromoSummary = components['schemas']['PromoSummary'];
 export type PromoPageResponse = components['schemas']['PageResponsePromoSummary'];
-export type PromoDetail = components['schemas']['PromoDetail'];
 export type CreatePromoCommand = components['schemas']['CreatePromoCommand'];
 export type UpdatePromoCommand = components['schemas']['UpdatePromoCommand'];
+
+/**
+ * `PromoDetail` gana `usage`, `definitionEditable` y `editBlockReason` —
+ * doc 44, sección 6.1. `api.ts` (generado) todavía no los trae, así que se
+ * extiende a mano en vez de tocar el archivo generado.
+ */
+export interface PromoUsageView {
+  orderCount: number; // pedidos en los que se aplicó (NO anulados)
+  grantedUnits: number; // unidades de producto bonificadas
+  discountAmount: number; // soles descontados
+  lastAppliedAt: string | null; // última aplicación; null = nunca
+}
+
+export type PromoDetail = components['schemas']['PromoDetail'] & {
+  usage: PromoUsageView;
+  definitionEditable: boolean; // true cuando usage.orderCount = 0
+  editBlockReason: string | null; // por qué no se puede editar todo (null si definitionEditable)
+};
+
+/** Edición básica — doc 44, sección 7.3: PATCH /promos/{id}/basics, siempre permitido. */
+export interface UpdatePromoBasicsCommand {
+  name: string; // obligatorio, máx. 150
+  endDate: string | null; // null = sin fecha de fin; no anterior a startDate
+  priority: number; // obligatorio, 1 a 999
+}
 
 export type ConditionCommand = components['schemas']['ConditionCommand'];
 export type ConditionView = components['schemas']['ConditionView'];
@@ -27,10 +51,8 @@ export type SegmentTargetView = components['schemas']['SegmentTargetView'];
 export type CustomerTargetView = components['schemas']['CustomerTargetView'];
 export type TargetReachView = components['schemas']['TargetReachView'];
 
-export type PreviewCommand = components['schemas']['PreviewCommand'];
-export type PreviewLineCommand = components['schemas']['PreviewLineCommand'];
-export type PreviewResult = components['schemas']['PreviewResult'];
-export type PendingChoicePreview = components['schemas']['PendingChoicePreview'];
+// POST /promos/{id}/preview ya no existe (doc 44, sección 11.5): la prueba
+// de una promoción se hace con Simular pedido + `promoId` (sección 9).
 
 export type PendingChoiceView = components['schemas']['PendingChoiceView'];
 export type ChoiceOptionView = components['schemas']['ChoiceOptionView'];

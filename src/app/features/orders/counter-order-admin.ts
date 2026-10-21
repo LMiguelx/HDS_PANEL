@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
   CounterCustomerContext,
+  CounterSalespersonView,
   CreateCounterOrderCommand,
   OrderCreatedResult,
   SuggestedItem,
@@ -44,6 +45,19 @@ export class CounterOrderAdminService {
 
   create(cmd: CreateCounterOrderCommand) {
     return this.http.post<OrderCreatedResult>(`${this.ordersBase}/counter`, cmd);
+  }
+
+  /**
+   * Vendedores activos para la opción "Otro vendedor" — doc 44, sección 5.3.
+   * Ordenada por el backend: primero los que están en ruta. `excludeUserId`
+   * es el vendedor ya asignado al cliente, para no repetirlo en la lista.
+   */
+  salespeople(excludeUserId?: number) {
+    let params = new HttpParams();
+    if (excludeUserId) params = params.set('excludeUserId', excludeUserId);
+    return this.http.get<CounterSalespersonView[]>(`${this.ordersBase}/counter/salespeople`, {
+      params,
+    });
   }
 
   suggested(customerId: number, limit = 15) {

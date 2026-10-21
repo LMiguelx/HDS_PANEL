@@ -8,6 +8,16 @@ export function vigenciaText(startDate?: string | null, endDate?: string | null)
   return `${from} – ${to}`;
 }
 
+/**
+ * Vigencia para la cabecera del detalle — doc 44, sección 6.2: cada lado
+ * dice explícitamente que no tiene fecha, en vez de un guion.
+ */
+export function vigenciaFullText(startDate?: string | null, endDate?: string | null): string {
+  const from = startDate ? format(parseISO(startDate), 'dd/MM/yyyy') : 'Sin fecha de inicio';
+  const to = endDate ? format(parseISO(endDate), 'dd/MM/yyyy') : 'Sin fecha de fin';
+  return `${from} – ${to}`;
+}
+
 /** "01/12/2026" para mostrar en campos de formulario/resumen. */
 export function dateText(value?: string | null): string {
   return value ? format(parseISO(value), 'dd/MM/yyyy') : '—';
@@ -18,6 +28,22 @@ export function waitingText(createdAt: string): string {
   const days = differenceInCalendarDays(new Date(), parseISO(createdAt));
   if (days <= 0) return 'Hoy';
   return days === 1 ? 'Espera 1 día' : `Espera ${days} días`;
+}
+
+/**
+ * Insignia del detalle — doc 44, sección 3.1. `PromoDetail` no trae
+ * `statusLabel` (a diferencia de `PromoSummary`): se calcula en el panel.
+ */
+export function promoStatusLabel(p: {
+  active?: boolean | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}): string {
+  if (!p.active) return 'Apagada';
+  const today = format(new Date(), 'yyyy-MM-dd');
+  if (p.startDate && p.startDate > today) return 'Programada';
+  if (p.endDate && p.endDate < today) return 'Vencida';
+  return 'Vigente';
 }
 
 /** Valores fijos del selector de prioridad — sección 3.8 del doc 28. */

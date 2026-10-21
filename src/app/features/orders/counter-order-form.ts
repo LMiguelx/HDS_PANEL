@@ -35,6 +35,7 @@ import { LookupService, toUiLookup } from '../promos/lookup';
 import { ToastService } from '../../core/ui/toast';
 import {
   CounterCustomerContext,
+  CounterSalespersonView,
   CreateCounterOrderCommand,
   SuggestedItem,
 } from '../../shared/models/counter-order.models';
@@ -52,7 +53,7 @@ import {
 import { AllocationView } from '../../shared/models/allocation.models';
 import { formatSoles } from '../../shared/pipes/money';
 import { quantityText } from '../sales-reports/sales-report-format';
-import { dateText, dateTimeText } from '../assignments/assignment-format';
+import { dateText, dateTimeText, timeText } from '../assignments/assignment-format';
 import { originName } from './order-format';
 import { isWholeQuantity, toWholeQuantity } from '../../shared/utils/quantity';
 
@@ -74,7 +75,7 @@ interface CartLine {
   quantity: number;
 }
 
-type AttributionTarget = 'salesperson' | 'counter';
+type AttributionTarget = 'salesperson' | 'counter' | 'other';
 type FormTab = 'catalogo' | 'sugerido' | 'promociones';
 
 const TABS: UiTabItem[] = [
@@ -253,27 +254,105 @@ function inputNumber(input: HTMLInputElement): number {
                     </div>
                   }
 
-                  @if (!editMode() && ctx.salesAssignment) {
+                  @if (!editMode()) {
                     <div class="cof-attribution">
-                      <span class="cof-label">Atribuir venta a</span>
+                      <span class="cof-label">Venta para</span>
                       <div class="cof-attribution-options">
-                        <ui-option-card
-                          [selected]="attributeTo() === 'salesperson'"
-                          (pick)="attributeTo.set('salesperson')"
-                        >
-                          {{ ctx.salesAssignment.salespersonName }}
-                        </ui-option-card>
+                        @if (ctx.salesAssignment; as a) {
+                          <ui-option-card
+                            [selected]="attributeTo() === 'salesperson'"
+                            [disabled]="!a.salespersonActive"
+                            (pick)="attributeTo.set('salesperson')"
+                          >
+                            <div class="cof-attr-name">
+                              {{ a.salespersonName }}
+                              <span class="cof-attr-code">{{ a.salespersonCode }}</span>
+                            </div>
+                            @if (!a.salespersonActive) {
+                              <div class="cof-attr-sub cof-attr-warn">
+                                Inactivo: no se le puede atribuir la venta
+                              </div>
+                            } @else {
+                              <div class="cof-attr-sub">
+                                {{ a.salesChannelName }}
+                                <span class="cof-route" [class.cof-route-on]="a.onRoute">
+                                  ●
+                                  {{
+                                    a.onRoute
+                                      ? 'En ruta · ' + timeText(a.routeStartedAt)
+                                      : 'Sin jornada abierta'
+                                  }}
+                                </span>
+                              </div>
+                            }
+                          </ui-option-card>
+                        }
                         <ui-option-card
                           [selected]="attributeTo() === 'counter'"
                           (pick)="attributeTo.set('counter')"
                         >
                           Mostrador (yo)
                         </ui-option-card>
+                        <ui-option-card
+                          [selected]="attributeTo() === 'other'"
+                          (pick)="selectOtherSalesperson()"
+                        >
+                          Otro vendedor
+                          @if (attributeTo() === 'other' && selectedOtherSalesperson(); as s) {
+                            <div class="cof-attr-sub">
+                              {{ s.salespersonName }} · {{ s.salesChannelName }}
+                            </div>
+                          }
+                        </ui-option-card>
                       </div>
+
+                      @if (attributeTo() === 'other') {
+                        <div class="cof-other-picker">
+                          <ui-field
+                            label="Buscar vendedor"
+                            placeholder="Nombre o código"
+                            [(value)]="otherSalespersonQuery"
+                          />
+                          @if (otherSalespeopleLoading()) {
+                            <span class="cof-muted">Cargando vendedores…</span>
+                          } @else if (otherSalespeopleFiltered().length === 0) {
+                            <span class="cof-muted">No hay otros vendedores activos.</span>
+                          } @else {
+                            <div class="cof-other-list">
+                              @for (s of otherSalespeopleFiltered(); track s.salespersonId) {
+                                <button
+                                  type="button"
+                                  class="cof-other-row"
+                                  [class.selected]="
+                                    selectedOtherSalesperson()?.salespersonId === s.salespersonId
+                                  "
+                                  (click)="selectedOtherSalesperson.set(s)"
+                                >
+                                  <span class="cof-attr-name"
+                                    >{{ s.salespersonName }}
+                                    <span class="cof-attr-code">{{ s.salespersonCode }}</span></span
+                                  >
+                                  <span class="cof-attr-sub">
+                                    {{ s.salesChannelName }} ·
+                                    <span class="cof-route" [class.cof-route-on]="s.onRoute">
+                                      ●
+                                      {{
+                                        s.onRoute
+                                          ? 'En ruta · ' + timeText(s.routeStartedAt)
+                                          : 'Sin jornada abierta'
+                                      }}
+                                    </span>
+                                  </span>
+                                </button>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
                     </div>
                   }
 
-                  @if (!editMode() && (attributeTo() === 'counter' || !ctx.salesAssignment)) {
+                  @if (!editMode() && attributeTo() === 'counter') {
                     <ui-field
                       label="Canal de venta"
                       type="select"
@@ -510,6 +589,11 @@ function inputNumber(input: HTMLInputElement): number {
           @if (canEditCart()) {
             <div class="cof-right">
               <ui-card title="Resumen" class="cof-sim-card">
+                @if (!editMode() && attributionSummaryText(); as attrText) {
+                  <p class="cof-muted cof-attr-summary">
+                    Venta para: <strong>{{ attrText }}</strong>
+                  </p>
+                }
                 @if (editMode()) {
                   <div class="cof-change-summary">
                     <div class="cof-estimate">
@@ -750,12 +834,76 @@ function inputNumber(input: HTMLInputElement): number {
       }
       .cof-attribution {
         display: grid;
-        gap: 8px;
+        gap: 10px;
       }
       .cof-attribution-options {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 10px;
+        align-items: start;
+      }
+      .cof-attr-name {
+        font-weight: 700;
+      }
+      .cof-attr-code {
+        font-weight: 400;
+        color: var(--ink-muted);
+        font-size: 12px;
+      }
+      .cof-attr-sub {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .cof-attr-warn {
+        color: var(--status-danger);
+      }
+      .cof-route {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        color: var(--ink-muted);
+      }
+      .cof-route-on {
+        color: var(--status-ok);
+        font-weight: 600;
+      }
+      .cof-other-picker {
+        border: 1px solid var(--divider);
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      .cof-other-list {
+        display: grid;
+        gap: 1px;
+        background: var(--hairline);
+        border: 1px solid var(--hairline);
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      .cof-other-row {
+        display: grid;
+        gap: 2px;
+        text-align: left;
+        border: 0;
+        background: var(--bg);
+        padding: 10px 12px;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        color: var(--ink);
+      }
+      .cof-other-row:hover {
+        background: var(--faint);
+      }
+      .cof-other-row.selected {
+        background: var(--faint);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .cof-attr-summary {
+        margin: 0 0 10px;
+        padding-bottom: 10px;
+        border-bottom: var(--border-hair);
       }
       .cof-left {
         display: grid;
@@ -1070,6 +1218,24 @@ export class CounterOrderFormPage implements OnInit {
   protected attributeTo = signal<AttributionTarget>('counter');
   protected salesChannelId = signal('');
   protected channelOptions = signal<UiFieldOption[]>([{ value: '', label: 'Sin canal' }]);
+  protected timeText = timeText;
+
+  // — "Otro vendedor" (doc 44, sección 5) — lista corta (~25), se pide una
+  // sola vez al elegir el cliente o al abrir esta opción, y se filtra en
+  // el cliente por nombre o código.
+  protected otherSalespeople = signal<CounterSalespersonView[]>([]);
+  protected otherSalespeopleLoading = signal(false);
+  private otherSalespeopleLoaded = false;
+  protected otherSalespersonQuery = signal('');
+  protected selectedOtherSalesperson = signal<CounterSalespersonView | null>(null);
+  protected otherSalespeopleFiltered = computed(() => {
+    const q = this.otherSalespersonQuery().trim().toLowerCase();
+    const list = this.otherSalespeople();
+    if (!q) return list;
+    return list.filter(
+      (s) => s.salespersonName.toLowerCase().includes(q) || s.salespersonCode.includes(q),
+    );
+  });
   protected paymentConditions = signal<UiFieldOption[]>([]);
   protected paymentConditionId = signal('');
   protected deliverNow = signal(false);
@@ -1249,6 +1415,7 @@ export class CounterOrderFormPage implements OnInit {
       this.customer();
       this.attributeTo();
       this.salesChannelId();
+      this.selectedOtherSalesperson();
       this.originalOrder();
       untracked(() => this.simTrigger$.next());
     });
@@ -1315,7 +1482,8 @@ export class CounterOrderFormPage implements OnInit {
       !!this.customer() &&
       !!this.context()?.canCreateOrder &&
       !!this.paymentConditionId() &&
-      this.lines().length > 0
+      this.lines().length > 0 &&
+      (this.attributeTo() !== 'other' || !!this.selectedOtherSalesperson())
     );
   }
 
@@ -1331,6 +1499,9 @@ export class CounterOrderFormPage implements OnInit {
   protected submitDisabledReason = computed(() => {
     if (!this.customer()) return 'Elige un cliente';
     if (!this.context()?.canCreateOrder) return 'Este cliente no puede recibir un pedido ahora.';
+    if (this.attributeTo() === 'other' && !this.selectedOtherSalesperson()) {
+      return 'Elige a qué vendedor va la venta';
+    }
     if (!this.paymentConditionId()) return 'Elige la condición de pago';
     if (this.lines().length === 0) return 'Agrega productos';
     return '';
@@ -1348,12 +1519,21 @@ export class CounterOrderFormPage implements OnInit {
     this.idempotencyKey.set(newIdempotencyKey());
     this.suggested.set([]);
     this.availablePromos.set([]);
+    this.resetAttribution();
     this.loadContext(item.id);
   }
 
   protected changeCustomer() {
     this.customer.set(null);
     this.context.set(null);
+    this.resetAttribution();
+  }
+
+  private resetAttribution() {
+    this.otherSalespeople.set([]);
+    this.otherSalespeopleLoaded = false;
+    this.otherSalespersonQuery.set('');
+    this.selectedOtherSalesperson.set(null);
   }
 
   private loadContext(customerId: number) {
@@ -1363,17 +1543,57 @@ export class CounterOrderFormPage implements OnInit {
       next: (ctx) => {
         this.context.set(ctx);
         this.contextLoading.set(false);
-        if (ctx.salesAssignment) {
+        const assignment = ctx.salesAssignment;
+        if (assignment?.salespersonActive) {
           this.attributeTo.set('salesperson');
           this.salesChannelId.set(
-            ctx.salesAssignment.salesChannelId ? String(ctx.salesAssignment.salesChannelId) : '',
+            assignment.salesChannelId ? String(assignment.salesChannelId) : '',
           );
         } else {
+          // Sin asignación, o asignado pero inactivo (sección 5.1): mostrador
+          // por defecto; si estaba inactivo, ya se pide la lista de "otro
+          // vendedor" para que la opción quede lista de inmediato.
           this.attributeTo.set('counter');
+          if (assignment) this.loadOtherSalespeople();
         }
         this.loadSuggested(customerId);
       },
       error: () => this.contextLoading.set(false),
+    });
+  }
+
+  /** "Venta para: {nombre}" del resumen — sección 5.5. */
+  protected attributionSummaryText(): string {
+    if (this.attributeTo() === 'salesperson' && this.context()?.salesAssignment) {
+      return this.context()!.salesAssignment!.salespersonName;
+    }
+    if (this.attributeTo() === 'other' && this.selectedOtherSalesperson()) {
+      return this.selectedOtherSalesperson()!.salespersonName;
+    }
+    if (this.attributeTo() === 'counter') return 'Mostrador (yo)';
+    return '';
+  }
+
+  /** Abre "Otro vendedor" y pide la lista la primera vez (sección 5.3). */
+  protected selectOtherSalesperson() {
+    this.attributeTo.set('other');
+    this.loadOtherSalespeople();
+  }
+
+  private loadOtherSalespeople() {
+    if (this.otherSalespeopleLoaded) return;
+    this.otherSalespeopleLoaded = true;
+    this.otherSalespeopleLoading.set(true);
+    const excludeUserId = this.context()?.salesAssignment?.salespersonId;
+    this.counterOrderSvc.salespeople(excludeUserId).subscribe({
+      next: (list) => {
+        this.otherSalespeople.set(list);
+        this.otherSalespeopleLoading.set(false);
+      },
+      error: () => {
+        this.otherSalespeopleLoading.set(false);
+        this.otherSalespeopleLoaded = false;
+      },
     });
   }
 
@@ -1447,6 +1667,9 @@ export class CounterOrderFormPage implements OnInit {
     if (this.attributeTo() === 'salesperson' && this.context()?.salesAssignment) {
       return this.context()!.salesAssignment!.salesChannelId ?? 0;
     }
+    if (this.attributeTo() === 'other') {
+      return this.selectedOtherSalesperson()?.salesChannelId ?? null;
+    }
     return this.salesChannelId() ? Number(this.salesChannelId()) : 0;
   }
 
@@ -1480,6 +1703,8 @@ export class CounterOrderFormPage implements OnInit {
     };
     if (this.attributeTo() === 'salesperson' && this.context()?.salesAssignment) {
       cmd.assignmentId = this.context()!.salesAssignment!.assignmentId;
+    } else if (this.attributeTo() === 'other' && this.selectedOtherSalesperson()) {
+      cmd.salespersonId = this.selectedOtherSalesperson()!.salespersonId;
     } else {
       cmd.salesChannelId = this.salesChannelId() ? Number(this.salesChannelId()) : 0;
     }

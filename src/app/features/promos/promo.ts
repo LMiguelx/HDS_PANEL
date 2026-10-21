@@ -6,13 +6,12 @@ import {
   CreatePromoCommand,
   PendingChoiceView,
   PendingCountView,
-  PreviewCommand,
-  PreviewResult,
   PromoDetail,
   PromoPageResponse,
   ResolveChoiceCommand,
   TargetReachView,
   TargetsCommand,
+  UpdatePromoBasicsCommand,
   UpdatePromoCommand,
 } from './promo.types';
 
@@ -48,6 +47,11 @@ export class PromoService {
     return this.http.put<PromoDetail>(`${this.base}/${id}`, cmd);
   }
 
+  /** Edición básica (nombre, fecha de fin, prioridad) — doc 44, sección 7.3. Siempre permitida. */
+  updateBasics(id: number, cmd: UpdatePromoBasicsCommand) {
+    return this.http.patch<PromoDetail>(`${this.base}/${id}/basics`, cmd);
+  }
+
   remove(id: number) {
     return this.http.delete<void>(`${this.base}/${id}`);
   }
@@ -69,11 +73,6 @@ export class PromoService {
   /** Cuántos clientes alcanza un targeting antes de guardarlo. */
   previewTargets(targets: TargetsCommand) {
     return this.http.post<TargetReachView>(`${this.base}/targets/preview`, targets);
-  }
-
-  /** Simula un pedido de ejemplo contra una promo ya creada. */
-  previewOrder(id: number, cmd: PreviewCommand) {
-    return this.http.post<PreviewResult>(`${this.base}/${id}/preview`, cmd);
   }
 
   /** Crea la promo (nace apagada). */

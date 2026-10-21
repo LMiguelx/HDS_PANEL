@@ -1,6 +1,7 @@
 // Contratos del pedido de mostrador, jornada y simulación — doc 30
-// (panel-admin-pedido-mostrador-simulacion-reportes.md). Escritos a mano:
-// son endpoints nuevos que api.ts (generado) todavía no incluye.
+// (panel-admin-pedido-mostrador-simulacion-reportes.md), con los campos de
+// "Venta para" del doc 44 (atribución a otro vendedor y estado de ruta).
+// Escritos a mano: son endpoints nuevos que api.ts (generado) todavía no incluye.
 
 // ---- Jornada de mostrador (RouteController, /api/routes) ----
 
@@ -17,11 +18,25 @@ export interface RouteView {
 
 export interface CounterAssignmentView {
   assignmentId: number; // se envía al registrar si la venta va al vendedor
-  salespersonId: number;
+  salespersonId: number; // se envía como excludeUserId al pedir la lista de "otro vendedor"
   salespersonCode: string;
   salespersonName: string;
   salesChannelId: number | null;
   salesChannelName: string | null;
+  salespersonActive: boolean; // doc 44 — false: deshabilitar "Vendedor asignado"
+  onRoute: boolean; // doc 44 — tiene la jornada de hoy abierta
+  routeStartedAt: string | null; // doc 44 — ISO datetime; null si no está en ruta
+}
+
+/** "Otro vendedor" — doc 44, sección 5.3: GET /orders/counter/salespeople. */
+export interface CounterSalespersonView {
+  salespersonId: number; // se envía como salespersonId en la opción "Otro vendedor"
+  salespersonCode: string;
+  salespersonName: string;
+  salesChannelId: number | null;
+  salesChannelName: string | null;
+  onRoute: boolean;
+  routeStartedAt: string | null;
 }
 
 export interface CounterTodayOrderView {
@@ -57,13 +72,14 @@ export interface OrderItemCommand {
 export interface CreateCounterOrderCommand {
   customerId: number;
   paymentConditionId: number;
-  assignmentId?: number; // dar la venta al vendedor asignado
-  salesChannelId?: number | null; // obligatorio si NO se envía assignmentId
+  assignmentId?: number; // opción 1: dar la venta al vendedor asignado
+  salesChannelId?: number | null; // opción 2 (mostrador): obligatorio
   deliverNow: boolean;
   note?: string; // máx. 255
   idempotencyKey: string; // máx. 36
   catalogItems: OrderItemCommand[];
   predictedItems: OrderItemCommand[];
+  salespersonId?: number; // doc 44 — opción 3: dar la venta a otro vendedor activo
 }
 
 export interface OrderCreatedResult {

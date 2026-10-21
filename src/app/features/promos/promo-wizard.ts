@@ -13,7 +13,21 @@ import { UiWizardSteps, UiWizardStep } from './ui/wizard-steps/wizard-steps';
 import { PromoService } from './promo';
 import { LookupService } from './lookup';
 import { CreatePromoCommand, LookupItem, PromoDetail, UpdatePromoCommand } from './promo.types';
-import { dateText, PRIORITY_OPTIONS } from './promo-format';
+import {
+  applicationsPerCustomerText,
+  dateText,
+  PRIORITY_OPTIONS,
+  priorityText,
+  repeatsText,
+} from './promo-format';
+import {
+  benefitProductName,
+  benefitQuantityText,
+  benefitText,
+  groupModeText,
+  thresholdText,
+} from './domain/promo-texts';
+import { ToastService } from '../../core/ui/toast';
 import {
   ImportMembersDialog,
   ImportMembersDialogResult,
@@ -27,6 +41,7 @@ interface ConditionDraft {
   familyId?: number;
   brandId?: number;
   name: string;
+  code?: string; // doc 44, sección 8.3 — solo tiene sentido para PRODUCT
 }
 
 interface BenefitDraft {
@@ -34,6 +49,7 @@ interface BenefitDraft {
   benefitType: 'FREE_PRODUCT' | 'DISCOUNT_AMOUNT' | 'DISCOUNT_PERCENT';
   catalog: boolean; // true = producto de catálogo (productId); false = material promocional (label)
   productId?: number;
+  productCode?: string; // doc 44, sección 8.3 — se guarda junto con el id, nunca solo el id
   productName?: string;
   quantity?: number;
   discountAmount?: number;
@@ -140,7 +156,6 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
           @if (savedAt()) {
             <span class="wizard-saved">Guardado</span>
           }
-          <button uiButton variant="secondary" (click)="exit()">Guardar y salir</button>
         </div>
       </div>
 
@@ -616,110 +631,140 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
             </div>
           }
           @case (4) {
-            <div class="wizard-summary-grid">
-              <div>
-                <h2>Resumen</h2>
-                <div class="wizard-prose">{{ summaryPhrase() }}</div>
-                <hr class="wizard-hr" />
-                <div class="wizard-summary-facts">
-                  <div>
-                    <span>Vigencia</span><span>{{ vigenciaSummary() }}</span>
-                  </div>
-                  <div>
-                    <span>Canal</span><span>{{ selectedChannelName() || '—' }}</span>
-                  </div>
-                  <div>
-                    <span>Se combina</span
-                    ><span>{{ stackable() ? 'Sí, con otras promociones' : 'No' }}</span>
-                  </div>
-                  <div>
-                    <span>Alcance</span><span>{{ audienceSummary() }}</span>
-                  </div>
+            <div class="wizard-summary-single">
+              <h2>Resumen</h2>
+              <div class="wizard-prose">{{ summaryPhrase() }}</div>
+              <hr class="wizard-hr" />
+
+              <h3 class="wizard-summary-subtitle">Datos</h3>
+              <div class="wizard-summary-facts">
+                <div>
+                  <span>Código</span><span>{{ code() }}</span>
                 </div>
-                <div class="wizard-summary-actions">
-                  <button
-                    uiButton
-                    variant="primary"
-                    [loading]="activating()"
-                    (click)="activatePromo()"
-                  >
-                    Activar promoción
-                  </button>
-                  <button
-                    uiButton
-                    variant="secondary"
-                    [loading]="savingDraft()"
-                    (click)="saveOff()"
-                  >
-                    Guardar apagada
-                  </button>
+                <div>
+                  <span>Tipo</span
+                  ><span>{{ requiresPurchase() ? 'Por compra' : 'Por lista de clientes' }}</span>
                 </div>
-                @if (saveError()) {
-                  <div class="wizard-save-error">{{ saveError() }}</div>
-                }
+                <div>
+                  <span>Canal</span><span>{{ selectedChannelName() || 'Todos los canales' }}</span>
+                </div>
+                <div>
+                  <span>Vigencia</span><span>{{ vigenciaSummary() }}</span>
+                </div>
+                <div>
+                  <span>Prioridad</span><span>{{ priorityLabel() }}</span>
+                </div>
+                <div>
+                  <span>Se combina</span><span>{{ stackable() ? 'Sí' : 'No' }}</span>
+                </div>
+                <div>
+                  <span>Se repite</span><span>{{ repeatsSummary() }}</span>
+                </div>
+                <div>
+                  <span>Veces por cliente</span><span>{{ maxApplicationsSummary() }}</span>
+                </div>
               </div>
-              <div class="wizard-side-card wizard-simulator">
-                <h3>Simular un pedido</h3>
+
+              <h3 class="wizard-summary-subtitle">Qué debe comprar</h3>
+              @if (!requiresPurchase()) {
                 <p class="wizard-side-text wizard-side-muted">
-                  El resultado es un estimado: el premio definitivo se calcula al facturar.
+                  No exige compra: se otorga por estar en la lista.
                 </p>
-                @if (!draftId()) {
-                  <p class="wizard-side-text">
-                    Guarda la promoción (aunque sea apagada) para poder simular.
-                  </p>
-                  <button
-                    uiButton
-                    variant="secondary"
-                    [loading]="savingDraft()"
-                    (click)="saveOff()"
-                  >
-                    Guardar apagada
-                  </button>
-                } @else {
-                  <ui-typeahead
-                    label="Cliente"
-                    [clearOnPick]="false"
-                    [search]="customerSearch"
-                    [selected]="simCustomer()"
-                    (picked)="simCustomer.set($event)"
-                  />
-                  <div class="wizard-sim-line">
-                    <ui-typeahead
-                      label="Producto"
-                      [clearOnPick]="false"
-                      [search]="scopeProductSearch"
-                      [selected]="simProduct()"
-                      (picked)="simProduct.set($event)"
-                    />
-                    <ui-field label="Cantidad" type="number" [(value)]="simQuantity" />
-                  </div>
-                  <button
-                    uiButton
-                    variant="secondary"
-                    class="ui-btn-block"
-                    [loading]="simulating()"
-                    (click)="simulate()"
-                  >
-                    Simular
-                  </button>
-                  <hr class="wizard-hr" />
-                  @if (simResult(); as r) {
-                    <div class="wizard-side-eyebrow">Otorgaría (estimado)</div>
-                    @if (r.qualifies) {
-                      @for (g of r.granted; track g.benefitLine) {
-                        <div class="wizard-sim-result">{{ g.displayText }}</div>
-                      }
-                      @for (p of r.pendingChoices; track p.benefitGroup) {
-                        <div class="wizard-sim-result">Elección pendiente — {{ p.modeText }}</div>
-                      }
-                    } @else {
-                      <div class="wizard-sim-result">
-                        {{ r.progressText || 'Todavía no califica.' }}
-                      </div>
+              } @else if (mode() === 'ambito' && ambitoSelected()) {
+                <p class="wizard-side-text">
+                  {{ ambitoSelected()!.extraInfo === 'Familia' ? 'Familia' : 'Marca' }}
+                  {{ ambitoSelected()!.name }}
+                </p>
+              } @else if (conditions().length === 0) {
+                <p class="wizard-side-text wizard-side-muted">
+                  Agrega al menos un producto en el paso "Qué debe comprar".
+                </p>
+              } @else {
+                <table class="ui-table-grid wizard-summary-table">
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Código</th>
+                      <th>Nombre</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (c of conditions(); track c.name + c.scope) {
+                      <tr>
+                        <td class="wizard-side-muted">{{ scopeLabel(c.scope) }}</td>
+                        <td class="wizard-side-muted">{{ c.code || '—' }}</td>
+                        <td>{{ c.name }}</td>
+                      </tr>
                     }
-                  }
+                  </tbody>
+                </table>
+              }
+
+              <h3 class="wizard-summary-subtitle">Tramos y premios</h3>
+              <div class="wizard-summary-tiers">
+                @for (t of tiers(); track t.key) {
+                  <div class="wizard-summary-tier">
+                    <div class="wizard-summary-tier-head">
+                      {{ requiresPurchase() ? 'Tramo ' + t.tier + ' · ' : ''
+                      }}{{ tierThresholdSummary(t) }}
+                    </div>
+                    @for (g of t.benefitGroups; track g.benefitGroup) {
+                      @if (g.benefits.length > 0) {
+                        <div class="wizard-summary-group-head">{{ groupModeSummary(g) }}</div>
+                        <table class="ui-table-grid wizard-summary-table">
+                          <thead>
+                            <tr>
+                              <th>Código</th>
+                              <th>Premio</th>
+                              <th class="wizard-col-right">Cantidad</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (b of g.benefits; track b.key) {
+                              <tr>
+                                <td class="wizard-side-muted">
+                                  {{ b.catalog ? b.productCode || '—' : '—' }}
+                                </td>
+                                <td>{{ benefitNameSummary(b) }}</td>
+                                <td class="wizard-col-right">{{ benefitQuantitySummary(b) }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      }
+                    }
+                  </div>
                 }
               </div>
+
+              <h3 class="wizard-summary-subtitle">A quiénes llega</h3>
+              <p class="wizard-side-text">{{ audienceSummary() }}</p>
+              @if (audience().length > 0) {
+                <table class="ui-table-grid wizard-summary-table">
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Nombre</th>
+                      <th>Modo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (a of audience(); track a.kind + a.id) {
+                      <tr>
+                        <td class="wizard-side-muted">
+                          {{ a.kind === 'segment' ? 'Segmento' : 'Cliente' }}
+                        </td>
+                        <td>{{ a.name }}</td>
+                        <td>{{ a.mode === 'INCLUDE' ? 'Incluido' : 'Excluido' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+
+              @if (saveError()) {
+                <div class="wizard-save-error">{{ saveError() }}</div>
+              }
             </div>
           }
         }
@@ -732,6 +777,29 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         <div class="wizard-footer-hint">{{ stepHint() }}</div>
         @if (step() < 4) {
           <button uiButton variant="primary" (click)="nextStep()">Continuar</button>
+        } @else {
+          <div class="wizard-footer-actions">
+            <button
+              uiButton
+              variant="secondary"
+              *hasPermission="'order.manage'"
+              (click)="goSimulate()"
+            >
+              Simular pedido
+            </button>
+            <button uiButton variant="secondary" [loading]="savingDraft()" (click)="saveOff()">
+              Guardar apagada
+            </button>
+            <button
+              uiButton
+              variant="primary"
+              *hasPermission="'promo.approve'"
+              [loading]="activating()"
+              (click)="activatePromo()"
+            >
+              Activar promoción
+            </button>
+          </div>
         }
       </div>
     </section>
@@ -1175,11 +1243,8 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
       .wizard-condition-actions ui-field {
         width: 130px;
       }
-      .wizard-summary-grid {
-        display: grid;
-        grid-template-columns: 1.1fr 1fr;
-        gap: 36px;
-        align-items: start;
+      .wizard-summary-single {
+        max-width: 760px;
       }
       .wizard-prose {
         border-left: 3px solid var(--accent);
@@ -1187,6 +1252,14 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         font-size: 20px;
         line-height: 1.45;
         color: var(--ink);
+      }
+      .wizard-summary-subtitle {
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+        margin: 26px 0 10px;
       }
       .wizard-summary-facts {
         display: grid;
@@ -1201,10 +1274,35 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
       .wizard-summary-facts span:first-child {
         color: var(--ink-muted);
       }
-      .wizard-summary-actions {
-        display: flex;
-        gap: 10px;
-        margin-top: 26px;
+      .wizard-summary-table {
+        width: 100%;
+        margin-bottom: 4px;
+      }
+      .wizard-col-right {
+        text-align: right;
+        font-variant-numeric: var(--tnum);
+      }
+      .wizard-summary-tiers {
+        display: grid;
+        gap: 14px;
+      }
+      .wizard-summary-tier {
+        border: 1px solid var(--hairline);
+        padding: 14px 16px;
+      }
+      .wizard-summary-tier-head {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--ink);
+        margin-bottom: 8px;
+      }
+      .wizard-summary-group-head {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+        margin: 10px 0 4px;
       }
       .wizard-save-error {
         margin-top: 14px;
@@ -1217,12 +1315,6 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         gap: 10px;
         align-items: end;
         margin-top: 10px;
-      }
-      .wizard-sim-result {
-        padding: 10px 12px;
-        background: var(--faint);
-        font-size: 14px;
-        margin-top: 8px;
       }
       .wizard-footer {
         display: flex;
@@ -1239,12 +1331,15 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         font-size: 13px;
         color: var(--ink-muted);
       }
+      .wizard-footer-actions {
+        display: flex;
+        gap: 10px;
+      }
 
       @media (max-width: 900px) {
         .wizard-step1-grid,
         .wizard-2col-wide,
-        .wizard-audience-grid,
-        .wizard-summary-grid {
+        .wizard-audience-grid {
           grid-template-columns: 1fr;
         }
       }
@@ -1286,6 +1381,10 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         .wizard-footer-hint {
           display: none;
         }
+        .wizard-footer-actions {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
       }
     `,
   ],
@@ -1296,6 +1395,7 @@ export class PromoWizardPage {
   private promoSvc = inject(PromoService);
   private lookupSvc = inject(LookupService);
   private dialog = inject(UiDialogService);
+  private toast = inject(ToastService);
 
   protected stepDefs: UiWizardStep[] = [
     { label: 'Datos generales' },
@@ -1362,11 +1462,6 @@ export class PromoWizardPage {
   protected savingDraft = signal(false);
   protected activating = signal(false);
   protected saveError = signal('');
-  protected simCustomer = signal<UiLookupItem | null>(null);
-  protected simProduct = signal<UiLookupItem | null>(null);
-  protected simQuantity = signal('1');
-  protected simulating = signal(false);
-  protected simResult = signal<import('./promo.types').PreviewResult | null>(null);
 
   protected editingId = signal<number | null>(null);
 
@@ -1374,8 +1469,6 @@ export class PromoWizardPage {
   protected brandFamilySearch = (q: string) => this.combinedBrandFamilySearch(q);
   protected scopeProductSearch = (q: string) =>
     this.lookupSvc.products(q).pipe(map((items) => this.toLookup(items)));
-  protected customerSearch = (q: string) =>
-    this.lookupSvc.customers(q).pipe(map((items) => this.toLookup(items)));
   protected audienceSearch = (q: string) => this.combinedAudienceSearch(q);
 
   protected String = String;
@@ -1429,9 +1522,10 @@ export class PromoWizardPage {
 
     const editId = this.route.snapshot.paramMap.get('id');
     const duplicateFrom = this.route.snapshot.queryParamMap.get('duplicateFrom');
+    const jumpToStep = this.route.snapshot.queryParamMap.get('step');
     if (editId) {
       this.editingId.set(Number(editId));
-      this.loadInto(Number(editId), true);
+      this.loadInto(Number(editId), true, jumpToStep === '5');
     } else if (duplicateFrom) {
       this.loadInto(Number(duplicateFrom), false);
       this.code.set(slugCode('PROMO'));
@@ -1513,7 +1607,10 @@ export class PromoWizardPage {
     ) as 'PRODUCT' | 'FAMILY' | 'BRAND';
     if (this.conditions().some((c) => c.name === item.name && c.scope === scope)) return;
     const draft: ConditionDraft = { scope, name: item.name };
-    if (scope === 'PRODUCT') draft.productId = item.id;
+    if (scope === 'PRODUCT') {
+      draft.productId = item.id;
+      draft.code = item.code ?? undefined;
+    }
     if (scope === 'FAMILY') draft.familyId = item.id;
     if (scope === 'BRAND') draft.brandId = item.id;
     this.conditions.update((list) => [...list, draft]);
@@ -1637,10 +1734,11 @@ export class PromoWizardPage {
   }
 
   protected benefitProductSelected(b: BenefitDraft): UiLookupItem | null {
-    return b.productId ? { id: b.productId, name: b.productName ?? '' } : null;
+    return b.productId ? { id: b.productId, code: b.productCode, name: b.productName ?? '' } : null;
   }
   protected setBenefitProduct(b: BenefitDraft, item: UiLookupItem) {
     b.productId = item.id;
+    b.productCode = item.code ?? undefined;
     b.productName = item.name;
     this.tiers.update((list) => [...list]);
   }
@@ -1684,15 +1782,17 @@ export class PromoWizardPage {
     return parts.join(' + ') || 'Sin premios todavía';
   }
 
+  /** Único lugar que arma este texto (sección 10): nunca concatena un valor que puede ser `undefined`. */
   protected benefitLabel(b: BenefitDraft): string {
-    switch (b.benefitType) {
-      case 'FREE_PRODUCT':
-        return `${b.catalog ? b.productName : b.label} × ${b.quantity ?? 1} gratis`;
-      case 'DISCOUNT_AMOUNT':
-        return `S/ ${b.discountAmount ?? 0} de descuento`;
-      case 'DISCOUNT_PERCENT':
-        return `${b.discountPercent ?? 0}% de descuento`;
-    }
+    return benefitText({
+      benefitType: b.benefitType,
+      quantity: b.quantity,
+      productCode: b.catalog ? b.productCode : undefined,
+      productName: b.catalog ? b.productName : undefined,
+      label: !b.catalog ? b.label : undefined,
+      discountAmount: b.discountAmount,
+      discountPercent: b.discountPercent,
+    });
   }
 
   protected tierPhrase(t: TierDraft): string {
@@ -1751,6 +1851,54 @@ export class PromoWizardPage {
     if (this.audience().length === 0) return 'Todos los clientes del canal';
     const n = this.reach()?.reachedCustomers;
     return n != null ? `${n} clientes` : `${this.audience().length} reglas de alcance`;
+  }
+
+  // — Resumen estructurado del paso 5 (sección 8.5): mismas reglas de texto
+  // que el detalle (domain/promo-texts.ts), armadas con el estado local.
+  protected priorityLabel(): string {
+    return priorityText(Number(this.priority()));
+  }
+
+  protected repeatsSummary(): string {
+    return repeatsText(
+      this.repeats(),
+      this.maxRepeatsPerOrder() ? this.numberOr(1, this.maxRepeatsPerOrder()) : null,
+    );
+  }
+
+  protected maxApplicationsSummary(): string {
+    return applicationsPerCustomerText(
+      this.maxApplicationsPerCustomer() ? Number(this.maxApplicationsPerCustomer()) : null,
+    );
+  }
+
+  protected tierThresholdSummary(t: TierDraft): string {
+    return thresholdText({
+      promoType: this.requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST',
+      measureType: this.measureType(),
+      fromQuantity: t.fromQuantity,
+    });
+  }
+
+  protected groupModeSummary(g: BenefitGroupDraft): string {
+    return groupModeText(g.selectionMode, g.chooseCount, g.benefits.length);
+  }
+
+  protected benefitNameSummary(b: BenefitDraft): string {
+    return benefitProductName({
+      benefitType: b.benefitType,
+      productName: b.catalog ? b.productName : undefined,
+      label: !b.catalog ? b.label : undefined,
+    });
+  }
+
+  protected benefitQuantitySummary(b: BenefitDraft): string {
+    return benefitQuantityText({
+      benefitType: b.benefitType,
+      quantity: b.quantity,
+      discountAmount: b.discountAmount,
+      discountPercent: b.discountPercent,
+    });
   }
 
   protected stepHint(): string {
@@ -1830,9 +1978,21 @@ export class PromoWizardPage {
       return;
     }
     this.errorSteps.update((s) => s.filter((x) => x !== this.step()));
-    const next = Math.min(4, this.step() + 1);
+    const leavingStep = this.step();
+    const next = Math.min(4, leavingStep + 1);
     this.step.set(next);
     this.visited.update((v) => Array.from(new Set([...v, next])));
+
+    // Sección 8.2: la promo ya queda guardada apagada al salir del paso de
+    // tramos y premios; el paso de "a quiénes llega" guarda el targeting —
+    // así en el resumen ya existe y se puede simular sin un guardado aparte.
+    if (leavingStep === 2) {
+      this.ensureSaved().subscribe();
+    } else if (leavingStep === 3) {
+      this.ensureSaved().subscribe((id) => {
+        this.promoSvc.setTargets(id, this.buildTargetsCommand()).subscribe();
+      });
+    }
   }
 
   protected prevStep() {
@@ -1953,8 +2113,16 @@ export class PromoWizardPage {
     };
   }
 
-  private loadInto(id: number, keepId: boolean) {
+  private loadInto(id: number, keepId: boolean, jumpToSummary = false) {
     this.promoSvc.detail(id).subscribe((p: PromoDetail) => {
+      // Sección 7.1: con definitionEditable = false no se abre el asistente
+      // en modo edición, sea cual sea la pantalla desde la que se llegó —
+      // la edición básica es la única vía. Se protege aquí, una sola vez,
+      // para no repetir el chequeo en cada lugar que enlaza a esta ruta.
+      if (keepId && !p.definitionEditable) {
+        this.router.navigate(['/promociones', id]);
+        return;
+      }
       if (keepId) this.code.set(p.code ?? '');
       this.name.set(keepId ? (p.name ?? '') : `${p.name ?? ''} (copia)`);
       this.description.set(p.description ?? '');
@@ -1988,6 +2156,7 @@ export class PromoWizardPage {
             familyId: c.familyId ?? undefined,
             brandId: c.brandId ?? undefined,
             name: c.productName ?? c.familyName ?? c.brandName ?? '',
+            code: c.productCode ?? undefined,
           })),
         );
       }
@@ -2008,6 +2177,7 @@ export class PromoWizardPage {
                 benefitType: (b.benefitType as BenefitDraft['benefitType']) ?? 'FREE_PRODUCT',
                 catalog: !!b.productId,
                 productId: b.productId ?? undefined,
+                productCode: b.productCode ?? undefined,
                 productName: b.productName ?? undefined,
                 quantity: b.quantity ?? undefined,
                 discountAmount: b.discountAmount ?? undefined,
@@ -2035,28 +2205,34 @@ export class PromoWizardPage {
             maxQuantity: c.maxQuantity ?? undefined,
           })),
         ]);
+        // "Volver al asistente" desde Simular pedido (sección 9.3) regresa
+        // directo al paso 5, ya visitado, sin repetir los pasos anteriores.
+        if (jumpToSummary) {
+          this.step.set(4);
+          this.visited.update((v) => Array.from(new Set([...v, 0, 1, 2, 3, 4])));
+        }
       }
     });
   }
 
+  /**
+   * Crea la promo la primera vez; de ahí en más actualiza con el estado
+   * actual del formulario (no se queda con el primer guardado — sección
+   * 8.2: cada "Continuar" guarda lo último).
+   */
   private ensureSaved(): Observable<number> {
-    if (this.draftId()) return of(this.draftId()!);
     this.savingDraft.set(true);
     this.saveError.set('');
-    const obs = this.editingId()
-      ? this.promoSvc
-          .update(this.editingId()!, this.buildUpdateCommand())
-          .pipe(map((p) => p.promoId!))
+    const id = this.draftId() ?? this.editingId();
+    const obs = id
+      ? this.promoSvc.update(id, this.buildUpdateCommand()).pipe(map((p) => p.promoId!))
       : this.promoSvc.create(this.buildCreateCommand()).pipe(map((p) => p.promoId!));
     return obs.pipe(
-      map((id) => {
-        this.draftId.set(id);
+      map((savedId) => {
+        this.draftId.set(savedId);
         this.savedAt.set(new Date());
         this.savingDraft.set(false);
-        if (this.audience().length) {
-          this.promoSvc.setTargets(id, this.buildTargetsCommand()).subscribe();
-        }
-        return id;
+        return savedId;
       }),
       catchError((err) => {
         this.savingDraft.set(false);
@@ -2066,47 +2242,52 @@ export class PromoWizardPage {
     );
   }
 
+  /** Sección 8.2: al llegar al paso 5 la promo ya está guardada — no hace falta guardar de nuevo. */
   protected saveOff() {
-    this.ensureSaved().subscribe({ next: () => this.router.navigate(['/promociones']) });
-  }
-
-  protected activatePromo() {
-    this.activating.set(true);
+    const id = this.draftId();
+    if (id) {
+      this.toast.success('Promoción guardada apagada');
+      this.router.navigate(['/promociones', id]);
+      return;
+    }
     this.ensureSaved().subscribe({
-      next: (id) => {
-        this.promoSvc.approve(id).subscribe({
-          next: () => {
-            this.activating.set(false);
-            this.router.navigate(['/promociones', id]);
-          },
-          error: () => this.activating.set(false),
-        });
+      next: (savedId) => {
+        this.toast.success('Promoción guardada apagada');
+        this.router.navigate(['/promociones', savedId]);
       },
-      error: () => this.activating.set(false),
     });
   }
 
-  protected simulate() {
-    const id = this.draftId();
-    const customer = this.simCustomer();
-    const product = this.simProduct();
-    if (!id || !customer || !product) return;
-    this.simulating.set(true);
-    this.promoSvc
-      .previewOrder(id, {
-        customerId: customer.id,
-        lines: [{ productId: product.id, quantity: this.numberOr(1, this.simQuantity()) }],
+  protected activatePromo() {
+    this.dialog
+      .confirm({
+        title: 'Activar promoción',
+        message: 'La promoción empezará a aplicarse en los pedidos. ¿Activarla?',
+        confirmLabel: 'Activar',
       })
-      .subscribe({
-        next: (r) => {
-          this.simResult.set(r);
-          this.simulating.set(false);
-        },
-        error: () => this.simulating.set(false),
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.activating.set(true);
+        this.ensureSaved().subscribe({
+          next: (id) => {
+            this.promoSvc.approve(id).subscribe({
+              next: () => {
+                this.activating.set(false);
+                this.toast.success('Promoción activada');
+                this.router.navigate(['/promociones', id]);
+              },
+              error: () => this.activating.set(false),
+            });
+          },
+          error: () => this.activating.set(false),
+        });
       });
   }
 
-  protected exit() {
-    this.router.navigate(['/promociones']);
+  /** "Simular pedido" (paso 5) — sección 8.2: ya existe guardada apagada, se puede probar sin activarla. */
+  protected goSimulate() {
+    const id = this.draftId();
+    if (!id) return;
+    this.router.navigate(['/promociones/simular'], { queryParams: { promoId: id, fromWizard: 1 } });
   }
 }

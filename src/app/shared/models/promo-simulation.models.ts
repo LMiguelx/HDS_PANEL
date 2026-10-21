@@ -1,6 +1,7 @@
 // Contratos del simulador de pedido y promociones disponibles del cliente —
 // doc 30 (panel-admin-pedido-mostrador-simulacion-reportes.md), secciones
-// 7.7 y 10. Escritos a mano: OrderSimulationController es nuevo.
+// 7.7 y 10, con la promoción en prueba del doc 44, sección 9.2. Escritos a
+// mano: OrderSimulationController es nuevo.
 import { ConditionView } from '../../features/promos/promo.types';
 
 export interface MobilePromoView {
@@ -27,6 +28,7 @@ export interface SimulateOrderCommand {
   paymentConditionId: number;
   salesChannelId: number; // 0 = sin canal
   lines: SimulateLineCommand[];
+  promoId?: number; // doc 44 — promoción en prueba: se evalúa aunque esté apagada o fuera de fecha
 }
 
 export interface SimulatedLineView {
@@ -75,6 +77,24 @@ export interface MobilePromoProgressView {
   rewardText: string;
 }
 
+/** La promoción en prueba, gane o no — doc 44, sección 9.2. */
+export interface TestedPromoView {
+  promoId: number;
+  promoCode: string;
+  promoName: string;
+  active: boolean; // false: insignia "Apagada · en prueba"
+  startDate: string | null; // "Empieza el dd/MM/yyyy" si es futura
+  endDate: string | null;
+  eligible: boolean; // ¿le llega a este cliente con este canal?
+  notEligibleReason: string | null; // motivo claro, listo para mostrar (null si eligible)
+  earned: boolean; // ¿el pedido la gana?
+  measureType: 'QUANTITY' | 'AMOUNT';
+  measuredValue: number; // cuánto midió el pedido (unidades o soles)
+  nextThreshold: number | null; // umbral del siguiente tramo (o del primero)
+  missingForNextTier: number | null; // cuánto falta para ese tramo
+  progressText: string; // "Te faltan 2 unidades para 1 x BONIF. PLATO MAXICAT"
+}
+
 export interface OrderSimulationView {
   customerId: number;
   customerCode: string;
@@ -88,4 +108,5 @@ export interface OrderSimulationView {
   lines: SimulatedLineView[];
   appliedPromos: SimulatedPromoView[];
   nearPromos: MobilePromoProgressView[];
+  testedPromo: TestedPromoView | null; // doc 44 — null si no se envió promoId
 }
