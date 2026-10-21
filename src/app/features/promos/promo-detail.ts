@@ -1,38 +1,56 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { differenceInCalendarDays, format, isBefore, parseISO, startOfDay } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiMenu } from '../../shared/ui/menu/menu';
+import { UiCard } from '../../shared/ui/card/card';
+import { UiBadge } from '../../shared/ui/badge/badge';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
+import { PromoRuleCard } from './ui/promo-rule-card';
+import { PromoConditionsTable } from './ui/promo-conditions-table';
+import { PromoTiersTable } from './ui/promo-tiers-table';
+import { PromoConfigList, PromoConfigRow } from './ui/promo-config-list';
+import { PromoTargetsBlock } from './ui/promo-targets-block';
 import { PromoService } from './promo';
 import { PromoDetail } from './promo.types';
 import {
   applicationsPerCustomerText,
+  dateText,
   priorityText,
   promoStatusLabel,
   repeatsText,
   vigenciaFullText,
 } from './promo-format';
 import { dateTimeText } from '../assignments/assignment-format';
-import {
-  benefitProductName,
-  benefitQuantityText,
-  groupModeText,
-  thresholdText,
-} from './domain/promo-texts';
 import { EditBasicsDialog, EditBasicsDialogResult } from './ui/edit-basics-dialog';
 import { formatSoles } from '../../shared/pipes/money';
 import { quantityText } from '../sales-reports/sales-report-format';
 
 @Component({
   selector: 'app-promo-detail',
-  imports: [RouterLink, UiButton, UiStatus, UiEmpty, UiMenu, HasPermissionDirective],
+  imports: [
+    RouterLink,
+    UiButton,
+    UiStatus,
+    UiEmpty,
+    UiMenu,
+    UiCard,
+    UiBadge,
+    HasPermissionDirective,
+    PromoRuleCard,
+    PromoConditionsTable,
+    PromoTiersTable,
+    PromoConfigList,
+    PromoTargetsBlock,
+  ],
   template: `
-    <section class="promo-detail-page">
+    <section class="pd-page">
       @if (loading()) {
-        <div class="promo-detail-skeleton" role="status" aria-label="Cargando"></div>
+        <div class="pd-skeleton" role="status" aria-label="Cargando"></div>
       } @else if (error()) {
         <ui-empty
           variant="error"
@@ -42,19 +60,22 @@ import { quantityText } from '../sales-reports/sales-report-format';
           (action)="load()"
         />
       } @else if (promo(); as p) {
-        <div class="promo-detail-head">
+        <div class="pd-head">
           <div>
-            <p class="promo-detail-eyebrow">PROMOCIONES · {{ p.code }}</p>
-            <div class="promo-detail-title-row">
+            <a routerLink="/promociones" class="pd-eyebrow">← Promociones · {{ p.code }}</a>
+            <div class="pd-title-row">
               <h1>{{ p.name }}</h1>
               <ui-status [label]="statusLabel(p)" />
             </div>
-            <p class="promo-detail-meta">{{ metaLine(p) }}</p>
+            <p class="pd-meta">{{ metaLine(p) }}</p>
             @if (p.description) {
-              <p class="promo-detail-prose">{{ p.description }}</p>
+              <p class="pd-description">
+                <span class="material-icons" aria-hidden="true">chat_bubble_outline</span>
+                Texto para el vendedor: {{ p.description }}
+              </p>
             }
           </div>
-          <div class="promo-detail-actions">
+          <div class="pd-actions">
             <button
               uiButton
               variant="secondary"
@@ -62,7 +83,7 @@ import { quantityText } from '../sales-reports/sales-report-format';
               [routerLink]="['/promociones/simular']"
               [queryParams]="{ promoId: p.promoId }"
             >
-              Simular
+              Simular pedido
             </button>
             <button
               uiButton
@@ -72,7 +93,7 @@ import { quantityText } from '../sales-reports/sales-report-format';
             >
               Duplicar
             </button>
-            <button uiButton variant="secondary" *hasPermission="'promo.create'" (click)="edit(p)">
+            <button uiButton variant="primary" *hasPermission="'promo.create'" (click)="edit(p)">
               Editar
             </button>
             <ui-menu label="Más acciones">
@@ -95,218 +116,167 @@ import { quantityText } from '../sales-reports/sales-report-format';
         </div>
 
         @if (deleteError()) {
-          <div class="promo-detail-error">{{ deleteError() }}</div>
+          <div class="pd-error">{{ deleteError() }}</div>
         }
 
-        <div class="promo-detail-usage">
-          <div class="promo-usage-cell">
-            <span class="promo-usage-value">{{ p.usage.orderCount }}</span>
-            <span class="promo-usage-label">Pedidos</span>
+        <div class="pd-usage">
+          <div class="pd-usage-cell">
+            <span class="pd-usage-label">Pedidos</span>
+            <span class="pd-usage-value">{{ p.usage.orderCount }}</span>
+            <span class="pd-usage-caption">no anulados</span>
           </div>
-          <div class="promo-usage-cell">
-            <span class="promo-usage-value">{{ quantityText(p.usage.grantedUnits) }}</span>
-            <span class="promo-usage-label">Unidades bonificadas</span>
+          <div class="pd-usage-cell">
+            <span class="pd-usage-label">Unidades bonificadas</span>
+            <span class="pd-usage-value">{{ quantityText(p.usage.grantedUnits) }}</span>
+            <span class="pd-usage-caption">productos gratis entregados</span>
           </div>
-          <div class="promo-usage-cell">
-            <span class="promo-usage-value">{{ formatSoles(p.usage.discountAmount) }}</span>
-            <span class="promo-usage-label">Descuentos</span>
+          <div class="pd-usage-cell">
+            <span class="pd-usage-label">Descuentos</span>
+            <span class="pd-usage-value">{{ formatSoles(p.usage.discountAmount) }}</span>
+            <span class="pd-usage-caption">en soles</span>
           </div>
-          <div class="promo-usage-cell">
-            <span class="promo-usage-value promo-usage-value-sm">{{
-              p.usage.lastAppliedAt ? dateTimeText(p.usage.lastAppliedAt) : 'Todavía no se aplicó'
-            }}</span>
-            <span class="promo-usage-label">Última aplicación</span>
+          <div class="pd-usage-cell">
+            <span class="pd-usage-label">Última aplicación</span>
+            <span class="pd-usage-value pd-usage-value-sm">
+              {{
+                p.usage.lastAppliedAt ? dateTimeText(p.usage.lastAppliedAt) : 'Todavía no se aplicó'
+              }}
+            </span>
           </div>
         </div>
 
-        @if (!p.definitionEditable) {
-          <div class="promo-edit-banner">
-            <span class="material-icons" aria-hidden="true">info</span>
-            <div>{{ p.editBlockReason }}</div>
-            <button
-              uiButton
-              variant="secondary"
-              size="sm"
-              *hasPermission="'promo.create'"
-              (click)="duplicate()"
-            >
-              Duplicar
-            </button>
-          </div>
-        }
+        <div class="pd-grid">
+          <div class="pd-main">
+            <ui-card title="La regla">
+              <app-promo-rule-card [source]="p" />
+            </ui-card>
 
-        <hr class="promo-detail-rule" />
-
-        <h2 class="promo-section-title">Configuración</h2>
-        <div class="promo-detail-facts">
-          <div>
-            <span>Se combina</span><span>{{ p.stackable ? 'Sí' : 'No' }}</span>
-          </div>
-          <div>
-            <span>Se repite</span><span>{{ repeatsText(p.repeats, p.maxRepeatsPerOrder) }}</span>
-          </div>
-          <div>
-            <span>Veces por cliente</span>
-            <span>{{ applicationsPerCustomerText(p.maxApplicationsPerCustomer) }}</span>
-          </div>
-        </div>
-
-        <h2 class="promo-section-title">
-          Qué debe comprar
-          @if (showSumNote(p)) {
-            <span class="promo-section-note">Las cantidades se suman entre sí</span>
-          }
-        </h2>
-        @if (p.promoType === 'CUSTOMER_LIST') {
-          <p class="promo-detail-muted">No exige compra: se otorga por estar en la lista.</p>
-        } @else if (!p.conditions?.length) {
-          <p class="promo-detail-muted">Cualquier compra que llegue al total mínimo del tramo.</p>
-        } @else {
-          <table class="ui-table-grid promo-table">
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Código</th>
-                <th>Nombre</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (c of p.conditions; track c.lineNumber) {
-                <tr>
-                  <td class="promo-detail-muted">{{ scopeName(c.scope) }}</td>
-                  <td class="promo-detail-muted">{{ c.productCode || '—' }}</td>
-                  <td>{{ c.productName || c.familyName || c.brandName }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        }
-
-        <h2 class="promo-section-title">Tramos y premios</h2>
-        <div class="promo-tiers">
-          @for (tier of p.tiers; track tier.tier) {
-            <div class="promo-tier-block">
-              <div class="promo-tier-head">
-                <span class="promo-tier-label">Tramo {{ tier.tier }}</span>
-                <span class="promo-tier-threshold">{{ tierThreshold(p, tier) }}</span>
+            <ui-card>
+              <div class="pd-card-head">
+                <h3 class="pd-card-title">
+                  Qué debe comprar
+                  @if (p.conditions?.length) {
+                    <ui-badge tone="neutral"
+                      >{{ p.conditions!.length }} producto{{
+                        p.conditions!.length === 1 ? '' : 's'
+                      }}</ui-badge
+                    >
+                  }
+                </h3>
+                @if (showSumNote(p)) {
+                  <span class="pd-card-note">+ Las cantidades se suman entre sí</span>
+                }
               </div>
-              @for (group of tier.benefitGroups; track group.benefitGroup) {
-                <div class="promo-benefit-group">
-                  <div class="promo-benefit-group-head">
-                    {{ groupMode(group) }}
-                    @if (group.label) {
-                      · {{ group.label }}
-                    }
-                  </div>
-                  <table class="ui-table-grid promo-table">
-                    <thead>
-                      <tr>
-                        <th>Tipo</th>
-                        <th>Código</th>
-                        <th>Premio</th>
-                        <th class="promo-col-right">Cantidad</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (b of group.benefits; track b.benefitLine) {
-                        <tr>
-                          <td class="promo-detail-muted">{{ b.benefitTypeName }}</td>
-                          <td class="promo-detail-muted">{{ b.productCode || '—' }}</td>
-                          <td>{{ benefitProductName(b) }}</td>
-                          <td class="promo-col-right">{{ benefitQuantityText(b) }}</td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
+              <app-promo-conditions-table [conditions]="p.conditions" [promoType]="p.promoType" />
+            </ui-card>
+
+            <ui-card>
+              <div class="pd-card-head">
+                <h3 class="pd-card-title">
+                  Tramos y premios
+                  @if (p.tiers?.length) {
+                    <ui-badge tone="neutral"
+                      >{{ p.tiers!.length }} tramo{{ p.tiers!.length === 1 ? '' : 's' }}</ui-badge
+                    >
+                  }
+                </h3>
+                <span class="pd-card-note">Se mide en {{ measureLabel(p) }}</span>
+              </div>
+              <app-promo-tiers-table
+                [tiers]="p.tiers"
+                [measureType]="p.measureType"
+                [promoType]="p.promoType"
+              />
+            </ui-card>
+          </div>
+
+          <div class="pd-side">
+            <div class="pd-edit-status" [class.pd-edit-ok]="p.definitionEditable">
+              <span class="material-icons" aria-hidden="true">{{
+                p.definitionEditable ? 'task_alt' : 'info'
+              }}</span>
+              <div class="pd-edit-status-body">
+                @if (p.definitionEditable) {
+                  <strong>Se puede editar todo</strong>
+                  <p>Todavía no se aplicó en pedidos. Los cambios valen para los pedidos nuevos.</p>
+                } @else {
+                  <p>{{ p.editBlockReason }}</p>
+                  <button
+                    uiButton
+                    variant="secondary"
+                    size="sm"
+                    *hasPermission="'promo.create'"
+                    (click)="duplicate()"
+                  >
+                    Duplicar
+                  </button>
+                }
+              </div>
+            </div>
+
+            <ui-card title="Vigencia">
+              <div class="pd-vigencia-dates">
+                <span>{{ p.startDate ? dateText(p.startDate) : 'Sin fecha de inicio' }}</span>
+                <span>{{ p.endDate ? dateText(p.endDate) : 'Sin fecha de fin' }}</span>
+              </div>
+              @if (vigenciaPercent(p); as percent) {
+                <div class="pd-vigencia-track">
+                  <div class="pd-vigencia-fill" [style.width.%]="percent"></div>
                 </div>
               }
-            </div>
-          }
-        </div>
+              <p class="pd-vigencia-status">{{ vigenciaStatusText(p) }}</p>
+            </ui-card>
 
-        <h2 class="promo-section-title">A quiénes llega</h2>
-        @if (!p.segments?.length && !p.customers?.length) {
-          <p class="promo-detail-muted">
-            Todos los clientes{{ p.salesChannelName ? ' del canal ' + p.salesChannelName : '' }}.
-          </p>
-        } @else {
-          @if (p.segments?.length) {
-            <table class="ui-table-grid promo-table">
-              <thead>
-                <tr>
-                  <th>Segmento</th>
-                  <th class="promo-col-right">Clientes</th>
-                  <th>Modo</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (s of p.segments; track s.segmentId) {
-                  <tr>
-                    <td>{{ s.segmentName }}</td>
-                    <td class="promo-col-right promo-detail-muted">{{ s.customerCount ?? 0 }}</td>
-                    <td><ui-status [label]="s.mode === 'INCLUDE' ? 'Incluido' : 'Excluido'" /></td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          }
-          @if (p.customers?.length) {
-            <table class="ui-table-grid promo-table">
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Cliente</th>
-                  <th>Modo</th>
-                  <th class="promo-col-right">Tope</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (c of p.customers; track c.customerId) {
-                  <tr>
-                    <td class="promo-detail-muted">{{ c.customerCode }}</td>
-                    <td>{{ c.customerName }}</td>
-                    <td><ui-status [label]="c.mode === 'INCLUDE' ? 'Incluido' : 'Excluido'" /></td>
-                    <td class="promo-col-right promo-detail-muted">
-                      {{ c.maxQuantity != null ? quantityText(c.maxQuantity) : '—' }}
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          }
-        }
+            <ui-card title="Configuración">
+              <app-promo-config-list [rows]="configRows(p)" />
+            </ui-card>
+
+            <ui-card title="A quiénes llega">
+              <app-promo-targets-block
+                [segments]="p.segments"
+                [customers]="p.customers"
+                [salesChannelName]="p.salesChannelName"
+              />
+            </ui-card>
+          </div>
+        </div>
       }
     </section>
   `,
   styles: [
     `
-      .promo-detail-page {
+      .pd-page {
         width: 100%;
         box-sizing: border-box;
         padding: var(--sp-8);
       }
-      .promo-detail-skeleton {
+      .pd-skeleton {
         height: 240px;
         background: var(--faint);
       }
-      .promo-detail-head {
+      .pd-head {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 24px;
+        gap: var(--sp-6);
         flex-wrap: wrap;
       }
-      .promo-detail-eyebrow {
+      .pd-eyebrow {
+        display: inline-block;
         margin: 0;
-        font-size: 11px;
-        letter-spacing: 0.1em;
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
         text-transform: uppercase;
         color: var(--ink-muted);
+        text-decoration: none;
       }
-      .promo-detail-title-row {
+      .pd-eyebrow:hover {
+        color: var(--accent-ink);
+      }
+      .pd-title-row {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: var(--sp-3);
         flex-wrap: wrap;
       }
       h1 {
@@ -314,167 +284,182 @@ import { quantityText } from '../sales-reports/sales-report-format';
         margin: 4px 0 0;
         color: var(--ink);
       }
-      .promo-detail-meta {
+      .pd-meta {
         margin: 4px 0 0;
         color: var(--ink-muted);
-        font-size: 14px;
+        font-size: var(--fs-body);
       }
-      .promo-detail-prose {
-        border-left: 3px solid var(--accent);
-        padding: 4px 0 4px 14px;
-        margin: 14px 0 0;
-        font-size: 15px;
-        color: var(--ink);
+      .pd-description {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        margin: var(--sp-2) 0 0;
+        font-size: var(--fs-dense);
+        color: var(--ink-muted);
         max-width: 640px;
       }
-      .promo-detail-actions {
+      .pd-description .material-icons {
+        font-size: 16px;
+        margin-top: 1px;
+      }
+      .pd-actions {
         display: flex;
-        gap: 8px;
+        gap: var(--sp-2);
         flex-wrap: wrap;
       }
-      .promo-detail-error {
-        margin-top: 14px;
-        color: var(--accent-ink);
-        font-size: 13px;
+      .pd-error {
+        margin-top: var(--sp-3);
+        color: var(--status-danger);
+        font-size: var(--fs-dense);
       }
-      .promo-detail-usage {
+      .pd-usage {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 0;
-        border: 1px solid var(--hairline);
-        margin-top: 20px;
+        margin-top: var(--sp-5);
+        background: var(--surface);
+        border: 2px solid var(--divider);
+        border-radius: var(--radius-card);
       }
-      .promo-usage-cell {
+      .pd-usage-cell {
         display: flex;
         flex-direction: column;
         gap: 2px;
-        padding: 16px 18px;
+        padding: var(--sp-4) var(--sp-5);
         border-right: 1px solid var(--hairline);
       }
-      .promo-usage-cell:last-child {
+      .pd-usage-cell:last-child {
         border-right: 0;
       }
-      .promo-usage-value {
+      .pd-usage-label {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        order: -1;
+      }
+      .pd-usage-value {
         font-size: var(--fs-metric);
         font-weight: var(--fw-metric);
         color: var(--ink);
         font-variant-numeric: var(--tnum);
       }
-      .promo-usage-value-sm {
-        font-size: 18px;
+      .pd-usage-value-sm {
+        font-size: var(--fs-h2);
         font-weight: 700;
       }
-      .promo-usage-label {
-        font-size: 12px;
+      .pd-usage-caption {
+        font-size: var(--fs-meta);
         color: var(--ink-muted);
       }
-      .promo-edit-banner {
+      .pd-grid {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        gap: var(--sp-6);
+        align-items: start;
+        margin-top: var(--sp-5);
+      }
+      .pd-main {
+        display: grid;
+        gap: var(--sp-5);
+        min-width: 0;
+      }
+      .pd-side {
+        display: grid;
+        gap: var(--sp-5);
+        position: sticky;
+        top: var(--sp-6);
+      }
+      .pd-card-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--sp-3);
+        flex-wrap: wrap;
+        margin-bottom: var(--sp-4);
+      }
+      .pd-card-title {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        font-size: var(--fs-h2);
+        font-weight: var(--fw-h2);
+        color: var(--ink);
+        margin: 0;
+      }
+      .pd-card-note {
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
+      }
+      .pd-edit-status {
         display: flex;
         align-items: flex-start;
-        gap: 10px;
-        margin-top: 16px;
-        padding: 12px 14px;
-        background: var(--faint);
-        border: 1px solid var(--hairline);
-        font-size: 13px;
-        color: var(--ink-muted);
-      }
-      .promo-edit-banner .material-icons {
-        font-size: 18px;
-        color: var(--ink-muted);
-      }
-      .promo-edit-banner button {
-        flex: none;
-        margin-left: auto;
-      }
-      .promo-detail-rule {
-        border: 0;
-        border-top: var(--border-hair);
-        margin: 24px 0;
-      }
-      .promo-section-title {
-        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
-        margin: 28px 0 12px;
+        gap: var(--sp-3);
+        padding: var(--sp-4);
+        border-radius: var(--radius-card);
+        border: 1px solid color-mix(in srgb, var(--status-warn) 40%, var(--hairline));
+        background: color-mix(in srgb, var(--status-warn) 10%, transparent);
         color: var(--ink);
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
       }
-      .promo-section-note {
-        font-size: 12px;
-        font-weight: 400;
+      .pd-edit-status .material-icons {
+        color: var(--status-warn);
+        font-size: 20px;
+      }
+      .pd-edit-status-body strong {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .pd-edit-status-body p {
+        margin: 0;
+        font-size: var(--fs-dense);
         color: var(--ink-muted);
       }
-      .promo-detail-facts {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 14px;
-        font-size: 14px;
+      .pd-edit-status-body button {
+        margin-top: var(--sp-3);
       }
-      .promo-detail-facts div {
+      .pd-edit-ok {
+        border-color: color-mix(in srgb, var(--status-ok) 40%, var(--hairline));
+        background: color-mix(in srgb, var(--status-ok) 10%, transparent);
+      }
+      .pd-edit-ok .material-icons {
+        color: var(--status-ok);
+      }
+      .pd-vigencia-dates {
         display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .promo-detail-facts span:first-child {
-        font-size: 12px;
-        color: var(--ink-muted);
-      }
-      .promo-table {
-        width: 100%;
-        margin-bottom: 4px;
-      }
-      .promo-col-right {
-        text-align: right;
+        justify-content: space-between;
+        font-size: var(--fs-dense);
+        font-weight: 700;
+        color: var(--ink);
         font-variant-numeric: var(--tnum);
       }
-      .promo-detail-muted {
-        color: var(--ink-muted);
-        font-size: 14px;
+      .pd-vigencia-track {
+        height: 6px;
+        border-radius: var(--radius-pill);
+        background: var(--surface-sunk);
+        margin-top: var(--sp-3);
+        overflow: hidden;
       }
-      .promo-tiers {
-        display: grid;
-        gap: 18px;
+      .pd-vigencia-fill {
+        height: 100%;
+        background: var(--status-ok);
       }
-      .promo-tier-block {
-        border: 1px solid var(--hairline);
-        padding: 16px 18px;
-      }
-      .promo-tier-head {
-        display: flex;
-        align-items: baseline;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
-      .promo-tier-label {
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
+      .pd-vigencia-status {
+        margin: var(--sp-2) 0 0;
+        font-size: var(--fs-meta);
         color: var(--ink-muted);
       }
-      .promo-tier-threshold {
-        font-size: 20px;
-        font-weight: 800;
-        color: var(--ink);
-      }
-      .promo-benefit-group {
-        margin-top: 12px;
-      }
-      .promo-benefit-group-head {
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--ink-muted);
-        margin-bottom: 6px;
+
+      @media (max-width: 900px) {
+        .pd-grid {
+          grid-template-columns: 1fr;
+        }
+        .pd-side {
+          position: static;
+        }
       }
 
       @media (max-width: 767px) {
-        .promo-detail-page {
+        .pd-page {
           padding: var(--sp-4);
-        }
-        .promo-detail-prose {
-          font-size: 15px;
         }
       }
     `,
@@ -486,13 +471,10 @@ export class PromoDetailPage {
   private promoSvc = inject(PromoService);
   private dialog = inject(UiDialogService);
 
-  protected repeatsText = repeatsText;
-  protected applicationsPerCustomerText = applicationsPerCustomerText;
+  protected dateText = dateText;
   protected dateTimeText = dateTimeText;
   protected formatSoles = formatSoles;
   protected quantityText = quantityText;
-  protected benefitProductName = benefitProductName;
-  protected benefitQuantityText = benefitQuantityText;
 
   protected promo = signal<PromoDetail | null>(null);
   protected loading = signal(true);
@@ -533,33 +515,61 @@ export class PromoDetailPage {
     return parts.join(' · ');
   }
 
+  protected measureLabel(p: PromoDetail): string {
+    return p.measureType === 'AMOUNT' ? 'monto (S/)' : 'unidades';
+  }
+
   protected showSumNote(p: PromoDetail): boolean {
     const conditions = p.conditions ?? [];
     return conditions.length > 1 || conditions.some((c) => c.scope !== 'PRODUCT');
   }
 
-  protected scopeName(scope?: string | null): string {
-    return { PRODUCT: 'Producto', FAMILY: 'Familia', BRAND: 'Marca' }[scope ?? ''] ?? scope ?? '—';
+  protected configRows(p: PromoDetail): PromoConfigRow[] {
+    return [
+      { label: 'Tipo', value: p.promoTypeName || p.promoType || '—' },
+      { label: 'Canal', value: p.salesChannelName ?? 'Todos los canales' },
+      { label: 'Se mide en', value: p.measureType === 'AMOUNT' ? 'Monto (S/)' : 'Unidades' },
+      { label: 'Prioridad', value: priorityText(p.priority) },
+      { label: 'Se combina con otras', value: p.stackable ? 'Sí' : 'No' },
+      { label: 'Se repite por múltiplos', value: repeatsText(p.repeats, p.maxRepeatsPerOrder) },
+      {
+        label: 'Veces por cliente',
+        value: applicationsPerCustomerText(p.maxApplicationsPerCustomer),
+      },
+    ];
   }
 
-  protected tierThreshold(
-    p: PromoDetail,
-    tier: { fromQuantity?: number; fromAmount?: number },
-  ): string {
-    return thresholdText({
-      promoType: p.promoType,
-      measureType: p.measureType,
-      fromQuantity: tier.fromQuantity,
-      fromAmount: tier.fromAmount,
-    });
+  /** Porcentaje de avance de la vigencia; `null` cuando no hay fecha de fin (sin barra). */
+  protected vigenciaPercent(p: PromoDetail): number | null {
+    if (!p.endDate) return null;
+    const today = startOfDay(new Date());
+    const end = startOfDay(parseISO(p.endDate));
+    const start = p.startDate ? startOfDay(parseISO(p.startDate)) : end;
+    if (isBefore(today, start)) return 0;
+    if (isBefore(end, today)) return 100;
+    if (end.getTime() === start.getTime()) return 100;
+    return Math.round(
+      ((today.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100,
+    );
   }
 
-  protected groupMode(group: {
-    selectionMode?: string | null;
-    chooseCount?: number | null;
-    benefits?: unknown[];
-  }): string {
-    return groupModeText(group.selectionMode, group.chooseCount, group.benefits?.length ?? 0);
+  protected vigenciaStatusText(p: PromoDetail): string {
+    if (!p.endDate) return 'Sin fecha de fin';
+    const today = startOfDay(new Date());
+    const end = startOfDay(parseISO(p.endDate));
+    if (p.startDate) {
+      const start = startOfDay(parseISO(p.startDate));
+      if (isBefore(today, start)) {
+        const days = differenceInCalendarDays(start, today);
+        return `Empieza en ${days} día${days === 1 ? '' : 's'}`;
+      }
+    }
+    if (isBefore(end, today)) {
+      return `Venció el ${dateText(p.endDate)}`;
+    }
+    const daysLeft = differenceInCalendarDays(end, today);
+    const weekday = format(end, 'EEEE', { locale: es });
+    return `Quedan ${daysLeft} día${daysLeft === 1 ? '' : 's'} · termina el ${weekday}`;
   }
 
   protected duplicate() {
