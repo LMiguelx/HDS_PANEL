@@ -6,6 +6,7 @@ import {
   ProductSalesReport,
   SalesStockReport,
   SalespersonSettlementReport,
+  SettlementGroupBy,
 } from '../../shared/models/sales-report.models';
 
 /** OrderReportController, /api/orders/reports. `order.view_all`. */
@@ -14,10 +15,22 @@ export class SalesReportAdminService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/orders/reports`;
 
-  /** from/to obligatorias — máximo 31 días. Un solo día: from === to. */
-  salespersonSettlement(from: string, to: string, originCode?: string) {
+  /**
+   * from/to obligatorias — máximo 31 días. Un solo día: from === to.
+   * `salespersonId` y `groupBy` ('DAY' por defecto en el backend) — doc 43,
+   * sección 5.1.
+   */
+  salespersonSettlement(
+    from: string,
+    to: string,
+    originCode?: string,
+    salespersonId?: number,
+    groupBy?: SettlementGroupBy,
+  ) {
     let params = new HttpParams().set('from', from).set('to', to);
     if (originCode) params = params.set('originCode', originCode);
+    if (salespersonId) params = params.set('salespersonId', salespersonId);
+    if (groupBy) params = params.set('groupBy', groupBy);
     return this.http.get<SalespersonSettlementReport>(`${this.base}/salesperson-settlement`, {
       params,
     });
@@ -30,6 +43,7 @@ export class SalesReportAdminService {
     return this.http.get<BrandSalesReport>(`${this.base}/brand-sales`, { params });
   }
 
+  /** La pantalla pide `size=20`; para exportar todo el rango se piden páginas de hasta 1000 (doc 43, sección 7). */
   productSales(
     productId: number,
     from: string,

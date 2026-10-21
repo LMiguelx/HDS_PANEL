@@ -2,15 +2,18 @@
 // Ver 27-panel-admin-pedidos-reportes-ventas-dashboard.md, secciones 9-10.
 import { PageResponse } from './api.models';
 
+/** `GroupBy` de la liquidación — doc 43, sección 3.2. */
+export type SettlementGroupBy = 'DAY' | 'SALESPERSON';
+
 export interface SalespersonSettlementRow {
-  date: string; // yyyy-MM-dd
+  date: string | null; // yyyy-MM-dd; null en la vista por vendedor (doc 43)
   salespersonId: number; // para abrir Pedidos filtrado
   salespersonCode: string;
   salespersonName: string;
   orderCount: number;
   weightKg: number; // 1 decimal
   netAmount: number;
-  firstOrderAt: string | null; // "Hora Inicio" — campo y televentas; null si ese día solo tuvo mostrador
+  firstOrderAt: string | null; // "Hora Inicio" — campo y televentas; null en la vista por vendedor o si ese día no hubo campo ni televentas
   lastOrderAt: string | null; // "Hora Fin"
   fieldOrderCount: number; // NUEVO (doc 42): ahora solo campo, antes incluía todo lo que no era mostrador
   fieldNetAmount: number;
@@ -18,6 +21,7 @@ export interface SalespersonSettlementRow {
   counterNetAmount: number;
   telesalesOrderCount: number; // NUEVO (doc 42, sección 12.2)
   telesalesNetAmount: number;
+  workedDays: number; // NUEVO (doc 43) — días con campo o televentas; por fila de día, 1 o 0
 }
 
 export interface SalespersonSettlementReport {
@@ -26,7 +30,7 @@ export interface SalespersonSettlementReport {
   totalOrders: number; // "Sumas" — cuadra exacto con las filas
   totalWeightKg: number;
   totalNetAmount: number;
-  lastOrderAt: string | null; // último pedido del período; null si no hubo pedidos
+  lastOrderAt: string | null; // último pedido de campo o televentas del período; null si no hubo
   rows: SalespersonSettlementRow[];
   originCode: string | null; // el filtro aplicado (FIELD | TELESALES | COUNTER); null = todos
   totalFieldOrders: number;
@@ -35,6 +39,9 @@ export interface SalespersonSettlementReport {
   totalCounterNetAmount: number;
   totalTelesalesOrders: number; // NUEVO (doc 42, sección 12.2)
   totalTelesalesNetAmount: number;
+  salespersonId: number | null; // NUEVO (doc 43) — filtro aplicado; null = todos
+  salespersonName: string | null; // NUEVO — para el título y el archivo
+  groupBy: SettlementGroupBy; // NUEVO
 }
 
 export interface ProductSalesRow {

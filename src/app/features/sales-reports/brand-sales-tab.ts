@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiExportMenu } from '../../shared/ui/export-menu/export-menu';
 import { SalesReportModuleTabs } from './ui/module-tabs';
 import { SalesReportAdminService } from './sales-report-admin';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
@@ -12,6 +13,13 @@ import { BrandView } from '../../shared/models/catalog.models';
 import { BrandSalesReport, ProductSalesRow } from '../../shared/models/sales-report.models';
 import { quantityText } from './sales-report-format';
 import { formatSoles } from '../../shared/pipes/money';
+import { dateText } from '../assignments/assignment-format';
+import { TableExporter } from '../../shared/utils/export/table-exporter.service';
+import { ExportColumn, ExportFormat, ExportTable } from '../../shared/utils/export/export.models';
+import { exportFileName } from '../../shared/utils/export/export-file-name';
+import { columnScreenText, formatByType } from '../../shared/utils/export/export-values';
+import { brandSalesColumns } from './domain/brand-sales.columns';
+import { ToastService } from '../../core/ui/toast';
 
 function todayIso(): string {
   const d = new Date();
@@ -31,7 +39,7 @@ const TOP_PRODUCTS = 10;
  */
 @Component({
   selector: 'app-brand-sales-tab',
-  imports: [UiField, UiTypeahead, UiEmpty, SalesReportModuleTabs],
+  imports: [UiField, UiTypeahead, UiEmpty, UiExportMenu, SalesReportModuleTabs],
   template: `
     <app-sales-report-module-tabs />
     <section class="bst-page">
@@ -51,6 +59,13 @@ const TOP_PRODUCTS = 10;
           [search]="searchSalespeople"
           [(selected)]="salespersonSelected"
           class="bst-toolbar-ta"
+        />
+        <ui-export-menu
+          class="bst-export"
+          [disabled]="!canExport()"
+          [busy]="exporting()"
+          [progressText]="exportProgressText()"
+          (export)="onExport($event)"
         />
       </div>
 
@@ -116,36 +131,38 @@ const TOP_PRODUCTS = 10;
           <table class="ui-table-grid bst-table">
             <thead>
               <tr>
-                <th>Código</th>
-                <th>Producto</th>
-                <th>Pedidos</th>
-                <th>Unidades</th>
-                <th>Bruto</th>
-                <th>Descuento</th>
-                <th>Neto</th>
+                @for (col of columns(); track col.key) {
+                  <th [class.bst-col-right]="col.type !== 'text' && col.type !== 'code'">
+                    {{ col.header }}
+                  </th>
+                }
               </tr>
             </thead>
             <tbody>
-              @for (p of r.products; track p.productId) {
+              @for (p of r.products; track p.productId; let i = $index) {
                 <tr class="bst-row" (click)="openProduct(p)">
-                  <td class="bst-muted">{{ p.productCode }}</td>
-                  <td>{{ p.productName }}</td>
-                  <td class="bst-muted">{{ p.orderCount }}</td>
-                  <td class="bst-muted">{{ quantityText(p.quantity) }}</td>
-                  <td class="bst-muted">{{ formatSoles(p.grossAmount) }}</td>
-                  <td class="bst-muted">{{ formatSoles(p.discountAmount) }}</td>
-                  <td class="bst-cell-strong">{{ formatSoles(p.netAmount) }}</td>
+                  @for (col of columns(); track col.key) {
+                    <td
+                      [class.bst-col-right]="col.type !== 'text' && col.type !== 'code'"
+                      [class.bst-cell-strong]="col.bold"
+                      [class.bst-muted]="!col.bold"
+                    >
+                      {{ columnScreenText(col, p, i) }}
+                    </td>
+                  }
                 </tr>
               }
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="2" class="bst-cell-strong">Sumas</td>
-                <td></td>
-                <td class="bst-cell-strong">{{ quantityText(sumQuantity(r)) }}</td>
-                <td class="bst-cell-strong">{{ formatSoles(sumGross(r)) }}</td>
-                <td class="bst-cell-strong">{{ formatSoles(sumDiscount(r)) }}</td>
-                <td class="bst-cell-strong">{{ formatSoles(sumNet(r)) }}</td>
+                @for (col of columns(); track col.key) {
+                  <td
+                    class="bst-cell-strong"
+                    [class.bst-col-right]="col.type !== 'text' && col.type !== 'code'"
+                  >
+                    {{ col.key === 'productCode' ? 'Sumas' : footerText(col, r) }}
+                  </td>
+                }
               </tr>
             </tfoot>
           </table>
@@ -171,6 +188,9 @@ const TOP_PRODUCTS = 10;
       }
       .bst-toolbar-ta {
         width: 240px;
+      }
+      .bst-export {
+        margin-left: auto;
       }
       .bst-brand-title {
         font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
@@ -257,10 +277,16 @@ const TOP_PRODUCTS = 10;
       }
       .bst-cell-strong {
         font-weight: 800;
+        white-space: nowrap;
       }
       .bst-muted {
         color: var(--ink-muted);
         font-size: 13px;
+        white-space: nowrap;
+      }
+      .bst-col-right {
+        text-align: right;
+        font-variant-numeric: var(--tnum);
       }
 
       @media (max-width: 767px) {
@@ -276,6 +302,8 @@ export class BrandSalesTab {
   private catalogSvc = inject(CatalogLookupService);
   private lookupSvc = inject(LookupService);
   private router = inject(Router);
+  private exporter = inject(TableExporter);
+  private toast = inject(ToastService);
 
   /** Query params opcionales para volver con la marca y el rango ya elegidos (desde el detalle de producto). */
   brandIdParam = input('', { alias: 'brandId' });
@@ -285,6 +313,14 @@ export class BrandSalesTab {
 
   protected formatSoles = formatSoles;
   protected quantityText = quantityText;
+  protected columnScreenText = columnScreenText;
+  protected columns = computed(() => brandSalesColumns());
+
+  protected exporting = signal(false);
+  protected exportProgressText = signal('');
+  protected canExport = computed(
+    () => !this.loading() && !this.error() && (this.report()?.products.length ?? 0) > 0,
+  );
 
   protected brands = signal<BrandView[]>([]);
   protected loadingBrands = signal(true);
@@ -353,14 +389,25 @@ export class BrandSalesTab {
   protected sumQuantity(r: BrandSalesReport) {
     return r.products.reduce((sum, p) => sum + p.quantity, 0);
   }
-  protected sumGross(r: BrandSalesReport) {
-    return r.products.reduce((sum, p) => sum + p.grossAmount, 0);
+
+  /**
+   * Bruto/descuento/neto de la fila "Sumas" salen del backend (no de sumar
+   * los productos en el cliente): el descuento se prorratea por producto y
+   * sumar las prorratas puede diferir un céntimo del total real — sección 9.2.
+   */
+  private totalsMap(r: BrandSalesReport): Record<string, number> {
+    return {
+      quantity: this.sumQuantity(r),
+      grossAmount: r.grossAmount,
+      discountAmount: r.discountAmount,
+      netAmount: r.netAmount,
+    };
   }
-  protected sumDiscount(r: BrandSalesReport) {
-    return r.products.reduce((sum, p) => sum + p.discountAmount, 0);
-  }
-  protected sumNet(r: BrandSalesReport) {
-    return r.products.reduce((sum, p) => sum + p.netAmount, 0);
+
+  protected footerText(column: ExportColumn<ProductSalesRow>, r: BrandSalesReport): string {
+    const totals = this.totalsMap(r);
+    if (!(column.key in totals)) return '';
+    return formatByType(column.type, totals[column.key], column.emptyWhenZero);
   }
 
   load() {
@@ -392,5 +439,46 @@ export class BrandSalesTab {
         salespersonId: this.salespersonSelected()?.id || undefined,
       },
     });
+  }
+
+  protected onExport(format: ExportFormat) {
+    const r = this.report();
+    if (!r || this.exporting()) return;
+    this.exporting.set(true);
+    this.exportProgressText.set('');
+
+    const table = this.buildTable(r);
+    this.exporter
+      .export(table, format)
+      .then(() => {
+        this.exporting.set(false);
+        this.toast.success(`Archivo descargado: ${table.fileName}.${format}`);
+      })
+      .catch((err: unknown) => {
+        this.exporting.set(false);
+        const message =
+          err instanceof Error ? err.message : 'No pudimos generar el archivo. Intenta de nuevo.';
+        this.toast.error(message);
+      });
+  }
+
+  private buildTable(r: BrandSalesReport): ExportTable<ProductSalesRow> {
+    return {
+      title: 'Marcas y productos',
+      subtitle: r.salespersonName
+        ? `${r.brandName} — vendido por ${r.salespersonName}`
+        : r.brandName,
+      filters: [
+        { label: 'Marca', value: r.brandName },
+        { label: 'Desde', value: dateText(r.from) },
+        { label: 'Hasta', value: dateText(r.to) },
+        { label: 'Vendedor', value: r.salespersonName ?? 'Todos' },
+      ],
+      columns: this.columns(),
+      rows: r.products,
+      totals: this.totalsMap(r),
+      totalsLabel: 'Sumas',
+      fileName: exportFileName(['marcas-productos', r.brandName, r.salespersonName, r.from, r.to]),
+    };
   }
 }

@@ -19,7 +19,7 @@ import {
   orderStatusName,
   originName,
 } from './order-format';
-import { dateTimeText } from '../assignments/assignment-format';
+import { dateText, dateTimeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 
 const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
@@ -97,7 +97,12 @@ function lastDayOfMonth(month: string): string {
         />
         <ui-field label="Estado" type="select" [(value)]="statusFilter" [options]="statusOptions" />
         <ui-field label="Origen" type="select" [(value)]="originFilter" [options]="originOptions" />
-        <ui-field label="Día" type="date" [(value)]="dayFilter" />
+        <ui-field
+          label="Día"
+          type="date"
+          [value]="dayFilter()"
+          (valueChange)="setDayFilter($event)"
+        />
         <div class="ord-month-field">
           <label for="ord-month">Mes</label>
           <input
@@ -105,10 +110,17 @@ function lastDayOfMonth(month: string): string {
             type="month"
             class="ord-month-input"
             [value]="monthFilter()"
-            (input)="monthFilter.set($any($event.target).value)"
+            (input)="setMonthFilter($any($event.target).value)"
           />
         </div>
       </div>
+
+      @if (seededRangeTo()) {
+        <p class="ord-range-note">
+          Mostrando del {{ dateText(dayFilter()) }} al {{ dateText(seededRangeTo()) }}. Cambia Día o
+          Mes para volver a un solo período.
+        </p>
+      }
 
       <ui-table
         [loading]="loading()"
@@ -300,6 +312,11 @@ function lastDayOfMonth(month: string): string {
         border-color: var(--accent);
         box-shadow: 0 0 0 1px var(--accent);
       }
+      .ord-range-note {
+        margin: 0 0 var(--sp-4);
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
+      }
       .ord-cell-strong {
         font-weight: 800;
       }
@@ -395,10 +412,13 @@ export class OrderListPage {
   customerIdParam = input('', { alias: 'customerId' });
   customerNameParam = input('', { alias: 'customerName' });
   fromParam = input('', { alias: 'from' });
+  /** Rango real (no un solo día): doc 43, sección 5.6 — "por vendedor" llega con from≠to. */
+  toParam = input('', { alias: 'to' });
   statusCodeParam = input('', { alias: 'statusCode' });
   originCodeParam = input('', { alias: 'originCode' });
 
   protected dateTimeText = dateTimeText;
+  protected dateText = dateText;
   protected formatSoles = formatSoles;
   protected statusName = orderStatusName;
   protected originName = originName;
@@ -412,6 +432,8 @@ export class OrderListPage {
   protected originFilter = signal('');
   protected dayFilter = signal(todayIso());
   protected monthFilter = signal('');
+  /** Rango exacto sembrado por otra pantalla (p. ej. Liquidación por vendedor); vacío = sin sembrar. */
+  protected seededRangeTo = signal('');
 
   protected rows = signal<AdminOrderSummary[]>([]);
   protected totalElements = signal(0);
@@ -445,6 +467,7 @@ export class OrderListPage {
     const customerId = this.customerIdParam();
     const customerName = this.customerNameParam();
     const from = this.fromParam();
+    const to = this.toParam();
     const statusCode = this.statusCodeParam();
     const originCode = this.originCodeParam();
     untracked(() => {
@@ -457,11 +480,23 @@ export class OrderListPage {
       if (from) {
         this.monthFilter.set('');
         this.dayFilter.set(from);
+        this.seededRangeTo.set(to && to !== from ? to : '');
       }
       if (statusCode) this.statusFilter.set(statusCode);
       if (originCode) this.originFilter.set(originCode);
     });
   });
+
+  /** Tocar el día a mano abandona el rango sembrado: vuelve a ser un filtro de un solo día. */
+  protected setDayFilter(value: string) {
+    this.seededRangeTo.set('');
+    this.dayFilter.set(value);
+  }
+
+  protected setMonthFilter(value: string) {
+    this.seededRangeTo.set('');
+    this.monthFilter.set(value);
+  }
 
   protected countText(): string {
     const n = this.totalElements();
@@ -474,6 +509,7 @@ export class OrderListPage {
     this.statusFilter.set('');
     this.originFilter.set('');
     this.monthFilter.set('');
+    this.seededRangeTo.set('');
     this.dayFilter.set(todayIso());
   }
 
@@ -489,6 +525,8 @@ export class OrderListPage {
   }
 
   private dateRange(): { from: string; to: string } {
+    const seededTo = this.seededRangeTo();
+    if (seededTo) return { from: this.dayFilter(), to: seededTo };
     const month = this.monthFilter();
     if (month) return { from: `${month}-01`, to: lastDayOfMonth(month) };
     const day = this.dayFilter();

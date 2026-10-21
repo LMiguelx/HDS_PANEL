@@ -1,15 +1,26 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
+import { map } from 'rxjs/operators';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
+import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
+import { UiOptionCard } from '../../shared/ui/option-card/option-card';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiExportMenu } from '../../shared/ui/export-menu/export-menu';
 import { SalesReportModuleTabs } from './ui/module-tabs';
 import { SalesReportAdminService } from './sales-report-admin';
+import { LookupService, toUiLookup } from '../promos/lookup';
+import { TableExporter } from '../../shared/utils/export/table-exporter.service';
+import { ExportColumn, ExportFormat, ExportTable } from '../../shared/utils/export/export.models';
+import { exportFileName } from '../../shared/utils/export/export-file-name';
+import { columnScreenText, formatByType } from '../../shared/utils/export/export-values';
+import { settlementColumns } from './domain/settlement.columns';
+import { ToastService } from '../../core/ui/toast';
 import {
   SalespersonSettlementReport,
   SalespersonSettlementRow,
+  SettlementGroupBy,
 } from '../../shared/models/sales-report.models';
 import { dateText, timeText } from '../assignments/assignment-format';
-import { weightText } from './sales-report-format';
 import { formatSoles } from '../../shared/pipes/money';
 
 function todayIso(): string {
@@ -24,356 +35,152 @@ const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
   { value: 'COUNTER', label: 'Mostrador' },
 ];
 
+const ORIGIN_NAME: Record<string, string> = {
+  FIELD: 'Campo',
+  TELESALES: 'Televentas',
+  COUNTER: 'Mostrador',
+};
+
 /**
  * Liquidación de vendedores — GET /orders/reports/salesperson-settlement.
- * Un solo día (from = to) trae una fila por vendedor; un rango trae una
- * fila por vendedor y por día (máximo 31 días entre from y to). Doc 30,
- * sección 11.1: separa venta de campo y de mostrador por fila.
+ * Doc 43: filtro por vendedor, "Ver por" (día/vendedor) con días
+ * trabajados, y exportación a Excel/CSV con las mismas columnas visibles.
  */
 @Component({
   selector: 'app-salesperson-settlement-tab',
-  imports: [UiField, UiEmpty, SalesReportModuleTabs],
-  template: `
-    <app-sales-report-module-tabs />
-    <section class="sst-page">
-      <div class="sst-toolbar">
-        <ui-field label="Desde" type="date" [(value)]="from" />
-        <ui-field label="Hasta" type="date" [(value)]="to" hint='Máximo 31 días desde "Desde"' />
-        <ui-field label="Origen" type="select" [(value)]="originFilter" [options]="originOptions" />
-      </div>
-
-      @if (loading()) {
-        <div class="sst-skeleton" role="status" aria-label="Cargando"></div>
-      } @else if (error()) {
-        <ui-empty
-          variant="error"
-          title="No pudimos cargar la liquidación"
-          body="{{ error() }}"
-          actionLabel="Reintentar"
-          (action)="load()"
-        />
-      } @else if (report(); as r) {
-        @if (r.rows.length === 0) {
-          <ui-empty title="Sin pedidos" body="No hubo pedidos en el rango elegido." />
-        } @else {
-          @if (isSingleDay()) {
-            <div class="sst-bar-chart">
-              @for (row of sortedRows(r); track row.salespersonId) {
-                <div class="sst-bar-row">
-                  <span class="sst-bar-label">{{ row.salespersonName }}</span>
-                  <div class="sst-bar-track">
-                    @if (showFieldCols()) {
-                      <div
-                        class="sst-bar-fill sst-bar-fill-field"
-                        [style.width.%]="barPct(r, row.fieldNetAmount)"
-                      ></div>
-                    }
-                    @if (showTelesalesCols()) {
-                      <div
-                        class="sst-bar-fill sst-bar-fill-telesales"
-                        [style.width.%]="barPct(r, row.telesalesNetAmount)"
-                      ></div>
-                    }
-                    @if (showCounterCols()) {
-                      <div
-                        class="sst-bar-fill sst-bar-fill-counter"
-                        [style.width.%]="barPct(r, row.counterNetAmount)"
-                      ></div>
-                    }
-                  </div>
-                  <span class="sst-bar-value">{{ formatSoles(row.netAmount) }}</span>
-                </div>
-              }
-              <div class="sst-bar-legend">
-                @if (showFieldCols()) {
-                  <span><span class="sst-legend-dot sst-legend-field"></span> Campo</span>
-                }
-                @if (showTelesalesCols()) {
-                  <span><span class="sst-legend-dot sst-legend-telesales"></span> Televentas</span>
-                }
-                @if (showCounterCols()) {
-                  <span><span class="sst-legend-dot sst-legend-counter"></span> Mostrador</span>
-                }
-              </div>
-            </div>
-          }
-
-          <div class="sst-table-wrap">
-            <table class="ui-table-grid sst-table">
-              <thead>
-                <tr>
-                  <th>Ítem</th>
-                  @if (!isSingleDay()) {
-                    <th>Fecha</th>
-                  }
-                  <th>Código</th>
-                  <th>Vendedor</th>
-                  @if (showFieldCols()) {
-                    <th>Ped. campo</th>
-                    <th>Venta campo</th>
-                  }
-                  @if (showTelesalesCols()) {
-                    <th>Ped. televentas</th>
-                    <th>Venta televentas S/</th>
-                  }
-                  @if (showCounterCols()) {
-                    <th>Ped. mostrador</th>
-                    <th>Venta mostrador</th>
-                  }
-                  @if (showWeightHours()) {
-                    <th>Peso</th>
-                  }
-                  <th>Venta total</th>
-                  @if (showWeightHours()) {
-                    <th>Hora Inicio</th>
-                    <th>Hora Fin</th>
-                  }
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of r.rows; track row.salespersonId + '-' + row.date; let i = $index) {
-                  <tr class="sst-row" (click)="openOrders(row)">
-                    <td class="sst-muted">{{ i + 1 }}</td>
-                    @if (!isSingleDay()) {
-                      <td class="sst-muted">{{ dateText(row.date) }}</td>
-                    }
-                    <td class="sst-muted">{{ row.salespersonCode }}</td>
-                    <td>{{ row.salespersonName }}</td>
-                    @if (showFieldCols()) {
-                      <td class="sst-muted">{{ row.fieldOrderCount }}</td>
-                      <td class="sst-muted">{{ formatSoles(row.fieldNetAmount) }}</td>
-                    }
-                    @if (showTelesalesCols()) {
-                      <td class="sst-muted">{{ row.telesalesOrderCount }}</td>
-                      <td class="sst-muted">{{ amountOrDash(row.telesalesNetAmount) }}</td>
-                    }
-                    @if (showCounterCols()) {
-                      <td class="sst-muted">{{ row.counterOrderCount }}</td>
-                      <td class="sst-muted">{{ formatSoles(row.counterNetAmount) }}</td>
-                    }
-                    @if (showWeightHours()) {
-                      <td class="sst-muted">{{ weightText(row.weightKg) }}</td>
-                    }
-                    <td class="sst-cell-strong">{{ formatSoles(row.netAmount) }}</td>
-                    @if (showWeightHours()) {
-                      <td class="sst-muted">{{ timeText(row.firstOrderAt) }}</td>
-                      <td class="sst-muted">{{ timeText(row.lastOrderAt) }}</td>
-                    }
-                  </tr>
-                }
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td [attr.colspan]="isSingleDay() ? 3 : 4" class="sst-cell-strong">Sumas</td>
-                  @if (showFieldCols()) {
-                    <td class="sst-cell-strong">{{ r.totalFieldOrders }}</td>
-                    <td class="sst-cell-strong">{{ formatSoles(r.totalFieldNetAmount) }}</td>
-                  }
-                  @if (showTelesalesCols()) {
-                    <td class="sst-cell-strong">{{ r.totalTelesalesOrders }}</td>
-                    <td class="sst-cell-strong">{{ amountOrDash(r.totalTelesalesNetAmount) }}</td>
-                  }
-                  @if (showCounterCols()) {
-                    <td class="sst-cell-strong">{{ r.totalCounterOrders }}</td>
-                    <td class="sst-cell-strong">{{ formatSoles(r.totalCounterNetAmount) }}</td>
-                  }
-                  @if (showWeightHours()) {
-                    <td class="sst-cell-strong">{{ weightText(r.totalWeightKg) }}</td>
-                  }
-                  <td class="sst-cell-strong">{{ formatSoles(r.totalNetAmount) }}</td>
-                  @if (showWeightHours()) {
-                    <td colspan="2"></td>
-                  }
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          @if (r.lastOrderAt) {
-            <p class="sst-footer-note">
-              Último pedido registrado a las {{ timeText(r.lastOrderAt) }}
-            </p>
-          }
-        }
-      }
-    </section>
-  `,
-  styles: [
-    `
-      .sst-page {
-        width: 100%;
-        box-sizing: border-box;
-        padding: var(--sp-8);
-      }
-      .sst-toolbar {
-        display: flex;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin-bottom: 20px;
-      }
-      .sst-toolbar ui-field {
-        width: 200px;
-      }
-      .sst-skeleton {
-        height: 240px;
-        background: var(--faint);
-      }
-      .sst-bar-chart {
-        display: grid;
-        gap: 10px;
-        margin-bottom: 24px;
-      }
-      .sst-bar-row {
-        display: grid;
-        grid-template-columns: 180px 1fr 110px;
-        align-items: center;
-        gap: 10px;
-      }
-      .sst-bar-label {
-        font-size: 13px;
-        color: var(--ink-muted);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .sst-bar-track {
-        height: 16px;
-        background: var(--faint);
-        display: flex;
-      }
-      .sst-bar-fill {
-        height: 100%;
-      }
-      .sst-bar-fill-field {
-        background: var(--accent);
-      }
-      .sst-bar-fill-telesales {
-        background: var(--st-telesales);
-      }
-      .sst-bar-fill-counter {
-        background: var(--st-counter-delivered);
-      }
-      .sst-bar-value {
-        font-size: 13px;
-        font-weight: 800;
-        color: var(--ink);
-        text-align: right;
-        font-variant-numeric: var(--tnum);
-      }
-      .sst-bar-legend {
-        display: flex;
-        gap: 16px;
-        font-size: 12px;
-        color: var(--ink-muted);
-        margin-top: 2px;
-      }
-      .sst-legend-dot {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        margin-right: 5px;
-      }
-      .sst-legend-field {
-        background: var(--accent);
-      }
-      .sst-legend-telesales {
-        background: var(--st-telesales);
-      }
-      .sst-legend-counter {
-        background: var(--st-counter-delivered);
-      }
-      .sst-table-wrap {
-        overflow-x: auto;
-      }
-      .sst-table {
-        width: 100%;
-      }
-      .sst-row {
-        cursor: pointer;
-      }
-      .sst-row:hover {
-        background: var(--faint);
-      }
-      .sst-cell-strong {
-        font-weight: 800;
-        white-space: nowrap;
-      }
-      .sst-muted {
-        color: var(--ink-muted);
-        font-size: 13px;
-        white-space: nowrap;
-      }
-      .sst-footer-note {
-        margin: 12px 0 0;
-        font-size: 12px;
-        color: var(--ink-muted);
-      }
-
-      @media (max-width: 767px) {
-        .sst-page {
-          padding: var(--sp-4);
-        }
-      }
-    `,
-  ],
+  imports: [UiField, UiTypeahead, UiOptionCard, UiEmpty, UiExportMenu, SalesReportModuleTabs],
+  templateUrl: './salesperson-settlement-tab.html',
+  styleUrls: ['./salesperson-settlement-tab.scss'],
 })
 export class SalespersonSettlementTab {
   private reportSvc = inject(SalesReportAdminService);
+  private lookupSvc = inject(LookupService);
+  private exporter = inject(TableExporter);
+  private toast = inject(ToastService);
   private router = inject(Router);
 
   protected dateText = dateText;
   protected timeText = timeText;
-  protected weightText = weightText;
   protected formatSoles = formatSoles;
   protected originOptions = ORIGIN_FILTER_OPTIONS;
+  protected columnScreenText = columnScreenText;
 
   protected from = signal(todayIso());
   protected to = signal(todayIso());
   protected originFilter = signal('');
+  protected salespersonFilter = signal<UiLookupItem | null>(null);
+  protected groupBy = signal<SettlementGroupBy>('DAY');
+
+  protected searchSalespeople = (q: string) =>
+    this.lookupSvc.users(q).pipe(map((items) => toUiLookup(items)));
 
   protected report = signal<SalespersonSettlementReport | null>(null);
   protected loading = signal(true);
   protected error = signal('');
+  protected exporting = signal(false);
+  protected exportProgressText = signal('');
 
   protected isSingleDay = computed(() => this.from() === this.to());
 
-  /** Doc 42, sección 12.2: qué columnas se ocultan según el filtro de origen. */
-  protected showFieldCols = computed(
-    () => this.originFilter() === '' || this.originFilter() === 'FIELD',
+  protected columns = computed(() =>
+    settlementColumns({
+      groupBy: this.groupBy(),
+      origin: this.originFilter() || null,
+      multiDay: !this.isSingleDay(),
+    }),
   );
-  protected showTelesalesCols = computed(
-    () => this.originFilter() === '' || this.originFilter() === 'TELESALES',
-  );
-  protected showCounterCols = computed(
-    () => this.originFilter() === '' || this.originFilter() === 'COUNTER',
-  );
-  protected showWeightHours = computed(() => this.originFilter() !== 'COUNTER');
 
-  protected amountOrDash(amount: number): string {
-    return amount > 0 ? this.formatSoles(amount) : '—';
-  }
+  protected canExport = computed(
+    () => !this.loading() && !this.error() && (this.report()?.rows.length ?? 0) > 0,
+  );
 
-  private loadEffect = effect(() => {
-    this.from();
-    this.to();
-    this.originFilter();
-    untracked(() => this.load());
+  protected periodText = computed(() => {
+    const r = this.report();
+    if (!r) return '';
+    return r.from === r.to ? dateText(r.from) : `${dateText(r.from)} al ${dateText(r.to)}`;
   });
 
-  protected sortedRows(r: SalespersonSettlementReport) {
+  protected rowsForChart = computed(() => {
+    const r = this.report();
+    if (!r) return [];
     return [...r.rows].sort((a, b) => b.netAmount - a.netAmount);
-  }
+  });
 
-  protected barPct(r: SalespersonSettlementReport, amount: number): number {
-    const max = Math.max(...r.rows.map((row) => row.netAmount), 1);
-    return Math.round((amount / max) * 100);
+  protected chartMax = computed(() => Math.max(...this.rowsForChart().map((r) => r.netAmount), 1));
+
+  /** Mismos totales que usa el exportador — sección 9.1 — para la fila "Sumas" en pantalla. */
+  protected totalsMap = computed((): Record<string, number> => {
+    const r = this.report();
+    if (!r) return {};
+    return {
+      fieldOrderCount: r.totalFieldOrders,
+      fieldNetAmount: r.totalFieldNetAmount,
+      telesalesOrderCount: r.totalTelesalesOrders,
+      telesalesNetAmount: r.totalTelesalesNetAmount,
+      counterOrderCount: r.totalCounterOrders,
+      counterNetAmount: r.totalCounterNetAmount,
+      netAmount: r.totalNetAmount,
+      weightKg: r.totalWeightKg,
+    };
+  });
+
+  /** Barras: solo tiene sentido con un día (por día) o con cualquier rango (por vendedor) — sección 5.7. */
+  protected showChart = computed(() => this.groupBy() === 'SALESPERSON' || this.isSingleDay());
+
+  /** Query params opcionales para volver con los filtros ya aplicados — sección 5.4. */
+  fromParam = input<string | undefined>(undefined, { alias: 'from' });
+  toParam = input<string | undefined>(undefined, { alias: 'to' });
+  originParam = input<string | undefined>(undefined, { alias: 'origin' });
+  salespersonIdParam = input<string | undefined>(undefined, { alias: 'salesperson' });
+  salespersonNameParam = input<string | undefined>(undefined, { alias: 'salespersonName' });
+  groupByParam = input<string | undefined>(undefined, { alias: 'groupBy' });
+
+  constructor() {
+    // Semilla desde la URL — declarado ANTES del efecto de carga para que
+    // corra primero y no dispare una carga con los valores por defecto
+    // seguida de otra con los sembrados (ARCHITECTURE_PANEL, D3).
+    effect(() => {
+      const from = this.fromParam();
+      const to = this.toParam();
+      const origin = this.originParam();
+      const salespersonId = this.salespersonIdParam();
+      const salespersonName = this.salespersonNameParam();
+      const groupBy = this.groupByParam();
+      untracked(() => {
+        if (from) this.from.set(from);
+        if (to) this.to.set(to);
+        if (origin) this.originFilter.set(origin);
+        if (salespersonId && salespersonName) {
+          this.salespersonFilter.set({ id: Number(salespersonId), name: salespersonName });
+        }
+        if (groupBy === 'SALESPERSON') this.groupBy.set('SALESPERSON');
+      });
+    });
+
+    effect(() => {
+      this.from();
+      this.to();
+      this.originFilter();
+      this.salespersonFilter();
+      this.groupBy();
+      untracked(() => {
+        this.syncUrl();
+        this.load();
+      });
+    });
   }
 
   load() {
     this.loading.set(true);
     this.error.set('');
     this.reportSvc
-      .salespersonSettlement(this.from(), this.to(), this.originFilter() || undefined)
+      .salespersonSettlement(
+        this.from(),
+        this.to(),
+        this.originFilter() || undefined,
+        this.salespersonFilter()?.id,
+        this.groupBy(),
+      )
       .subscribe({
         next: (result) => {
           this.report.set(result);
@@ -387,14 +194,108 @@ export class SalespersonSettlementTab {
       });
   }
 
+  private syncUrl() {
+    this.router.navigate([], {
+      queryParams: {
+        from: this.from(),
+        to: this.to(),
+        origin: this.originFilter() || null,
+        salesperson: this.salespersonFilter()?.id ?? null,
+        salespersonName: this.salespersonFilter()?.name ?? null,
+        groupBy: this.groupBy() !== 'DAY' ? this.groupBy() : null,
+      },
+      replaceUrl: true,
+    });
+  }
+
+  protected barPct(amount: number): number {
+    return Math.round((amount / this.chartMax()) * 100);
+  }
+
+  /** Texto de la fila "Sumas": vacío salvo en las columnas con total conocido. */
+  protected footerText(column: ExportColumn<SalespersonSettlementRow>): string {
+    const totals = this.totalsMap();
+    if (!(column.key in totals)) return '';
+    return formatByType(column.type, totals[column.key], column.emptyWhenZero);
+  }
+
+  protected clearFilters() {
+    this.from.set(todayIso());
+    this.to.set(todayIso());
+    this.originFilter.set('');
+    this.salespersonFilter.set(null);
+    this.groupBy.set('DAY');
+  }
+
   protected openOrders(row: SalespersonSettlementRow) {
+    const r = this.report();
+    if (!r) return;
     this.router.navigate(['/pedidos'], {
       queryParams: {
         salespersonId: row.salespersonId,
-        from: row.date,
-        to: row.date,
+        salespersonName: row.salespersonName,
+        from: row.date ?? r.from,
+        to: row.date ?? r.to,
         originCode: this.originFilter() || undefined,
       },
     });
+  }
+
+  protected onExport(format: ExportFormat) {
+    const r = this.report();
+    if (!r || this.exporting()) return;
+    this.exporting.set(true);
+    this.exportProgressText.set('');
+
+    const table = this.buildTable(r);
+    this.exporter
+      .export(table, format)
+      .then(() => {
+        this.exporting.set(false);
+        this.toast.success(`Archivo descargado: ${table.fileName}.${format}`);
+      })
+      .catch((err: unknown) => {
+        this.exporting.set(false);
+        const message =
+          err instanceof Error ? err.message : 'No pudimos generar el archivo. Intenta de nuevo.';
+        this.toast.error(message);
+      });
+  }
+
+  private buildTable(r: SalespersonSettlementReport): ExportTable<SalespersonSettlementRow> {
+    const columns = this.columns();
+    return {
+      title:
+        this.groupBy() === 'SALESPERSON' ? 'Liquidación por vendedor' : 'Liquidación de vendedores',
+      subtitle: r.salespersonName ?? undefined,
+      filters: [
+        { label: 'Desde', value: dateText(r.from) },
+        { label: 'Hasta', value: dateText(r.to) },
+        {
+          label: 'Origen',
+          value: r.originCode ? (ORIGIN_NAME[r.originCode] ?? r.originCode) : 'Todos',
+        },
+        { label: 'Vendedor', value: r.salespersonName ?? 'Todos' },
+        { label: 'Ver por', value: this.groupBy() === 'DAY' ? 'Día' : 'Vendedor' },
+      ],
+      columns,
+      rows: r.rows,
+      totals: this.totalsMap(),
+      totalsLabel: 'Sumas',
+      footnote: r.lastOrderAt
+        ? `Último pedido registrado a las ${timeText(r.lastOrderAt)} del ${dateText(r.lastOrderAt)}`
+        : undefined,
+      fileName: this.buildFileName(r),
+    };
+  }
+
+  private buildFileName(r: SalespersonSettlementReport): string {
+    if (r.salespersonName) {
+      return exportFileName(['liquidacion', r.salespersonName, r.from, r.to]);
+    }
+    if (this.groupBy() === 'SALESPERSON') {
+      return exportFileName(['liquidacion-por-vendedor', r.from, r.to]);
+    }
+    return exportFileName(['liquidacion-vendedores', r.from, r.to]);
   }
 }
