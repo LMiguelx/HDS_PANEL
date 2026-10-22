@@ -1,0 +1,252 @@
+<div class="md-head">
+  <div>
+    <h1>Mi día</h1>
+    <p class="md-sub">{{ headerDateLabel() }}</p>
+  </div>
+  <button uiButton variant="secondary" size="sm" [loading]="store.loading()" (click)="refresh()">
+    <span class="material-icons" aria-hidden="true">refresh</span>
+    Actualizar
+  </button>
+</div>
+
+@if (store.loading() && store.plan().length === 0 && store.portfolio().length === 0) {
+  <div class="md-skeleton" role="status" aria-label="Cargando"></div>
+} @else if (store.error()) {
+  <ui-empty
+    variant="error"
+    title="No pudimos cargar tu día"
+    body="Intenta de nuevo en unos segundos."
+    actionLabel="Reintentar"
+    (action)="refresh()"
+  />
+} @else {
+  <div class="md-kpis">
+    <div class="md-kpi">
+      <span class="md-kpi-label">Hoy</span>
+      <span class="md-kpi-value">{{ kpis().total }}</span>
+    </div>
+    <div class="md-kpi">
+      <span class="md-kpi-label">Pendientes</span>
+      <span class="md-kpi-value">{{ kpis().pending }}</span>
+    </div>
+    <div class="md-kpi md-kpi-ok">
+      <span class="md-kpi-label">Compraron</span>
+      <span class="md-kpi-value">{{ kpis().attended }}</span>
+    </div>
+    <div class="md-kpi md-kpi-warn">
+      <span class="md-kpi-label">No compró</span>
+      <span class="md-kpi-value">{{ kpis().noPurchase }}</span>
+    </div>
+    <div class="md-kpi">
+      <span class="md-kpi-label">Venta hoy</span>
+      <span class="md-kpi-value md-kpi-amount">{{ formatSoles(kpis().ventaHoy) }}</span>
+    </div>
+  </div>
+
+  @if (!jornadaOpen()) {
+    <div class="md-jornada-banner">
+      Para tomar pedidos o registrar llamadas, abre tu jornada.
+      <button uiButton variant="primary" size="sm" (click)="routeStore.start()">
+        Abrir jornada
+      </button>
+    </div>
+  }
+
+  <div class="md-filterbar">
+    <ui-tabs [items]="tabs" [value]="activeTab()" (valueChange)="switchTab($event)" />
+    <ui-field
+      label="Buscar"
+      placeholder="Nombre, código o documento"
+      [(value)]="search"
+      class="md-search"
+    />
+    <ui-field
+      label="Estado"
+      type="select"
+      [(value)]="statusFilter"
+      [options]="statusOptions"
+      class="md-status-filter"
+    />
+    @if (isNarrow()) {
+      <div class="md-view-switch">
+        <button
+          type="button"
+          class="md-view-btn"
+          [class.on]="mobileView() === 'list'"
+          (click)="mobileView.set('list')"
+        >
+          Lista
+        </button>
+        <button
+          type="button"
+          class="md-view-btn"
+          [class.on]="mobileView() === 'map'"
+          (click)="mobileView.set('map')"
+        >
+          Mapa
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (visibleRows().length === 0) {
+    <ui-empty
+      title="Sin clientes"
+      [body]="
+        search() || statusFilter()
+          ? 'Tu búsqueda no encontró nada.'
+          : activeTab() === 'hoy'
+            ? 'No tienes clientes programados para hoy.'
+            : 'Tu cartera está vacía.'
+      "
+    />
+  } @else {
+    <div class="md-body">
+      <div class="md-list" [class.md-hidden-narrow]="isNarrow() && mobileView() !== 'list'">
+        @for (row of visibleRows(); track row.customerId) {
+          <button
+            type="button"
+            class="md-row"
+            [class.selected]="selectedCustomerId() === row.customerId"
+            (mouseenter)="onRowHoverEnter(row.customerId)"
+            (mouseleave)="onRowHoverLeave()"
+            (click)="selectCustomer(row)"
+          >
+            <div class="md-row-top">
+              <span class="md-row-name">{{ row.summary.businessName }}</span>
+              <ui-status
+                [label]="visitStatusInfo(row.summary.visitStatusCode).label"
+                [status]="visitStatusInfo(row.summary.visitStatusCode).badgeSlug"
+              />
+              @if (calledThisSession(row.customerId)) {
+                <span class="material-icons md-call-icon" title="Llamada registrada hoy">call</span>
+              }
+            </div>
+            <div class="md-row-sub">
+              {{ row.summary.address || 'Sin dirección' }}
+              @if (row.summary.phone) {
+                · {{ row.summary.phone }}
+              }
+              @if (row.isCoverage) {
+                · <span class="md-coverage-tag">Cubriendo</span>
+              }
+              @if (activeTab() === 'cartera') {
+                @if (row.isToday) {
+                  · <span class="md-today-tag">Hoy</span>
+                } @else {
+                  · {{ row.schedule }}
+                }
+              }
+            </div>
+          </button>
+        }
+      </div>
+
+      <div class="md-map-wrap" [class.md-hidden-narrow]="isNarrow() && mobileView() !== 'map'">
+        <div class="md-map" #mapEl></div>
+      </div>
+    </div>
+
+    @if (selectedCustomerId(); as customerId) {
+      <div class="md-panel">
+        @if (customerDetailLoading()) {
+          <p class="md-muted">Cargando cliente…</p>
+        } @else if (customerDetailError() || !customerDetail()) {
+          <ui-empty variant="error" title="No pudimos cargar el cliente" />
+        } @else {
+          @if (customerDetail(); as c) {
+            <div class="md-panel-head">
+              <div>
+                <div class="md-panel-name-row">
+                  <span class="md-panel-name">{{ c.businessName }}</span>
+                  <span class="md-muted">· {{ c.code }} · {{ c.customerTypeName || '—' }}</span>
+                </div>
+                <div class="md-muted">{{ ratingText(c.rating) }}</div>
+              </div>
+              @if (c.phone) {
+                <button type="button" class="md-phone-chip" (click)="copyPhone(c.phone)">
+                  <span class="material-icons" aria-hidden="true">content_copy</span>
+                  {{ c.phone }}
+                </button>
+              }
+              <button
+                type="button"
+                class="md-panel-close"
+                aria-label="Cerrar"
+                (click)="closeCustomerPanel()"
+              >
+                ✕
+              </button>
+            </div>
+
+            @if (c.metrics; as m) {
+              <p class="md-muted">
+                Última compra: {{ m.lastPurchaseDate ? dateTimeText(m.lastPurchaseDate) : '—' }} ·
+                {{ m.ordersLast90d }} pedidos en 90 días · {{ formatSoles(m.amountLast90d) }} en 90
+                días
+              </p>
+            } @else {
+              <p class="md-muted">Este cliente todavía no tiene compras registradas.</p>
+            }
+
+            @if (c.hasOrderInCycle) {
+              <p class="md-note">Ya compró este ciclo.</p>
+            }
+            @if (!canTakeOrder()) {
+              <p class="md-note md-note-warn">{{ takeOrderBlockedReason() }}</p>
+            }
+
+            <div class="md-panel-actions">
+              @if (todayOrderId()) {
+                <button uiButton variant="primary" (click)="viewTodayOrder()">
+                  Ver pedido de hoy
+                </button>
+              } @else {
+                <button
+                  uiButton
+                  variant="primary"
+                  [disabled]="!canTakeOrder() || !jornadaOpen()"
+                  [title]="!jornadaOpen() ? 'Abre tu jornada para tomar pedidos' : ''"
+                  (click)="takeOrder()"
+                >
+                  Tomar pedido
+                </button>
+              }
+              <button
+                uiButton
+                variant="secondary"
+                [disabled]="!jornadaOpen()"
+                [title]="!jornadaOpen() ? 'Abre tu jornada para registrar llamadas' : ''"
+                (click)="openRegisterCall()"
+              >
+                Registrar llamada
+              </button>
+              <button uiButton variant="ghost" (click)="toggleHistory()">
+                {{ historyOpen() ? 'Ocultar historial' : 'Historial' }}
+              </button>
+            </div>
+
+            @if (historyOpen()) {
+              <div class="md-history">
+                @if (historyLoading()) {
+                  <p class="md-muted">Cargando historial…</p>
+                } @else if (historyRows().length === 0) {
+                  <p class="md-muted">Sin pedidos anteriores.</p>
+                } @else {
+                  @for (o of historyRows(); track o.orderId) {
+                    <button type="button" class="md-history-row" (click)="goToOrder(o.orderId)">
+                      <span>{{ dateTimeText(o.orderDate) }}</span>
+                      <ui-status [label]="orderStatusName(o.statusCode)" />
+                      <span>{{ formatSoles(o.netAmount) }}</span>
+                      <span class="md-history-link">Ver pedido</span>
+                    </button>
+                  }
+                }
+              </div>
+            }
+          }
+        }
+      </div>
+    }
+  }
+}

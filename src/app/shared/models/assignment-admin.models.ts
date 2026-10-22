@@ -1,8 +1,8 @@
 // Contratos del panel de administración de asignaciones (/api/admin/assignments).
 // Escritos a mano porque el endpoint es nuevo y `api.ts` (generado por
 // openapi-typescript) todavía no lo incluye — mismo criterio ya usado en
-// assignment.models.ts / customer.models.ts. Reemplazar por alias a `api.ts`
-// cuando el backend regenere el esquema con este módulo incluido.
+// sales-report.models.ts / segment.models.ts. Ver
+// 29-panel-admin-asignaciones-mapa-coberturas.md.
 
 export interface AssignmentView {
   assignmentId: number;
@@ -16,12 +16,20 @@ export interface AssignmentView {
   weeksOfCycle: number[]; // 1..4, puede venir incompleto (ver hasGap)
 }
 
+/** Fila del listado (GET /) — mismos campos de AssignmentView + nombres. */
+export interface AssignmentAdminView extends AssignmentView {
+  customerCode: string;
+  customerName: string;
+  userName: string; // vendedor
+}
+
 export interface AssignmentListFilters {
   userId?: number;
   customerId?: number;
   hasGap?: boolean;
   page?: number;
   size?: number;
+  sort?: string;
 }
 
 export interface OrphanCustomerView {
@@ -44,56 +52,103 @@ export interface VendorOnRouteView {
   startLongitude: number | null;
 }
 
-export interface MapCustomerView {
-  customerId: number;
-  code: string;
-  customerName: string;
-  latitude: number;
-  longitude: number;
-  /** null si el cliente es huérfano. */
-  userId: number | null;
-  userName: string | null;
-  /** null si no hay visita registrada hoy (aunque haya tenido una ayer). */
-  visitStatusCode: string | null;
-  /** true si según weekday + semana del ciclo, hoy le toca visita. */
-  scheduledToday: boolean;
-}
-
-export interface MapQuery {
-  userIds?: number[];
-  orphansOnly?: boolean;
-}
-
+/**
+ * Nace siempre hoy: no se envía effectiveFrom (doc 33, sección 6.4).
+ * weekdays/weeksOfCycle son obligatorios desde doc 33 — al menos un valor
+ * cada uno; una asignación manual ya no puede nacer con horario incompleto.
+ */
 export interface CreateAssignmentCommand {
   customerId: number;
   userId: number;
-  effectiveFrom: string; // yyyy-MM-dd
-  weekdays?: number[]; // opcional al crear — vacío/omitido = horario incompleto
-  weeksOfCycle?: number[];
+  weekdays: number[];
+  weeksOfCycle: number[];
 }
 
 export interface UpdateScheduleCommand {
-  // PATCH parcial: solo se reemplaza lo enviado. `undefined` = no tocar;
-  // una lista (incluso []) sí reemplaza el campo.
+  // PATCH parcial: solo se reemplaza lo enviado. `undefined` = no tocar.
+  // Doc 33, sección 7.3: ya no se admite una lista vacía — si se envía,
+  // debe traer al menos un valor.
   weekdays?: number[];
   weeksOfCycle?: number[];
 }
 
+export type CoverageSelection = 'SCHEDULED' | 'ALL_PORTFOLIO' | 'CUSTOMER_IDS';
+
 export interface CreateCoverageCommand {
   absentUserId: number;
   coveringUserId: number;
-  coverageDate: string; // yyyy-MM-dd
-  customerIds: number[];
+  coverageDate: string; // yyyy-MM-dd, hoy o futura
+  selection: CoverageSelection;
+  customerIds: number[]; // solo con CUSTOMER_IDS (al menos uno); vacío en las otras
   reason?: string; // máx 255
 }
 
 export interface CoverageView {
   coverageId: number;
+  customerId: number;
   absentUserId: number;
   coveringUserId: number;
   coverageDate: string;
-  customerId: number;
   reason: string | null;
+}
+
+/** Fila del listado de coberturas ya realizadas (GET /coverage). */
+export interface CoverageAdminView {
+  coverageId: number;
+  customerId: number;
+  customerName: string;
+  absentUserId: number;
+  absentUserName: string;
+  coveringUserId: number;
+  coveringUserName: string;
+  coverageDate: string; // yyyy-MM-dd
+  reason: string | null;
+  createdAt: string; // ISO datetime
+}
+
+export interface CoverageListFilters {
+  absentUserId?: number;
+  coveringUserId?: number;
+  page?: number;
+  size?: number;
+}
+
+/**
+ * Cartera real del vendedor ausente en la fecha dada — GET /coverage-candidates.
+ * Llegan con los programados primero y luego por nombre.
+ */
+export interface CoverageCandidateView {
+  customerId: number;
+  code: string;
+  businessName: string;
+  rating: number | null; // 1 a 5; null = sin calificar
+  scheduledOnDate: boolean; // el ausente lo tenía programado esa fecha
+  existingCoveringUserId: number | null;
+  existingCoveringUserName: string | null;
+}
+
+export interface ImportCoverageParams {
+  absentUserId: number;
+  coveringUserId: number;
+  coverageDate: string; // yyyy-MM-dd, hoy o futura
+  reason?: string;
+}
+
+export interface ImportCoverageResult {
+  totalRows: number;
+  invalidRows: number;
+  duplicatesInFile: number;
+  matched: number;
+  notInPortfolio: number;
+  inactive: number;
+  notFound: number;
+  alreadyCovered: number;
+  toReassign: number;
+  toCreate: number;
+  applied: boolean;
+  notFoundSample: string[];
+  notInPortfolioSample: string[];
+  invalidSample: string[];
 }
 
 /**
@@ -111,8 +166,15 @@ export interface AutoAssignmentResult {
 export interface IncompleteScheduleView {
   assignmentId: number;
   customerId: number;
+  customerCode: string;
   customerName: string;
   userId: number;
+  userName: string;
   hasWeekdays: boolean;
   hasWeeksOfCycle: boolean;
+}
+
+export interface PendingScheduleFilters {
+  page?: number;
+  size?: number;
 }

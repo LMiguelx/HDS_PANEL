@@ -1,9 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
 import { permissionGuard } from './core/auth/permission-guard';
-
-const comingSoon = () =>
-  import('./shared/ui/coming-soon/coming-soon').then((m) => m.ComingSoonPage);
+import { telesalesRouteGuard } from './core/auth/telesales-guard';
 
 export const routes: Routes = [
   {
@@ -11,8 +9,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login').then((m) => m.LoginPage),
   },
   {
+    path: 'splash',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/auth/splash').then((m) => m.SplashPage),
+  },
+  {
     path: '',
     canActivate: [authGuard],
+    canActivateChild: [telesalesRouteGuard],
     loadComponent: () => import('./core/layout/shell/shell').then((m) => m.ShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
@@ -20,19 +24,32 @@ export const routes: Routes = [
         path: 'dashboard',
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardPage),
       },
+      // Mi perfil — autoservicio, cualquier autenticado (no cuelga de /usuarios,
+      // que sí requiere user.manage).
+      {
+        path: 'mi-perfil',
+        loadComponent: () => import('./features/users/my-profile').then((m) => m.MyProfilePage),
+      },
+      // Modo televentas (doc 42) — el guard de arriba restringe el resto del
+      // panel cuando aplica; esta ruta no repite permiso, el modo ya decide.
+      {
+        path: 'televentas',
+        loadChildren: () =>
+          import('./features/televentas/televentas.routes').then((m) => m.TELEVENTAS_ROUTES),
+      },
 
-      // Clientes (módulo 2) — sin rediseñar todavía, ver _archive/customers/
+      // Clientes (módulo 2) — rediseñado
       {
         path: 'clientes',
         canActivate: [permissionGuard('customer.view')],
-        loadComponent: comingSoon,
-        data: { title: 'Clientes', icon: 'store' },
+        loadChildren: () =>
+          import('./features/customers/customers.routes').then((m) => m.CUSTOMER_ROUTES),
       },
       {
         path: 'aprobaciones',
         canActivate: [permissionGuard('customer.approve')],
-        loadComponent: comingSoon,
-        data: { title: 'Aprobaciones', icon: 'how_to_reg' },
+        loadComponent: () =>
+          import('./features/customer-requests/approvals').then((m) => m.ApprovalsPage),
       },
       // Asignaciones (módulo 2) — rediseñado
       {
@@ -41,25 +58,20 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/assignments/assignments.routes').then((m) => m.ASSIGNMENT_ROUTES),
       },
-      {
-        path: 'segmentos',
-        canActivate: [permissionGuard('segments.manage')],
-        loadComponent: comingSoon,
-        data: { title: 'Segmentos', icon: 'group_work' },
-      },
-
-      // Pedidos (módulo 3) — sin rediseñar todavía, ver _archive/sales/
+      // Pedidos (módulo 3) — rediseñado
       {
         path: 'pedidos',
         canActivate: [permissionGuard('order.view_all', 'order.create')],
-        loadComponent: comingSoon,
-        data: { title: 'Pedidos', icon: 'receipt' },
+        loadChildren: () => import('./features/orders/order.routes').then((m) => m.ORDER_ROUTES),
       },
+      // Reportes de ventas — nuevo, separa operación (Pedidos) de análisis
       {
-        path: 'pedidos/bonificaciones-pendientes',
+        path: 'reportes-ventas',
         canActivate: [permissionGuard('order.view_all')],
-        loadComponent: comingSoon,
-        data: { title: 'Bonificaciones pendientes', icon: 'production_quantity_limits' },
+        loadChildren: () =>
+          import('./features/sales-reports/sales-reports.routes').then(
+            (m) => m.SALES_REPORTS_ROUTES,
+          ),
       },
 
       // Promociones (módulo 4) — rediseñado
@@ -68,48 +80,88 @@ export const routes: Routes = [
         canActivate: [permissionGuard('promo.create', 'promo.approve', 'promo.allocate')],
         loadChildren: () => import('./features/promos/promos.routes').then((m) => m.PROMO_ROUTES),
       },
+      // Segmentos de clientes — nuevo, se usan para el targeting de promociones
+      {
+        path: 'segmentos',
+        canActivate: [permissionGuard('segment.manage')],
+        loadChildren: () =>
+          import('./features/segments/segments.routes').then((m) => m.SEGMENT_ROUTES),
+      },
 
-      // Reparto (módulo 5) — sin rediseñar todavía, ver _archive/delivery/
+      // Reparto (módulo 5) — rediseñado
       {
         path: 'reparto',
         canActivate: [permissionGuard('delivery.deliver', 'delivery.settle')],
-        loadComponent: comingSoon,
-        data: { title: 'Reparto', icon: 'local_shipping' },
+        loadChildren: () =>
+          import('./features/delivery/delivery.routes').then((m) => m.DELIVERY_ROUTES),
       },
       {
         path: 'flota',
         canActivate: [permissionGuard('delivery.settle')],
-        loadComponent: comingSoon,
-        data: { title: 'Flota', icon: 'directions_car' },
+        loadChildren: () => import('./features/fleet/fleet.routes').then((m) => m.FLEET_ROUTES),
       },
 
-      // Facturación (módulo 6) — sin rediseñar todavía, ver _archive/billing/
+      // Facturación (módulo 6) — rediseñado
       {
         path: 'facturas',
         canActivate: [permissionGuard('invoice.reconcile')],
-        loadComponent: comingSoon,
-        data: { title: 'Facturas', icon: 'description' },
+        loadChildren: () =>
+          import('./features/billing/billing.routes').then((m) => m.BILLING_ROUTES),
+      },
+      // Validación y envío de pedidos a facturación — doc 32, nuevo.
+      {
+        path: 'validacion-facturacion',
+        canActivate: [permissionGuard('order.send_to_billing')],
+        loadChildren: () =>
+          import('./features/billing/billing-validation.routes').then(
+            (m) => m.BILLING_VALIDATION_ROUTES,
+          ),
+      },
+      // Detalle de factura — ruta propia (no cuelga de /facturas) porque su
+      // permiso es más amplio que el de la bandeja de conciliación: customer.view
+      // basta para verla (ej. desde el mapa de una planilla), no solo invoice.reconcile.
+      {
+        path: 'factura/:invoiceId',
+        canActivate: [permissionGuard('customer.view', 'invoice.reconcile')],
+        loadComponent: () =>
+          import('./features/billing/invoice-detail').then((m) => m.InvoiceDetailPage),
       },
 
-      // Administración (módulo 7) — sin rediseñar todavía, ver _archive/admin/
+      // Notificaciones de supervisión — doc 36, nuevo.
       {
-        path: 'empresa',
-        canActivate: [permissionGuard('config.edit')],
-        loadComponent: comingSoon,
-        data: { title: 'Empresa', icon: 'business' },
+        path: 'notificaciones',
+        canActivate: [permissionGuard('notification.view_all', 'notification.send')],
+        loadChildren: () =>
+          import('./features/notifications/notification.routes').then((m) => m.NOTIFICATION_ROUTES),
+      },
+
+      // Administración (módulo 7) — rediseñado
+      {
+        path: 'usuarios',
+        canActivate: [permissionGuard('user.manage')],
+        loadChildren: () => import('./features/users/user.routes').then((m) => m.USER_ROUTES),
       },
       {
+        path: 'empresa',
+        canActivate: [permissionGuard('config.edit', 'system.maintenance.manage')],
+        loadChildren: () =>
+          import('./features/company/company.routes').then((m) => m.COMPANY_ROUTES),
+      },
+      // Catálogo y precios — rediseñado
+      {
         path: 'precios',
-        canActivate: [permissionGuard('price.view')],
-        loadComponent: comingSoon,
-        data: { title: 'Precios', icon: 'sell' },
+        canActivate: [permissionGuard('price.view', 'product.edit')],
+        loadChildren: () =>
+          import('./features/catalog/catalog.routes').then((m) => m.CATALOG_ROUTES),
       },
       {
         path: 'inventario',
-        canActivate: [permissionGuard('report.view')],
-        loadComponent: comingSoon,
-        data: { title: 'Inventario', icon: 'inventory' },
+        canActivate: [permissionGuard('report.view', 'config.edit', 'stock.advance')],
+        loadChildren: () =>
+          import('./features/inventory/inventory.routes').then((m) => m.INVENTORY_ROUTES),
       },
+      // Mantenimiento se mudó a Empresa → Sistema (doc 38, sección 10).
+      { path: 'mantenimiento', redirectTo: 'empresa/sistema' },
     ],
   },
   { path: '**', redirectTo: 'dashboard' },

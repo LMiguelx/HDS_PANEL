@@ -8,6 +8,8 @@ import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiMenu } from '../../shared/ui/menu/menu';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
+import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { ToastService } from '../../core/ui/toast';
 import { PromoModuleTabs } from './ui/module-tabs';
 import { PromoService } from './promo';
 import { PromoSummary } from './promo.types';
@@ -105,22 +107,43 @@ import { vigenciaText } from './promo-format';
                 </td>
                 <td>{{ p.promoTypeName || p.promoType }}</td>
                 <td>{{ p.scopeSummary }}</td>
-                <td class="promo-cell-strong">{{ p.benefitSummary }}</td>
+                <td class="promo-cell-strong">
+                  {{ p.benefitSummary }}
+                  @if (p.repeats) {
+                    <span class="promo-badge-repeats">Se repite</span>
+                  }
+                </td>
                 <td class="promo-cell-muted">{{ vigencia(p) }}</td>
                 <td>{{ p.salesChannelName }}</td>
                 <td><ui-status [label]="p.statusLabel || ''" /></td>
                 <td class="promo-row-menu-cell">
                   <ui-menu label="Ver, editar, activar, duplicar">
                     <button type="button" (click)="goToDetail(p)">Ver</button>
-                    <button type="button" (click)="duplicate(p)">Duplicar</button>
-                    @if (!p.active) {
-                      <button type="button" (click)="edit(p)">Editar</button>
-                    }
+                    <button type="button" *hasPermission="'order.manage'" (click)="simulate(p)">
+                      Simular
+                    </button>
+                    <button type="button" *hasPermission="'promo.create'" (click)="duplicate(p)">
+                      Duplicar
+                    </button>
+                    <button type="button" *hasPermission="'promo.create'" (click)="edit(p)">
+                      Editar
+                    </button>
                     @if (p.active) {
-                      <button type="button" (click)="deactivate(p)">Desactivar</button>
+                      <button
+                        type="button"
+                        *hasPermission="'promo.approve'"
+                        (click)="deactivate(p)"
+                      >
+                        Desactivar
+                      </button>
                     } @else {
-                      <button type="button" (click)="activate(p)">Activar</button>
+                      <button type="button" *hasPermission="'promo.approve'" (click)="activate(p)">
+                        Activar
+                      </button>
                     }
+                    <button type="button" *hasPermission="'promo.create'" (click)="remove(p)">
+                      Borrar
+                    </button>
                   </ui-menu>
                 </td>
               </tr>
@@ -136,7 +159,12 @@ import { vigenciaText } from './promo-format';
                 <ui-status [label]="p.statusLabel || ''" />
               </div>
               <div class="promo-card-mobile-scope">{{ p.scopeSummary }}</div>
-              <div class="promo-card-mobile-benefit">{{ p.benefitSummary }}</div>
+              <div class="promo-card-mobile-benefit">
+                {{ p.benefitSummary }}
+                @if (p.repeats) {
+                  <span class="promo-badge-repeats">Se repite</span>
+                }
+              </div>
               <div class="promo-card-mobile-vigencia">{{ vigencia(p) }}</div>
             </a>
           }
@@ -191,6 +219,17 @@ import { vigenciaText } from './promo-format';
       }
       .promo-cell-strong {
         font-weight: 800;
+      }
+      .promo-badge-repeats {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border: 1px solid var(--accent);
+        color: var(--accent-ink);
       }
       .promo-cell-muted {
         color: var(--ink-muted);
@@ -265,6 +304,8 @@ export class PromoListPage implements OnInit, OnDestroy {
   private promoSvc = inject(PromoService);
   private lookupSvc = inject(LookupService);
   private router = inject(Router);
+  private dialog = inject(UiDialogService);
+  private toast = inject(ToastService);
 
   protected columns = [
     'Nombre',
@@ -392,11 +433,39 @@ export class PromoListPage implements OnInit, OnDestroy {
   }
 
   protected edit(p: PromoSummary) {
+    // Con definitionEditable = false el propio asistente redirige al
+    // detalle (sección 7.1): no hace falta duplicar ese chequeo aquí.
     this.router.navigate(['/promociones', p.promoId, 'editar']);
+  }
+
+  protected simulate(p: PromoSummary) {
+    this.router.navigate(['/promociones/simular'], { queryParams: { promoId: p.promoId } });
   }
 
   protected activate(p: PromoSummary) {
     this.promoSvc.approve(p.promoId!).subscribe(() => this.load());
+  }
+
+  protected remove(p: PromoSummary) {
+    this.dialog
+      .confirm({
+        title: 'Borrar promoción',
+        message: '¿Borrar esta promoción? Esta acción no se puede deshacer.',
+        confirmLabel: 'Borrar',
+        destructive: true,
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.promoSvc.remove(p.promoId!).subscribe({
+          next: () => this.load(),
+          error: (err) => {
+            const detalle = err?.error?.detail ?? err?.error?.message;
+            this.toast.error(
+              detalle || 'No pudimos borrar la promoción: ya se aplicó en algún pedido.',
+            );
+          },
+        });
+      });
   }
 
   protected deactivate(p: PromoSummary) {

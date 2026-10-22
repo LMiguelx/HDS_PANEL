@@ -2,16 +2,16 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
+  ApplicationView,
   CreatePromoCommand,
   PendingChoiceView,
   PendingCountView,
-  PreviewCommand,
-  PreviewResult,
   PromoDetail,
   PromoPageResponse,
   ResolveChoiceCommand,
   TargetReachView,
   TargetsCommand,
+  UpdatePromoBasicsCommand,
   UpdatePromoCommand,
 } from './promo.types';
 
@@ -47,6 +47,11 @@ export class PromoService {
     return this.http.put<PromoDetail>(`${this.base}/${id}`, cmd);
   }
 
+  /** Edición básica (nombre, fecha de fin, prioridad) — doc 44, sección 7.3. Siempre permitida. */
+  updateBasics(id: number, cmd: UpdatePromoBasicsCommand) {
+    return this.http.patch<PromoDetail>(`${this.base}/${id}/basics`, cmd);
+  }
+
   remove(id: number) {
     return this.http.delete<void>(`${this.base}/${id}`);
   }
@@ -70,11 +75,6 @@ export class PromoService {
     return this.http.post<TargetReachView>(`${this.base}/targets/preview`, targets);
   }
 
-  /** Simula un pedido de ejemplo contra una promo ya creada. */
-  previewOrder(id: number, cmd: PreviewCommand) {
-    return this.http.post<PreviewResult>(`${this.base}/${id}/preview`, cmd);
-  }
-
   /** Crea la promo (nace apagada). */
   create(cmd: CreatePromoCommand) {
     return this.http.post<PromoDetail>(this.base, cmd);
@@ -90,5 +90,10 @@ export class PromoService {
 
   resolveChoice(promoApplicationId: number, cmd: ResolveChoiceCommand) {
     return this.http.post<void>(`${this.base}/pending-choices/${promoApplicationId}/resolve`, cmd);
+  }
+
+  /** Qué promociones se aplicaron a un pedido — doc 30, sección 9.2. `order.view_all`. */
+  applicationsByOrder(orderId: number) {
+    return this.http.get<ApplicationView[]>(`${this.base}/applications/by-order/${orderId}`);
   }
 }

@@ -1,0 +1,82 @@
+@if (loading() && !data()) {
+  <div class="vp-skeleton" role="status" aria-label="Cargando"></div>
+} @else if (error() && !data()) {
+  <ui-empty
+    variant="error"
+    title="No pudimos cargar la cartera"
+    body="Intenta de nuevo en unos segundos."
+  />
+} @else if (data(); as d) {
+  <div class="vp-head">
+    <span class="vp-title">Cartera completa · {{ d.customers.length }} clientes</span>
+    <div class="vp-day-chips">
+      <button
+        type="button"
+        class="vp-chip"
+        [class.on]="dayFilter() === null"
+        (click)="selectDay(null)"
+      >
+        Todos
+      </button>
+      @for (w of weekdays; track w.value) {
+        <button
+          type="button"
+          class="vp-chip"
+          [class.dim]="(byWeekdayMap().get(w.value) ?? 0) === 0"
+          [class.on]="dayFilter() === w.value"
+          (click)="selectDay(w.value)"
+        >
+          {{ w.label }} {{ byWeekdayMap().get(w.value) ?? 0 }}
+        </button>
+      }
+    </div>
+    <span class="vp-summary">
+      {{ d.scheduledOnDate }} le tocan hoy
+      @if (d.withoutSchedule > 0) {
+        · <span class="vp-warn">⚠ {{ d.withoutSchedule }} sin horario</span>
+      }
+      @if (d.withoutLocation > 0) {
+        · {{ d.withoutLocation }} sin ubicación
+      }
+    </span>
+  </div>
+
+  <div class="vp-body">
+    <div class="vp-side">
+      <ui-field
+        label="Buscar"
+        placeholder="Buscar por nombre o código"
+        [value]="search()"
+        (valueChange)="search.set($event)"
+      />
+      <div class="vp-list">
+        @for (c of filteredCustomers(); track c.customerId) {
+          <button type="button" class="vp-row" (click)="focusCustomer(c)">
+            <span class="vp-row-name">{{ c.customerName }}</span>
+            <span class="vp-row-meta">
+              <span class="vp-mono">{{ c.code }}</span>
+              @if (c.weekdays.length && c.weeksOfCycle.length) {
+                · Sec. {{ c.routeSequence ?? '—' }}
+              } @else {
+                · <span class="vp-warn">sin horario</span>
+              }
+            </span>
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="vp-map-wrap">
+      <div class="vp-map" #mapEl></div>
+      <div class="vp-legend">COLOR = VENDEDOR · LLENO = LE TOCA HOY</div>
+
+      <app-map-customer-popup
+        [data]="popupData()"
+        [loading]="popupLoading()"
+        [error]="popupError()"
+        [position]="popupPosition()"
+        (close)="closePopup()"
+      />
+    </div>
+  </div>
+}

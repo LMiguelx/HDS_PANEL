@@ -1,0 +1,238 @@
+@if (rows().length === 0) {
+  <ui-empty
+    variant="al-dia"
+    eyebrow="Al día"
+    title="Sin solicitudes de creación pendientes"
+    body="Cuando un vendedor pida dar de alta un cliente, aparece acá."
+  />
+} @else {
+  <ui-approval-tray [detailOpen]="selectedKey() !== null" (back)="select.emit(null)">
+    <div trayFilter>
+      <app-erp-segmented-filter
+        [counts]="filterCounts()"
+        [value]="filterValue()"
+        (valueChange)="filterValue.set($event)"
+      />
+    </div>
+
+    <div trayList>
+      @if (filteredRows().length === 0) {
+        <div class="ct-list-empty">
+          <p class="ct-muted">Ninguna solicitud con este filtro.</p>
+          <button type="button" class="ct-link" (click)="filterValue.set('all')">Ver todas</button>
+        </div>
+      } @else {
+        @for (r of filteredRows(); track r.requestId) {
+          <button
+            type="button"
+            class="ct-row"
+            [class.selected]="selectedKey() === String(r.requestId)"
+            (click)="pick(r.requestId)"
+          >
+            <div class="ct-row-top">
+              <span class="ct-row-name">{{ r.businessName }}</span>
+              <app-erp-badge
+                [label]="erpStatusLabel(r.erpRegistered).label"
+                [tone]="erpStatusLabel(r.erpRegistered).tone"
+              />
+            </div>
+            <div class="ct-row-line">
+              {{ r.documentNumber }} · {{ r.ubigeo ? ubigeoText(r.ubigeo) : 'Sin ubigeo' }}
+            </div>
+            <div class="ct-row-line ct-muted">
+              {{ r.requestedByName }} · {{ dateTimeText(r.createdAt) }}
+              @if (r.erpRegistered) {
+                <span class="ct-row-code">{{ r.customerCode }} · Sec. {{ r.routeSequence }}</span>
+              }
+            </div>
+          </button>
+        }
+      }
+    </div>
+
+    <div trayDetail>
+      @if (!selectedKey()) {
+        <ui-empty title="Elige una solicitud" body="Selecciona una fila para revisarla." />
+      } @else if (detailLoading()) {
+        <div class="ct-detail-skeleton" role="status" aria-label="Cargando"></div>
+      } @else if (detailError()) {
+        <ui-empty
+          variant="error"
+          title="No pudimos cargar la solicitud"
+          body="Intenta de nuevo en unos segundos."
+          actionLabel="Reintentar"
+          (action)="retryDetail()"
+        />
+      } @else if (detail(); as d) {
+        <div class="ct-detail-head">
+          <div>
+            <h2>{{ d.businessName }}</h2>
+            <p class="ct-detail-meta">
+              Solicitó {{ d.requestedByName }} · {{ dateTimeText(d.createdAt) }}
+            </p>
+          </div>
+          <app-erp-badge
+            [label]="erpStatusLabel(d.erpRegistered).label"
+            [tone]="erpStatusLabel(d.erpRegistered).tone"
+          />
+        </div>
+
+        <ui-status-steps [steps]="steps()" class="ct-steps" />
+
+        <h3 class="ct-block-title">Datos de la solicitud</h3>
+        <div class="ct-kv-grid">
+          <div class="ct-field">
+            <span class="ct-label">Documento</span>
+            <span class="ct-value"
+              >{{ documentTypeName(d.documentTypeId) }}<br /><span class="ct-mono">{{
+                d.documentNumber
+              }}</span></span
+            >
+          </div>
+          <div class="ct-field">
+            <span class="ct-label">Tipo de cliente</span>
+            <span class="ct-value">
+              @if (d.customerTypeId == null) {
+                <span class="ct-warn">Sin tipo</span>
+              } @else {
+                {{ customerTypeName(d.customerTypeId) }}
+              }
+            </span>
+          </div>
+          <div class="ct-field">
+            <span class="ct-label">Actividad</span>
+            <span class="ct-value">{{ d.businessActivity || '—' }}</span>
+          </div>
+          <div class="ct-field">
+            <span class="ct-label">Dirección</span>
+            <span class="ct-value">{{ d.address || '—' }}</span>
+          </div>
+          <div class="ct-field">
+            <span class="ct-label">Distrito · Provincia</span>
+            <span class="ct-value">{{ ubigeoText(d.ubigeo) }}</span>
+          </div>
+          <div class="ct-field">
+            <span class="ct-label">Teléfono</span>
+            <span class="ct-value">{{ d.phone || '—' }}</span>
+          </div>
+          <div class="ct-field">
+            <span class="ct-label">Ubicación GPS</span>
+            <span class="ct-value">
+              @if (d.latitude != null && d.longitude != null) {
+                Marcada ·
+                <a [href]="mapsUrl(d.latitude, d.longitude)" target="_blank" rel="noopener"
+                  >Ver en el mapa ↗</a
+                >
+              } @else {
+                <span class="ct-muted">Sin marcar</span>
+              }
+            </span>
+          </div>
+        </div>
+
+        <h3 class="ct-block-title">Registro en el ERP</h3>
+        @if (d.erpRegistered) {
+          <div class="ct-kv-grid">
+            <div class="ct-field">
+              <span class="ct-label">Código de cliente</span>
+              <span class="ct-value ct-mono">{{ d.customerCode }}</span>
+            </div>
+            <div class="ct-field">
+              <span class="ct-label">Secuencia de ruta</span>
+              <span class="ct-value">{{ d.routeSequence }}</span>
+            </div>
+            <div class="ct-field">
+              <span class="ct-label">Registrado</span>
+              <span class="ct-value">{{ dateTimeText(d.erpRegisteredAt) }}</span>
+            </div>
+          </div>
+        } @else {
+          <p class="ct-muted">
+            El ERP todavía no registra a este cliente. El código y la secuencia de ruta aparecerán
+            aquí.
+          </p>
+        }
+
+        <h3 class="ct-block-title">Asignación</h3>
+        <div class="ct-assign" [class.ct-disabled]="!d.erpRegistered">
+          <ui-typeahead
+            label="Vendedor"
+            [clearOnPick]="false"
+            [disabled]="!d.erpRegistered"
+            [search]="userSearch"
+            [(selected)]="vendor"
+            [hint]="vendor()?.id === d.requestedBy ? 'Quien hizo la solicitud' : ''"
+          />
+          <div class="ct-chip-group">
+            <span class="ct-label">Días de visita *</span>
+            <div class="ct-chips">
+              @for (day of weekdays; track day.value) {
+                <button
+                  type="button"
+                  class="ct-chip"
+                  [class.on]="weekdaysValue().includes(day.value)"
+                  [disabled]="!d.erpRegistered"
+                  (click)="toggleWeekday(day.value)"
+                >
+                  {{ day.label }}
+                </button>
+              }
+            </div>
+          </div>
+          <div class="ct-chip-group">
+            <span class="ct-label">Semanas del ciclo *</span>
+            <div class="ct-chips">
+              @for (week of cycleWeeks; track week.value) {
+                <button
+                  type="button"
+                  class="ct-chip"
+                  [class.on]="weeksValue().includes(week.value)"
+                  [disabled]="!d.erpRegistered"
+                  (click)="toggleWeek(week.value)"
+                >
+                  {{ week.label }}
+                </button>
+              }
+            </div>
+          </div>
+          @if (visitSummary()) {
+            <p class="ct-muted">{{ visitSummary() }}</p>
+          }
+          @if (!d.erpRegistered) {
+            <p class="ct-muted">
+              Podrás asignar el vendedor y el horario cuando el ERP registre al cliente.
+            </p>
+          }
+        </div>
+      }
+    </div>
+
+    <div trayFooter>
+      @if (detail(); as d) {
+        @if (approveReason()) {
+          <p class="ct-footer-reason">
+            <span class="material-icons" aria-hidden="true">info</span>
+            {{ approveReason() }}
+          </p>
+        }
+        @if (actionError()) {
+          <p class="ct-footer-error">{{ actionError() }}</p>
+        }
+        <div class="ct-footer-actions">
+          <button uiButton variant="secondary" [loading]="acting()" (click)="reject()">
+            Rechazar
+          </button>
+          <button
+            uiButton
+            variant="primary"
+            [disabled]="!canApprove()"
+            [loading]="acting()"
+            (click)="approve()"
+          >
+            Aprobar y crear
+          </button>
+        </div>
+      }
+    </div>
+  </ui-approval-tray>
+}

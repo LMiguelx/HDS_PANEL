@@ -58,12 +58,15 @@ let nextId = 0;
         height: 30px;
         min-height: 0;
         flex: none;
-        border: 1px solid var(--divider);
+        border: 1px solid var(--ink-muted);
         background: var(--surface-sunk);
+        border-radius: var(--radius-pill);
         cursor: pointer;
         position: relative;
         padding: 0;
-        transition: background var(--dur-fast) var(--ease-standard);
+        transition:
+          background var(--dur-fast) var(--ease-standard),
+          border-color var(--dur-fast) var(--ease-standard);
       }
       .ui-toggle-track.on {
         background: var(--accent);
@@ -83,7 +86,9 @@ let nextId = 0;
         left: 3px;
         width: 22px;
         height: 22px;
-        background: var(--bg);
+        border-radius: 50%;
+        background: light-dark(#ffffff, #0f0e0d);
+        box-shadow: 0 1px 3px light-dark(rgba(32, 30, 29, 0.35), rgba(0, 0, 0, 0.5));
         transition: transform var(--dur-fast) var(--ease-standard);
       }
       .ui-toggle-track.on .ui-toggle-knob {
