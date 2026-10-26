@@ -6,6 +6,7 @@ const RECALC_CODES = new Set([
   'BONUS_WITH_PRICE',
   'TOTAL_MISMATCH',
   'DISCOUNT_MISMATCH',
+  'LINE_DISCOUNT_MISMATCH', // doc 47, sección 15 — "Descuento por producto"
   'BONUS_WITHOUT_ORIGIN',
   'BONUS_NOT_GRANTED',
   'BONUS_LINE_MISSING',

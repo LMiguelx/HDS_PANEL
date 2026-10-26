@@ -179,6 +179,14 @@ interface CartLine {
                     <span>{{ sl.quantity }} × {{ sl.productName }}</span>
                     <span class="sim-muted">{{ formatSoles(sl.subtotal) }}</span>
                   </div>
+                  @if (sl.discountAmount) {
+                    <div class="sim-result-line-discount">
+                      <span>Descuento: − {{ formatSoles(sl.discountAmount) }}</span>
+                      <span class="sim-result-line-net"
+                        >Neto: {{ formatSoles(sl.netSubtotal) }}</span
+                      >
+                    </div>
+                  }
                 }
               </div>
 
@@ -196,7 +204,15 @@ interface CartLine {
                       <div class="sim-muted">{{ g.displayText }}</div>
                     }
                     @for (c of promo.pendingChoices; track c.groupLabel) {
-                      <div class="sim-muted">{{ c.groupLabel }} — se elegiría al entregar</div>
+                      <div class="sim-pending-choice">
+                        <div class="sim-pending-choice-title">
+                          Premio a elegir · {{ c.groupLabel }}
+                        </div>
+                        <div class="sim-muted">El vendedor lo elige al tomar el pedido.</div>
+                        @for (opt of c.options; track opt.displayText) {
+                          <div class="sim-muted">{{ opt.displayText }}</div>
+                        }
+                      </div>
                     }
                   </div>
                 }
@@ -353,6 +369,28 @@ interface CartLine {
         justify-content: space-between;
         gap: 12px;
         font-size: 13px;
+      }
+      .sim-result-line-discount {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 12px;
+        color: var(--status-danger);
+        margin-top: -2px;
+        margin-bottom: 4px;
+      }
+      .sim-result-line-net {
+        font-weight: 700;
+      }
+      .sim-pending-choice {
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px dashed var(--hairline);
+      }
+      .sim-pending-choice-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--accent-ink);
       }
       .sim-result-promo {
         padding: 8px 0;

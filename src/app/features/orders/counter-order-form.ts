@@ -32,6 +32,7 @@ import { AllocationService } from '../sales/allocation';
 import { OrderSimulationService } from '../promos/order-simulation';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
 import { LookupService, toUiLookup } from '../promos/lookup';
+import { PromoCatalogPanel } from '../promos/ui/promo-catalog-panel';
 import { ToastService } from '../../core/ui/toast';
 import {
   CounterCustomerContext,
@@ -40,7 +41,7 @@ import {
   SuggestedItem,
 } from '../../shared/models/counter-order.models';
 import {
-  MobilePromoView,
+  MobilePromoCatalogView,
   OrderSimulationView,
   SimulateOrderCommand,
 } from '../../shared/models/promo-simulation.models';
@@ -123,6 +124,7 @@ function inputNumber(input: HTMLInputElement): number {
     UiButton,
     UiField,
     UiToggle,
+    PromoCatalogPanel,
     UiTypeahead,
     UiCard,
     UiEmpty,
@@ -451,23 +453,13 @@ function inputNumber(input: HTMLInputElement): number {
                         }
                       }
                       @case ('promociones') {
-                        @if (availablePromos().length === 0) {
-                          <ui-empty
-                            title="Sin promociones"
-                            body="No hay promociones vigentes para este cliente y canal."
-                          />
-                        } @else {
-                          <div class="cof-promo-list cof-scroll-list">
-                            @for (p of availablePromos(); track p.promoId) {
-                              <div class="cof-promo-card">
-                                <div class="cof-promo-name">{{ p.name }}</div>
-                                <div class="cof-muted">{{ p.requirementText }}</div>
-                                <div class="cof-muted">{{ p.rewardText }}</div>
-                                <div class="cof-promo-valid">{{ p.validUntilText }}</div>
-                              </div>
-                            }
-                          </div>
-                        }
+                        <app-promo-catalog-panel
+                          [catalog]="availablePromos()"
+                          [loading]="availablePromosLoading()"
+                          [error]="availablePromosError()"
+                          (featuredOnlyChange)="onCatalogFeaturedOnlyChange($event)"
+                          (retry)="retryAvailablePromos()"
+                        />
                       }
                     }
                   </div>
@@ -971,8 +963,7 @@ function inputNumber(input: HTMLInputElement): number {
         max-height: 360px;
         overflow-y: auto;
       }
-      .cof-suggested-list,
-      .cof-promo-list {
+      .cof-suggested-list {
         display: grid;
         gap: 1px;
         background: var(--hairline);
@@ -989,21 +980,6 @@ function inputNumber(input: HTMLInputElement): number {
       .cof-suggested-name {
         font-weight: 600;
         font-size: 14px;
-      }
-      .cof-promo-card {
-        background: var(--surface);
-        padding: 12px 14px;
-        display: grid;
-        gap: 2px;
-      }
-      .cof-promo-name {
-        font-weight: 700;
-        font-size: 14px;
-      }
-      .cof-promo-valid {
-        font-size: 11px;
-        color: var(--ink-muted);
-        margin-top: 4px;
       }
       .cof-lines {
         display: grid;
@@ -1245,7 +1221,10 @@ export class CounterOrderFormPage implements OnInit {
   protected activeTab = signal<FormTab>('catalogo');
   protected suggested = signal<SuggestedItem[]>([]);
   protected suggestedLoading = signal(false);
-  protected availablePromos = signal<MobilePromoView[]>([]);
+  protected availablePromos = signal<MobilePromoCatalogView | null>(null);
+  protected availablePromosLoading = signal(false);
+  protected availablePromosError = signal(false);
+  private availablePromosFeaturedOnly = false;
 
   protected simResult = signal<OrderSimulationView | null>(null);
   protected simulating = signal(false);
@@ -1518,7 +1497,7 @@ export class CounterOrderFormPage implements OnInit {
     this.deliverNow.set(false);
     this.idempotencyKey.set(newIdempotencyKey());
     this.suggested.set([]);
-    this.availablePromos.set([]);
+    this.availablePromos.set(null);
     this.resetAttribution();
     this.loadContext(item.id);
   }
@@ -1606,13 +1585,36 @@ export class CounterOrderFormPage implements OnInit {
       },
       error: () => this.suggestedLoading.set(false),
     });
+    this.loadAvailablePromos(customerId, false);
+  }
+
+  /** `featuredOnly` por defecto `false`: en mostrador se ven todas (doc 49, sección 9.1). */
+  protected loadAvailablePromos(customerId: number, featuredOnly: boolean) {
     const salesChannelId = this.resolvedSalesChannelId();
-    if (salesChannelId != null) {
-      this.simulationSvc.available(customerId, salesChannelId).subscribe({
-        next: (list) => this.availablePromos.set(list),
-        error: () => this.availablePromos.set([]),
-      });
-    }
+    if (salesChannelId == null) return;
+    this.availablePromosFeaturedOnly = featuredOnly;
+    this.availablePromosLoading.set(true);
+    this.availablePromosError.set(false);
+    this.simulationSvc.available(customerId, salesChannelId, featuredOnly).subscribe({
+      next: (catalog) => {
+        this.availablePromos.set(catalog);
+        this.availablePromosLoading.set(false);
+      },
+      error: () => {
+        this.availablePromosError.set(true);
+        this.availablePromosLoading.set(false);
+      },
+    });
+  }
+
+  protected onCatalogFeaturedOnlyChange(featuredOnly: boolean) {
+    const customerId = this.customer()?.id;
+    if (customerId != null) this.loadAvailablePromos(customerId, featuredOnly);
+  }
+
+  protected retryAvailablePromos() {
+    const customerId = this.customer()?.id;
+    if (customerId != null) this.loadAvailablePromos(customerId, this.availablePromosFeaturedOnly);
   }
 
   protected addProduct(item: UiLookupItem) {
@@ -1715,7 +1717,11 @@ export class CounterOrderFormPage implements OnInit {
       next: (result) => {
         this.submitting.set(false);
         this.toast.success(
-          result.duplicate ? 'Este pedido ya se había registrado.' : 'Pedido registrado.',
+          result.duplicate
+            ? 'Este pedido ya se había registrado.'
+            : result.pendingChoiceCount > 0
+              ? `Pedido registrado. Ganó ${result.pendingChoiceCount} premio(s) a elegir.`
+              : 'Pedido registrado.',
         );
         this.idempotencyKey.set(newIdempotencyKey());
         this.router.navigate(['/pedidos/detalle', result.orderId]);

@@ -132,7 +132,14 @@ const TOP_PRODUCTS = 10;
             <thead>
               <tr>
                 @for (col of columns(); track col.key) {
-                  <th [class.bst-col-right]="col.type !== 'text' && col.type !== 'code'">
+                  <th
+                    [class.bst-col-right]="col.type !== 'text' && col.type !== 'code'"
+                    [title]="
+                      col.key === 'discountAmount'
+                        ? 'Descuento de promociones de cada producto.'
+                        : ''
+                    "
+                  >
                     {{ col.header }}
                   </th>
                 }

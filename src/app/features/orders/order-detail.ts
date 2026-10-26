@@ -21,7 +21,14 @@ import {
   OrderBillingValidation,
 } from '../../shared/models/billing-validation.models';
 import { hasRecalcFix } from '../billing/billing-validation-format';
-import { ApplicationView, ChoiceOptionView, PendingChoiceView } from '../promos/promo.types';
+import { ApplicationView, PendingChoiceView } from '../promos/promo.types';
+import { PromoChoiceDialog, PromoChoiceDialogResult } from '../promos/ui/promo-choice-dialog';
+import { quantityText } from '../sales-reports/sales-report-format';
+import { TelesalesApi } from '../televentas/data-access/televentas.api';
+import {
+  MobileOrderChoiceOptionView,
+  MobileOrderChoiceView,
+} from '../televentas/domain/televentas.models';
 import {
   ORDER_LINE_TYPE_COLOR_VAR,
   deliveryStatusName,
@@ -140,27 +147,23 @@ import { formatSoles } from '../../shared/pipes/money';
 
         @if (o.statusCode === 'OPEN' && pendingChoices().length > 0) {
           <div class="od-alert od-alert-warn">
-            <strong>Falta elegir un premio</strong> de una promoción antes de poder entregar o
-            facturar este pedido.
+            <strong>Falta elegir un premio</strong> de una promoción. No se puede enviar a
+            facturación hasta resolverlo.
             @for (item of pendingChoices(); track item.promoApplicationId) {
               <div class="od-choice-card">
-                <div class="od-choice-label">
+                <span class="od-choice-label">
                   {{ item.promoName }} — {{ item.groupLabel || 'Elige tu premio' }}
-                </div>
-                <div class="od-choice-options">
-                  @for (opt of item.options; track opt.optionId) {
-                    <button
-                      type="button"
-                      uiButton
-                      variant="secondary"
-                      size="sm"
-                      [disabled]="!optionAvailable(opt) || resolvingChoice()"
-                      (click)="resolveChoice(item, opt)"
-                    >
-                      {{ opt.displayText || opt.label }}
-                    </button>
-                  }
-                </div>
+                </span>
+                <button
+                  type="button"
+                  uiButton
+                  variant="secondary"
+                  size="sm"
+                  *hasPermission="'promo.resolve_choice'"
+                  (click)="openChoiceDialog(item)"
+                >
+                  Resolver
+                </button>
               </div>
             }
           </div>
@@ -240,6 +243,8 @@ import { formatSoles } from '../../shared/pipes/money';
                     <th>Cantidad</th>
                     <th>Precio unit.</th>
                     <th>Subtotal</th>
+                    <th>Descuento</th>
+                    <th>Neto</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -259,14 +264,32 @@ import { formatSoles } from '../../shared/pipes/money';
                       <td class="od-muted">{{ item.quantity }}</td>
                       <td class="od-muted">{{ item.bonus ? '—' : formatSoles(item.unitPrice) }}</td>
                       <td class="od-muted">{{ item.bonus ? '—' : formatSoles(item.subtotal) }}</td>
+                      <td class="od-discount">
+                        {{
+                          item.bonus || !item.discountAmount
+                            ? '—'
+                            : '− ' + formatSoles(item.discountAmount)
+                        }}
+                      </td>
+                      <td class="od-net">{{ item.bonus ? '—' : formatSoles(item.netSubtotal) }}</td>
                     </tr>
                     @if (item.stockPending) {
                       <tr class="od-pending-note-row">
-                        <td colspan="6" class="od-pending-note">⚠ Pendiente de stock</td>
+                        <td colspan="8" class="od-pending-note">⚠ Pendiente de stock</td>
                       </tr>
                     }
                   }
                 </tbody>
+                @if (o.discountAmount) {
+                  <tfoot>
+                    <tr class="od-totals-row">
+                      <td colspan="5" class="od-muted">Subtotal</td>
+                      <td class="od-muted">{{ formatSoles(o.totalAmount) }}</td>
+                      <td class="od-discount">− {{ formatSoles(o.discountAmount) }}</td>
+                      <td class="od-net">{{ formatSoles(o.netAmount) }}</td>
+                    </tr>
+                  </tfoot>
+                }
               </table>
 
               <div class="od-cards-mobile">
@@ -284,6 +307,11 @@ import { formatSoles } from '../../shared/pipes/money';
                       {{ item.quantity }}
                       @if (!item.bonus) {
                         × {{ formatSoles(item.unitPrice) }} = {{ formatSoles(item.subtotal) }}
+                        @if (item.discountAmount) {
+                          ·
+                          <span class="od-discount">− {{ formatSoles(item.discountAmount) }}</span>
+                          · <span class="od-net">{{ formatSoles(item.netSubtotal) }}</span>
+                        }
                       }
                     </div>
                     @if (item.stockPending) {
@@ -292,25 +320,113 @@ import { formatSoles } from '../../shared/pipes/money';
                   </div>
                 }
               </div>
+
+              @if (o.discountAmount) {
+                <p class="od-discount-note">
+                  Cada promoción descuenta sobre el precio de lista de los productos que la
+                  activaron. Si un producto recibe varias, se suman.
+                </p>
+              }
             </ui-card>
 
-            @if (applications().length > 0) {
+            @if (o.originCode === 'TELESALES' && mobileOrderChoices().length > 0) {
               <ui-card>
-                <h2 class="od-section-title">Promociones aplicadas</h2>
-                <div class="od-promo-list">
-                  @for (a of applications(); track a.promoApplicationId) {
-                    <div class="od-promo-row">
-                      <span class="od-promo-name">{{ a.promoName }}</span>
-                      <span class="od-muted">
-                        @if (a.productName) {
-                          {{ a.quantity }} × {{ a.productName }}
-                        } @else if (a.discountAmount) {
-                          {{ formatSoles(a.discountAmount) }} de descuento
-                        }
-                      </span>
+                <h2 class="od-section-title">Premios a elegir</h2>
+                @for (c of mobileOrderChoices(); track mobileChoiceKey(c)) {
+                  <div class="od-mchoice-card">
+                    <div class="od-mchoice-head">
+                      <span class="od-mchoice-title">✦ {{ c.promoName }} · {{ c.modeText }}</span>
+                      <ui-status [label]="c.statusLabel || ''" />
                     </div>
-                  }
+                    @if (c.status === 'DECLINED') {
+                      <p class="od-muted">Supervisión decidió no otorgar este premio.</p>
+                    } @else {
+                      @for (opt of c.options; track opt.benefitLine) {
+                        <label class="od-mchoice-option">
+                          <input
+                            [type]="(c.chooseCount ?? 1) > 1 ? 'checkbox' : 'radio'"
+                            [name]="mobileChoiceKey(c)"
+                            [disabled]="!isEditingMobileChoice(c)"
+                            [checked]="isMobileChoiceOptionChecked(c, opt)"
+                            (change)="toggleMobileChoiceOption(c, opt)"
+                          />
+                          {{ opt.displayText }}
+                        </label>
+                      }
+                      @if (c.editable) {
+                        <div class="od-mchoice-actions">
+                          @if (isEditingMobileChoice(c)) {
+                            <button
+                              type="button"
+                              uiButton
+                              variant="primary"
+                              size="sm"
+                              [disabled]="!canSaveMobileChoice(c) || savingMobileChoice()"
+                              [loading]="savingMobileChoice()"
+                              (click)="saveMobileChoice(o.orderId, c)"
+                            >
+                              Guardar elección
+                            </button>
+                          } @else {
+                            <button
+                              type="button"
+                              uiButton
+                              variant="secondary"
+                              size="sm"
+                              (click)="startEditingMobileChoice(c)"
+                            >
+                              {{ c.status === 'PENDING' ? 'Elegir premio' : 'Cambiar elección' }}
+                            </button>
+                          }
+                        </div>
+                      }
+                    }
+                  </div>
+                }
+              </ui-card>
+            }
+
+            @if (applicationsError()) {
+              <ui-card>
+                <h2 class="od-section-title">Promociones del pedido</h2>
+                <ui-empty
+                  variant="error"
+                  title="No pudimos cargar las promociones del pedido"
+                  body="Intenta de nuevo en unos segundos."
+                  actionLabel="Reintentar"
+                  (action)="loadApplications(o.orderId)"
+                />
+              </ui-card>
+            } @else if (visibleApplications().length > 0) {
+              <ui-card>
+                <div class="od-promo-head">
+                  <h2 class="od-section-title">Promociones del pedido</h2>
+                  <button type="button" class="od-history-toggle" (click)="toggleHistory()">
+                    {{ showHistory() ? 'Ocultar historial' : 'Ver historial' }}
+                  </button>
                 </div>
+                <table class="ui-table-grid od-promo-table">
+                  <thead>
+                    <tr>
+                      <th>Promoción</th>
+                      <th>Premio</th>
+                      <th>Producto</th>
+                      <th>Valor</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (a of visibleApplications(); track a.promoApplicationId) {
+                      <tr [class.od-row-muted]="a.status === 'REVERSED'">
+                        <td>{{ a.promoName }}</td>
+                        <td class="od-muted">{{ a.benefitTypeName }}</td>
+                        <td class="od-muted">{{ a.productName || '—' }}</td>
+                        <td class="od-muted">{{ applicationValueText(a) }}</td>
+                        <td><ui-status [label]="a.statusLabel || ''" /></td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
               </ui-card>
             }
 
@@ -501,16 +617,15 @@ import { formatSoles } from '../../shared/pipes/money';
         margin-top: 10px;
         padding-top: 10px;
         border-top: 1px dashed var(--hairline);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
       }
       .od-choice-label {
         font-size: 13px;
         font-weight: 600;
-        margin-bottom: 6px;
-      }
-      .od-choice-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
       }
       .od-grid {
         display: grid;
@@ -589,22 +704,87 @@ import { formatSoles } from '../../shared/pipes/money';
       .od-cards-mobile {
         display: none;
       }
-      .od-promo-list {
+      .od-mchoice-card {
+        padding: 12px 14px;
+        border: 2px solid var(--accent);
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
         display: grid;
-        gap: 1px;
-        background: var(--hairline);
-        border: 1px solid var(--hairline);
+        gap: 6px;
+        margin-bottom: 10px;
       }
-      .od-promo-row {
+      .od-mchoice-card:last-child {
+        margin-bottom: 0;
+      }
+      .od-mchoice-head {
         display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .od-mchoice-title {
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .od-mchoice-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .od-mchoice-option input {
+        accent-color: var(--accent);
+      }
+      .od-mchoice-option input:not(:disabled) {
+        cursor: pointer;
+      }
+      .od-mchoice-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 4px;
+      }
+      .od-promo-head {
+        display: flex;
+        align-items: center;
         justify-content: space-between;
         gap: 12px;
-        background: var(--surface);
-        padding: 8px 10px;
-        font-size: 13px;
+        margin-bottom: 14px;
       }
-      .od-promo-name {
-        font-weight: 600;
+      .od-promo-head .od-section-title {
+        margin: 0;
+      }
+      .od-history-toggle {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--accent-ink);
+        cursor: pointer;
+      }
+      .od-promo-table {
+        width: 100%;
+      }
+      .od-row-muted {
+        opacity: 0.55;
+      }
+      .od-discount {
+        color: var(--status-danger);
+        font-variant-numeric: var(--tnum);
+      }
+      .od-net {
+        font-weight: 700;
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .od-totals-row td {
+        border-top: 2px solid var(--divider);
+        font-weight: 700;
+      }
+      .od-discount-note {
+        margin: 10px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .od-delivery {
         display: grid;
@@ -690,6 +870,7 @@ import { formatSoles } from '../../shared/pipes/money';
 export class OrderDetailPage {
   private orderSvc = inject(OrderAdminService);
   private promoSvc = inject(PromoService);
+  private telesalesApi = inject(TelesalesApi);
   private catalogSvc = inject(CatalogLookupService);
   private billingSvc = inject(BillingValidationAdminService);
   private auth = inject(AuthService);
@@ -716,7 +897,19 @@ export class OrderDetailPage {
 
   protected pendingChoices = signal<PendingChoiceView[]>([]);
   protected applications = signal<ApplicationView[]>([]);
-  protected resolvingChoice = signal(false);
+  protected mobileOrderChoices = signal<MobileOrderChoiceView[]>([]);
+  private mobileChoiceEditing = signal<Set<string>>(new Set());
+  private mobileChoiceSelections = signal<Map<string, number[]>>(new Map());
+  protected savingMobileChoice = signal(false);
+  protected applicationsError = signal(false);
+  protected showHistory = signal(false);
+
+  /** Por defecto solo lo vigente; "Ver historial" agrega REVERSED — doc 47, sección 12.2. */
+  protected visibleApplications = computed(() =>
+    this.showHistory()
+      ? this.applications()
+      : this.applications().filter((a) => a.status !== 'REVERSED'),
+  );
   protected delivering = signal(false);
   protected sendingToBilling = signal(false);
   protected cancelling = signal(false);
@@ -767,10 +960,8 @@ export class OrderDetailPage {
         this.loading.set(false);
         this.billingValidation.set(null);
         this.loadPendingChoices(detail);
-        this.promoSvc
-          .applicationsByOrder(id)
-          .pipe(catchError(() => of([])))
-          .subscribe((list) => this.applications.set(list));
+        this.loadApplications(id);
+        if (detail.originCode === 'TELESALES') this.loadMobileOrderChoices(id);
       },
       error: () => {
         this.loading.set(false);
@@ -791,25 +982,131 @@ export class OrderDetailPage {
     });
   }
 
-  protected optionAvailable(opt: ChoiceOptionView): boolean {
-    return opt.availableStock == null || opt.availableStock > 0;
+  loadApplications(orderId: number) {
+    this.applicationsError.set(false);
+    this.promoSvc.applicationsByOrder(orderId).subscribe({
+      next: (list) => this.applications.set(list),
+      error: (err) => {
+        // Sin permiso para este endpoint: no mostrar la tarjeta — doc 47, sección 12.2.
+        if (err?.status === 403) {
+          this.applications.set([]);
+          return;
+        }
+        this.applicationsError.set(true);
+      },
+    });
   }
 
-  protected resolveChoice(item: PendingChoiceView, opt: ChoiceOptionView) {
-    if (!this.optionAvailable(opt) || !opt.optionId) return;
-    this.resolvingChoice.set(true);
-    this.promoSvc
-      .resolveChoice(item.promoApplicationId!, { chosenOptionIds: [opt.optionId] })
+  protected toggleHistory() {
+    this.showHistory.update((v) => !v);
+  }
+
+  protected applicationValueText(a: ApplicationView): string {
+    if (a.productName) return quantityText(a.quantity ?? 0) + ' und';
+    if (a.discountAmount) return formatSoles(a.discountAmount);
+    return '—';
+  }
+
+  /** Abre la tarjeta de un premio pendiente en un panel flotante — doc 47, sección 12.2. */
+  protected openChoiceDialog(item: PendingChoiceView) {
+    this.dialog
+      .open<PromoChoiceDialog, PendingChoiceView, PromoChoiceDialogResult>(PromoChoiceDialog, {
+        data: item,
+      })
+      .afterClosed()
+      .subscribe((result) => {
+        if (result) this.load();
+      });
+  }
+
+  /** GET /api/mobile/orders/{orderId}/promo-choices — doc 49, sección 10.2. */
+  private loadMobileOrderChoices(orderId: number) {
+    this.telesalesApi
+      .orderChoices(orderId)
+      .pipe(catchError(() => of([])))
+      .subscribe((list) => {
+        this.mobileOrderChoices.set(list);
+        this.mobileChoiceEditing.set(new Set());
+        this.mobileChoiceSelections.set(new Map());
+      });
+  }
+
+  protected mobileChoiceKey(c: MobileOrderChoiceView): string {
+    return `${c.promoId}-${c.tier}-${c.benefitGroup}`;
+  }
+
+  protected isEditingMobileChoice(c: MobileOrderChoiceView): boolean {
+    return this.mobileChoiceEditing().has(this.mobileChoiceKey(c));
+  }
+
+  protected startEditingMobileChoice(c: MobileOrderChoiceView) {
+    const key = this.mobileChoiceKey(c);
+    this.mobileChoiceEditing.update((set) => new Set(set).add(key));
+    this.mobileChoiceSelections.update((map) => {
+      const next = new Map(map);
+      next.set(key, []);
+      return next;
+    });
+  }
+
+  protected isMobileChoiceOptionChecked(
+    c: MobileOrderChoiceView,
+    opt: MobileOrderChoiceOptionView,
+  ): boolean {
+    if (!this.isEditingMobileChoice(c)) return opt.chosen;
+    return (this.mobileChoiceSelections().get(this.mobileChoiceKey(c)) ?? []).includes(
+      opt.benefitLine,
+    );
+  }
+
+  protected toggleMobileChoiceOption(c: MobileOrderChoiceView, opt: MobileOrderChoiceOptionView) {
+    if (!this.isEditingMobileChoice(c)) return;
+    const key = this.mobileChoiceKey(c);
+    this.mobileChoiceSelections.update((map) => {
+      const next = new Map(map);
+      if ((c.chooseCount ?? 1) <= 1) {
+        next.set(key, [opt.benefitLine]);
+        return next;
+      }
+      const current = next.get(key) ?? [];
+      next.set(
+        key,
+        current.includes(opt.benefitLine)
+          ? current.filter((l) => l !== opt.benefitLine)
+          : [...current, opt.benefitLine],
+      );
+      return next;
+    });
+  }
+
+  /** Deshabilitado hasta elegir exactamente `chooseCount` opciones distintas de las actuales. */
+  protected canSaveMobileChoice(c: MobileOrderChoiceView): boolean {
+    const selected = this.mobileChoiceSelections().get(this.mobileChoiceKey(c)) ?? [];
+    if (selected.length !== (c.chooseCount ?? 1)) return false;
+    const current = [...(c.chosenBenefitLines ?? [])].sort();
+    const next = [...selected].sort();
+    return JSON.stringify(current) !== JSON.stringify(next);
+  }
+
+  protected saveMobileChoice(orderId: number, c: MobileOrderChoiceView) {
+    if (!this.canSaveMobileChoice(c)) return;
+    const benefitLines = this.mobileChoiceSelections().get(this.mobileChoiceKey(c)) ?? [];
+    this.savingMobileChoice.set(true);
+    this.telesalesApi
+      .saveOrderChoices(orderId, {
+        choices: [{ promoId: c.promoId, tier: c.tier, benefitGroup: c.benefitGroup, benefitLines }],
+      })
       .subscribe({
-        next: () => {
-          this.resolvingChoice.set(false);
-          this.toast.success('Premio elegido.');
-          this.load();
+        next: (detail) => {
+          this.savingMobileChoice.set(false);
+          this.order.set(detail);
+          this.toast.success('Elección actualizada');
+          this.loadMobileOrderChoices(orderId);
         },
         error: (err) => {
-          this.resolvingChoice.set(false);
+          this.savingMobileChoice.set(false);
           const detalle = err?.error?.detail ?? err?.error?.message;
-          this.toast.error(detalle || 'No pudimos registrar la elección.');
+          this.toast.error(detalle || 'No pudimos guardar la elección.');
         },
       });
   }

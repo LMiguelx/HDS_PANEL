@@ -20,9 +20,18 @@ import { AllocationService } from '../../../sales/allocation';
 import { CustomerDetail, CustomerSummary } from '../../../../shared/models/customer.models';
 import { ProductView } from '../../../../shared/models/catalog.models';
 import { SuggestedItem } from '../../../../shared/models/counter-order.models';
-import { MobilePromoProgressView, MobilePromoView } from '../../../../shared/models/promo-simulation.models';
+import {
+  MobilePromoCatalogView,
+  MobilePromoProgressView,
+} from '../../../../shared/models/promo-simulation.models';
+import { PromoCatalogPanel } from '../../../promos/ui/promo-catalog-panel';
 import { AllocationView } from '../../../../shared/models/allocation.models';
-import { PriceResolved } from '../../domain/televentas.models';
+import {
+  MobileChoiceOptionView,
+  MobileChoiceView,
+  PriceResolved,
+  PromoChoiceCommand,
+} from '../../domain/televentas.models';
 import { formatSoles } from '../../../../shared/pipes/money';
 import { isWholeQuantity, toWholeQuantity } from '../../../../shared/utils/quantity';
 import { ratingText } from '../../../customers/customer-format';
@@ -74,7 +83,7 @@ function inputNumber(input: HTMLInputElement): number {
  */
 @Component({
   selector: 'app-new-call-order',
-  imports: [UiButton, UiField, UiCard, UiEmpty, UiBadge, UiTabs],
+  imports: [UiButton, UiField, UiCard, UiEmpty, UiBadge, UiTabs, PromoCatalogPanel],
   templateUrl: './new-call-order.html',
   styleUrls: ['./new-call-order.scss'],
 })
@@ -142,7 +151,10 @@ export class NewCallOrderPage {
 
   protected suggested = signal<SuggestedItem[]>([]);
   protected suggestedLoading = signal(false);
-  protected promos = signal<MobilePromoView[]>([]);
+  protected promoCatalog = signal<MobilePromoCatalogView | null>(null);
+  protected promoCatalogLoading = signal(false);
+  protected promoCatalogError = signal(false);
+  private promoCatalogFeaturedOnly = true;
 
   protected allocations = signal<AllocationView[]>([]);
   protected allocationQuantities = signal<Map<number, number>>(new Map());
@@ -160,6 +172,8 @@ export class NewCallOrderPage {
   protected prices = signal<Map<number, PriceResolved>>(new Map());
   protected pricesLoading = signal(false);
   protected promoProgress = signal<MobilePromoProgressView[]>([]);
+  protected draftChoices = signal<MobileChoiceView[]>([]);
+  private draftChoiceSelections = signal<Map<string, number[]>>(new Map());
 
   protected subtotal = computed(() =>
     this.lines().reduce((sum, l) => sum + (this.prices().get(l.productId)?.subtotal ?? 0), 0),
@@ -237,6 +251,8 @@ export class NewCallOrderPage {
           if (!customer || !paymentConditionId || lines.length === 0) {
             this.prices.set(new Map());
             this.promoProgress.set([]);
+            this.draftChoices.set([]);
+            this.draftChoiceSelections.set(new Map());
             return of(null);
           }
           this.pricesLoading.set(true);
@@ -251,20 +267,25 @@ export class NewCallOrderPage {
               const map = new Map<number, PriceResolved>();
               for (const r of results) if (r) map.set(r.productId, r);
               this.prices.set(map);
-              return this.api
-                .draftPreview({
-                  customerId: customer.customerId,
-                  paymentConditionId,
-                  lines: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
-                })
-                .pipe(catchError(() => of([])));
+              const draftCmd = {
+                customerId: customer.customerId,
+                paymentConditionId,
+                lines: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+              };
+              return forkJoin({
+                progress: this.api.draftPreview(draftCmd).pipe(catchError(() => of([]))),
+                choices: this.api.draftChoices(draftCmd).pipe(catchError(() => of([]))),
+              });
             }),
           );
         }),
       )
-      .subscribe((progress) => {
+      .subscribe((result) => {
         this.pricesLoading.set(false);
-        if (progress) this.promoProgress.set(progress);
+        if (!result) return;
+        this.promoProgress.set(result.progress ?? []);
+        this.draftChoices.set(result.choices ?? []);
+        this.pruneStaleChoiceSelections(result.choices ?? []);
       });
 
     effect(() => {
@@ -330,14 +351,42 @@ export class NewCallOrderPage {
       },
       error: () => this.suggestedLoading.set(false),
     });
-    this.api.availablePromos(customerId).subscribe({
-      next: (list) => this.promos.set(list),
-      error: () => this.promos.set([]),
-    });
+    this.loadPromoCatalog(customerId, true);
     this.allocationSvc.mine().subscribe({
       next: (list) => this.allocations.set(list),
       error: () => this.allocations.set([]),
     });
+  }
+
+  /** `featuredOnly` por defecto `true` (doc 49, sección 10.1); si no hay destacadas, abre en Todas. */
+  private loadPromoCatalog(customerId: number, featuredOnly: boolean) {
+    this.promoCatalogFeaturedOnly = featuredOnly;
+    this.promoCatalogLoading.set(true);
+    this.promoCatalogError.set(false);
+    this.api.availablePromos(customerId, featuredOnly).subscribe({
+      next: (catalog) => {
+        this.promoCatalogLoading.set(false);
+        if (featuredOnly && catalog.featuredCount === 0) {
+          this.loadPromoCatalog(customerId, false);
+          return;
+        }
+        this.promoCatalog.set(catalog);
+      },
+      error: () => {
+        this.promoCatalogLoading.set(false);
+        this.promoCatalogError.set(true);
+      },
+    });
+  }
+
+  protected onCatalogFeaturedOnlyChange(featuredOnly: boolean) {
+    const customerId = this.customer()?.customerId;
+    if (customerId != null) this.loadPromoCatalog(customerId, featuredOnly);
+  }
+
+  protected retryPromoCatalog() {
+    const customerId = this.customer()?.customerId;
+    if (customerId != null) this.loadPromoCatalog(customerId, this.promoCatalogFeaturedOnly);
   }
 
   protected pickCustomer(c: CustomerSummary) {
@@ -398,6 +447,78 @@ export class NewCallOrderPage {
     this.lines.update((list) => list.filter((l) => l.productId !== line.productId));
   }
 
+  /** `promoId-tier-benefitGroup` — la llave que se envía en `PromoChoiceCommand`. */
+  protected choiceKey(c: MobileChoiceView): string {
+    return `${c.promoId}-${c.tier}-${c.benefitGroup}`;
+  }
+
+  protected isChoiceOptionSelected(c: MobileChoiceView, opt: MobileChoiceOptionView): boolean {
+    return (this.draftChoiceSelections().get(this.choiceKey(c)) ?? []).includes(opt.benefitLine);
+  }
+
+  protected isChoiceMulti(c: MobileChoiceView): boolean {
+    return (c.chooseCount ?? 1) > 1;
+  }
+
+  protected draftChoiceSelectionsFor(c: MobileChoiceView): number[] {
+    return this.draftChoiceSelections().get(this.choiceKey(c)) ?? [];
+  }
+
+  /** "Dejar para supervisión" = sin selección: el premio queda pendiente (doc 47, sección 13.1). */
+  protected selectChoiceNone(c: MobileChoiceView) {
+    this.draftChoiceSelections.update((map) => {
+      const next = new Map(map);
+      next.delete(this.choiceKey(c));
+      return next;
+    });
+  }
+
+  protected toggleChoiceOption(c: MobileChoiceView, opt: MobileChoiceOptionView) {
+    const key = this.choiceKey(c);
+    this.draftChoiceSelections.update((map) => {
+      const next = new Map(map);
+      if (!this.isChoiceMulti(c)) {
+        next.set(key, [opt.benefitLine]);
+        return next;
+      }
+      const current = next.get(key) ?? [];
+      next.set(
+        key,
+        current.includes(opt.benefitLine)
+          ? current.filter((l) => l !== opt.benefitLine)
+          : [...current, opt.benefitLine],
+      );
+      return next;
+    });
+  }
+
+  /** Si el carrito deja de ganar un premio, su elección se descarta (doc 47, sección 13.1). */
+  private pruneStaleChoiceSelections(choices: MobileChoiceView[]) {
+    const validKeys = new Set(choices.map((c) => this.choiceKey(c)));
+    this.draftChoiceSelections.update((map) => {
+      const next = new Map<string, number[]>();
+      for (const [key, value] of map) if (validKeys.has(key)) next.set(key, value);
+      return next;
+    });
+  }
+
+  private buildPromoChoices(): PromoChoiceCommand[] {
+    const selections = this.draftChoiceSelections();
+    const result: PromoChoiceCommand[] = [];
+    for (const c of this.draftChoices()) {
+      const benefitLines = selections.get(this.choiceKey(c)) ?? [];
+      if (benefitLines.length === (c.chooseCount ?? 1)) {
+        result.push({
+          promoId: c.promoId,
+          tier: c.tier,
+          benefitGroup: c.benefitGroup,
+          benefitLines,
+        });
+      }
+    }
+    return result;
+  }
+
   protected allocationQuantity(row: AllocationRow): number {
     return this.allocationQuantities().get(row.allocationId) ?? 0;
   }
@@ -427,6 +548,8 @@ export class NewCallOrderPage {
       .filter(([, qty]) => qty > 0)
       .map(([allocationId, quantity]) => ({ allocationId, quantity }));
 
+    const promoChoices = this.buildPromoChoices();
+
     this.submitting.set(true);
     this.api
       .createOrder({
@@ -442,6 +565,7 @@ export class NewCallOrderPage {
           .map((l) => ({ productId: l.productId, quantity: l.quantity })),
         allocationItems,
         remote: true,
+        ...(promoChoices.length > 0 ? { promoChoices } : {}),
       })
       .subscribe({
         next: (result) => {

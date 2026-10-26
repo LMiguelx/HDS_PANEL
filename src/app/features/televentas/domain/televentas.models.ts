@@ -65,6 +65,14 @@ export interface DailyOrderSummaryView {
   orders: OrderSummary[];
 }
 
+/** Una elección de premio dentro del `POST /api/orders` — doc 47, sección 13.1. */
+export interface PromoChoiceCommand {
+  promoId: number;
+  tier: number;
+  benefitGroup: number;
+  benefitLines: number[];
+}
+
 /** POST /api/orders — sección 7.7. El panel siempre envía remote: true, sin ubicación. */
 export interface CreateOrderCommand {
   assignmentId: number;
@@ -75,6 +83,7 @@ export interface CreateOrderCommand {
   predictedItems: OrderItemCommand[];
   allocationItems: AllocationItemCommand[];
   remote: true;
+  promoChoices?: PromoChoiceCommand[]; // doc 47, sección 13.1 — lo elegido del draft-choices
 }
 
 export interface AllocationItemCommand {
@@ -96,9 +105,77 @@ export interface PreviewLineCommand {
   quantity: number;
 }
 
-/** POST /api/mobile/promos/draft-preview — solo progreso de promociones cerca de ganarse. */
+/**
+ * POST /api/mobile/promos/draft-preview (progreso) y POST
+ * /api/mobile/promos/draft-choices (premios a elegir) — mismo request, dos
+ * endpoints y dos respuestas distintas (doc 47, sección 13.1).
+ */
 export interface DraftProgressCommand {
   customerId: number;
   paymentConditionId: number;
   lines: PreviewLineCommand[];
+}
+
+/** Opción de un premio a elegir mientras se arma el carrito — doc 47, sección 13.1. */
+export interface MobileChoiceOptionView {
+  benefitLine: number; // se devuelve en la elección
+  benefitType: string;
+  benefitTypeName: string;
+  productId: number | null;
+  productCode: string | null;
+  productName: string | null;
+  quantity: number | null;
+  discountAmount: number | null;
+  discountPercent: number | null;
+  label: string | null;
+  displayText: string;
+}
+
+/** Premio a elegir que gana el carrito antes de guardar — doc 47, sección 13.1. */
+export interface MobileChoiceView {
+  promoId: number; // se devuelve en la elección
+  promoName: string;
+  tier: number; // se devuelve en la elección
+  benefitGroup: number; // se devuelve en la elección
+  groupLabel: string | null;
+  chooseCount: number; // cuántas elegir
+  modeText: string; // "Elige 1 de 2"
+  options: MobileChoiceOptionView[];
+}
+
+/** POST /api/mobile/orders/{orderId}/promo-choices — doc 49, sección 10.3. */
+export interface SaveOrderChoicesCommand {
+  choices: PromoChoiceCommand[];
+}
+
+/** Opción de un premio del pedido, ya elegido o no — doc 49, sección 10.2. */
+export interface MobileOrderChoiceOptionView {
+  benefitLine: number; // se envía al elegir
+  benefitType: string;
+  benefitTypeName: string;
+  productId: number | null;
+  productCode: string | null;
+  productName: string | null;
+  quantity: number | null;
+  discountAmount: number | null;
+  discountPercent: number | null;
+  label: string | null;
+  displayText: string;
+  chosen: boolean; // la opción elegida
+}
+
+/** GET /api/mobile/orders/{orderId}/promo-choices — doc 49, sección 10.2. */
+export interface MobileOrderChoiceView {
+  promoId: number; // se devuelve al elegir
+  promoName: string;
+  tier: number; // se devuelve al elegir
+  benefitGroup: number; // se devuelve al elegir
+  groupLabel: string | null;
+  chooseCount: number;
+  modeText: string; // "Elige 1 de 2"
+  status: string; // PENDING | CHOSEN | DECLINED
+  statusLabel: string;
+  chosenBenefitLines: number[]; // vacío salvo en CHOSEN
+  editable: boolean; // se puede elegir o cambiar ahora
+  options: MobileOrderChoiceOptionView[];
 }

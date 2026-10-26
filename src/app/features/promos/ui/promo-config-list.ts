@@ -4,6 +4,7 @@ export interface PromoConfigRow {
   label: string;
   value: string;
   strong?: boolean;
+  hint?: string;
 }
 
 /**
@@ -19,6 +20,9 @@ export interface PromoConfigRow {
           <span>{{ row.label }}</span>
           <span>{{ row.value }}</span>
         </div>
+        @if (row.hint) {
+          <div class="pcl-hint">{{ row.hint }}</div>
+        }
       }
     </div>
   `,
@@ -48,6 +52,11 @@ export interface PromoConfigRow {
       }
       .pcl-row-strong span:last-child {
         font-size: var(--fs-body);
+      }
+      .pcl-hint {
+        margin-top: -2px;
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
       }
     `,
   ],

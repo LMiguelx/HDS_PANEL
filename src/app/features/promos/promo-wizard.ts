@@ -6,6 +6,7 @@ import { catchError, map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiToggle } from '../../shared/ui/toggle/toggle';
+import { UiCheckbox } from '../../shared/ui/checkbox/checkbox';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiCard } from '../../shared/ui/card/card';
 import { UiBadge } from '../../shared/ui/badge/badge';
@@ -142,6 +143,7 @@ function emptyTier(tierNumber: number): TierDraft {
     UiButton,
     UiField,
     UiToggle,
+    UiCheckbox,
     UiTypeahead,
     UiWizardSteps,
     HasPermissionDirective,
@@ -240,6 +242,22 @@ function emptyTier(tierNumber: number): TierDraft {
                     usa cuando la campaña ya regala mucho y no quiere sumarse a un descuento.
                   </p>
                 </div>
+                @if (!editingId()) {
+                  <div class="wizard-toggle-card">
+                    <ui-checkbox label="Destacar en la app" [(checked)]="featured" />
+                    <p class="wizard-toggle-text">
+                      El vendedor la verá entre las primeras al atender a sus clientes. No cambia
+                      cómo se aplica la promoción.
+                    </p>
+                  </div>
+                } @else {
+                  <div class="wizard-toggle-card">
+                    <p class="wizard-toggle-text">
+                      Destacada en la app: <strong>{{ featured() ? 'Sí' : 'No' }}</strong> · se
+                      cambia desde el detalle de la promoción.
+                    </p>
+                  </div>
+                }
               </div>
             </div>
           }
@@ -1673,6 +1691,8 @@ export class PromoWizardPage {
   protected endDate = signal('');
   protected maxApplicationsPerCustomer = signal('');
   protected stackable = signal(true);
+  /** Solo se usa al crear/duplicar — doc 49, sección 8.2: editar no cambia `featured`. */
+  protected featured = signal(false);
   protected channelOptions = signal<UiFieldOption[]>([]);
 
   // Paso 2
@@ -2374,6 +2394,7 @@ export class PromoWizardPage {
       { label: 'Canal', value: this.selectedChannelName() || 'Todos los canales' },
       { label: 'Vigencia', value: this.vigenciaSummary() },
       { label: 'Prioridad', value: this.priorityLabel() },
+      { label: 'Destacada en la app', value: this.featured() ? 'Sí' : 'No' },
       { label: 'Se combina con otras', value: this.stackable() ? 'Sí' : 'No' },
       { label: 'Se repite por múltiplos', value: this.repeatsSummary() },
       { label: 'Veces por cliente', value: this.maxApplicationsSummary() },
@@ -2582,6 +2603,7 @@ export class PromoWizardPage {
       endDate: this.endDate() || undefined,
       conditions: this.buildConditionsCommand(),
       tiers: this.buildTiersCommand(),
+      featured: this.featured(),
     };
   }
 
@@ -2640,6 +2662,7 @@ export class PromoWizardPage {
         p.maxApplicationsPerCustomer != null ? String(p.maxApplicationsPerCustomer) : '',
       );
       this.stackable.set(!!p.stackable);
+      if (keepId) this.featured.set(!!p.featured); // duplicar: la copia nace sin destacar (sección 8.4)
       this.requiresPurchase.set(p.promoType !== 'CUSTOMER_LIST');
       this.measureType.set((p.measureType as 'QUANTITY' | 'AMOUNT') || 'QUANTITY');
       this.repeats.set(!!p.repeats);

@@ -5,6 +5,7 @@ import { UiButton } from '../../shared/ui/button/button';
 import { UiField } from '../../shared/ui/field/field';
 import { UiTable } from '../../shared/ui/table/table';
 import { UiStatus } from '../../shared/ui/status/status';
+import { UiBadge } from '../../shared/ui/badge/badge';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiMenu } from '../../shared/ui/menu/menu';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
@@ -24,6 +25,7 @@ import { vigenciaText } from './promo-format';
     UiField,
     UiTable,
     UiStatus,
+    UiBadge,
     UiEmpty,
     UiMenu,
     HasPermissionDirective,
@@ -104,6 +106,12 @@ import { vigenciaText } from './promo-format';
                   <a [routerLink]="['/promociones', p.promoId]" class="promo-name-link">{{
                     p.name
                   }}</a>
+                  @if (p.featured) {
+                    <ui-badge tone="accent" class="promo-featured-badge"
+                      ><span class="material-icons" aria-hidden="true">star</span>
+                      Destacada</ui-badge
+                    >
+                  }
                 </td>
                 <td>{{ p.promoTypeName || p.promoType }}</td>
                 <td>{{ p.scopeSummary }}</td>
@@ -155,7 +163,15 @@ import { vigenciaText } from './promo-format';
           @for (p of promos(); track p.promoId) {
             <a [routerLink]="['/promociones', p.promoId]" class="promo-card-mobile">
               <div class="promo-card-mobile-head">
-                <span class="promo-card-mobile-name">{{ p.name }}</span>
+                <span class="promo-card-mobile-name"
+                  >{{ p.name }}
+                  @if (p.featured) {
+                    <ui-badge tone="accent" class="promo-featured-badge"
+                      ><span class="material-icons" aria-hidden="true">star</span>
+                      Destacada</ui-badge
+                    >
+                  }
+                </span>
                 <ui-status [label]="p.statusLabel || ''" />
               </div>
               <div class="promo-card-mobile-scope">{{ p.scopeSummary }}</div>
@@ -219,6 +235,16 @@ import { vigenciaText } from './promo-format';
       }
       .promo-cell-strong {
         font-weight: 800;
+      }
+      .promo-featured-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        margin-left: 8px;
+        vertical-align: middle;
+      }
+      .promo-featured-badge .material-icons {
+        font-size: 13px;
       }
       .promo-badge-repeats {
         display: inline-block;

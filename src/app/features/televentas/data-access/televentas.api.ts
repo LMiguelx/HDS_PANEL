@@ -3,18 +3,21 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { PageResponse } from '../../../shared/models/api.models';
 import { AssignmentView } from '../../../shared/models/assignment-admin.models';
-import { OrderSummary } from '../../../shared/models/order.models';
+import { OrderDetail, OrderSummary } from '../../../shared/models/order.models';
 import {
+  MobilePromoCatalogView,
   MobilePromoProgressView,
-  MobilePromoView,
 } from '../../../shared/models/promo-simulation.models';
 import { OrderCreatedResult, SuggestedItem } from '../../../shared/models/counter-order.models';
 import {
   CreateOrderCommand,
   DailyOrderSummaryView,
   DraftProgressCommand,
+  MobileChoiceView,
+  MobileOrderChoiceView,
   PriceResolved,
   RegisterVisitCommand,
+  SaveOrderChoicesCommand,
   TodayStopView,
   VisitReasonView,
   VisitView,
@@ -94,10 +97,13 @@ export class TelesalesApi {
     });
   }
 
-  /** GET /api/mobile/promos/available — mismo contrato del doc 30, sección 7.7. */
-  availablePromos(customerId: number) {
-    return this.http.get<MobilePromoView[]>(`${this.api}/mobile/promos/available`, {
-      params: params({ customerId }),
+  /**
+   * GET /api/mobile/promos/available — sobre `{ promos, products }` (doc 49,
+   * sección 10.1). `featuredOnly` por defecto `true`: abre en Destacadas.
+   */
+  availablePromos(customerId: number, featuredOnly = true) {
+    return this.http.get<MobilePromoCatalogView>(`${this.api}/mobile/promos/available`, {
+      params: params({ customerId, featuredOnly: featuredOnly ? 'true' : 'false' }),
     });
   }
 
@@ -107,6 +113,23 @@ export class TelesalesApi {
       `${this.api}/mobile/promos/draft-preview`,
       cmd,
     );
+  }
+
+  /** POST /api/mobile/promos/draft-choices — premios a elegir que gana el carrito (doc 47, sección 13.1). */
+  draftChoices(cmd: DraftProgressCommand) {
+    return this.http.post<MobileChoiceView[]>(`${this.api}/mobile/promos/draft-choices`, cmd);
+  }
+
+  /** GET /api/mobile/orders/{orderId}/promo-choices — doc 49, sección 10.2. */
+  orderChoices(orderId: number) {
+    return this.http.get<MobileOrderChoiceView[]>(
+      `${this.api}/mobile/orders/${orderId}/promo-choices`,
+    );
+  }
+
+  /** POST /api/mobile/orders/{orderId}/promo-choices — elegir o cambiar (doc 49, sección 10.3). */
+  saveOrderChoices(orderId: number, cmd: SaveOrderChoicesCommand) {
+    return this.http.post<OrderDetail>(`${this.api}/mobile/orders/${orderId}/promo-choices`, cmd);
   }
 
   /** GET /api/prices/resolve — price.view. */

@@ -185,23 +185,13 @@
                   }
                 }
                 @case ('promociones') {
-                  @if (promos().length === 0) {
-                    <ui-empty
-                      title="Sin promociones"
-                      body="Este cliente no tiene promociones vigentes."
-                    />
-                  } @else {
-                    <div class="nco-promo-list nco-scroll-list">
-                      @for (p of promos(); track p.promoId) {
-                        <div class="nco-promo-card">
-                          <div class="nco-promo-name">{{ p.name }}</div>
-                          <div class="nco-muted">{{ p.requirementText }}</div>
-                          <div class="nco-muted">{{ p.rewardText }}</div>
-                          <div class="nco-promo-valid">{{ p.validUntilText }}</div>
-                        </div>
-                      }
-                    </div>
-                  }
+                  <app-promo-catalog-panel
+                    [catalog]="promoCatalog()"
+                    [loading]="promoCatalogLoading()"
+                    [error]="promoCatalogError()"
+                    (featuredOnlyChange)="onCatalogFeaturedOnlyChange($event)"
+                    (retry)="retryPromoCatalog()"
+                  />
                 }
                 @case ('dotacion') {
                   @if (allocationRows().length === 0) {
@@ -299,6 +289,35 @@
                   <div class="nco-near-track">
                     <div class="nco-near-fill" [style.width.%]="np.percentComplete"></div>
                   </div>
+                </div>
+              }
+            }
+
+            @if (draftChoices().length > 0) {
+              <h3 class="nco-sim-subtitle">Premios a elegir</h3>
+              @for (c of draftChoices(); track choiceKey(c)) {
+                <div class="nco-choice-card">
+                  <div class="nco-choice-title">✦ {{ c.promoName }} · {{ c.modeText }}</div>
+                  @for (opt of c.options; track opt.benefitLine) {
+                    <label class="nco-choice-option">
+                      <input
+                        [type]="isChoiceMulti(c) ? 'checkbox' : 'radio'"
+                        [name]="choiceKey(c)"
+                        [checked]="isChoiceOptionSelected(c, opt)"
+                        (change)="toggleChoiceOption(c, opt)"
+                      />
+                      {{ opt.displayText }}
+                    </label>
+                  }
+                  <label class="nco-choice-option nco-choice-option-none">
+                    <input
+                      type="radio"
+                      [name]="choiceKey(c)"
+                      [checked]="!isChoiceMulti(c) && draftChoiceSelectionsFor(c).length === 0"
+                      (change)="selectChoiceNone(c)"
+                    />
+                    Dejar para supervisión
+                  </label>
                 </div>
               }
             }

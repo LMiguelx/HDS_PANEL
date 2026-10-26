@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
-import { MobilePromoView } from '../../shared/models/promo-simulation.models';
 import {
+  MobilePromoCatalogView,
   OrderSimulationView,
   SimulateOrderCommand,
 } from '../../shared/models/promo-simulation.models';
@@ -10,18 +10,21 @@ import {
 /**
  * OrderSimulationController — promociones disponibles de un cliente y
  * simulación de pedido (precio + promos + bonificaciones, sin guardar
- * nada). `order.manage`. Ver doc 30, secciones 7.7 y 10.
+ * nada). `order.manage`. Ver doc 30, secciones 7.7 y 10; sobre de promos
+ * disponibles — doc 49, sección 9.
  */
 @Injectable({ providedIn: 'root' })
 export class OrderSimulationService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/promos`;
 
-  available(customerId: number, salesChannelId: number) {
-    const params = new HttpParams()
+  /** `featuredOnly` por defecto `false`: en mostrador se ven todas (doc 49, sección 9.1). */
+  available(customerId: number, salesChannelId: number, featuredOnly = false) {
+    let params = new HttpParams()
       .set('customerId', customerId)
       .set('salesChannelId', salesChannelId);
-    return this.http.get<MobilePromoView[]>(`${this.base}/available`, { params });
+    if (featuredOnly) params = params.set('featuredOnly', true);
+    return this.http.get<MobilePromoCatalogView>(`${this.base}/available`, { params });
   }
 
   simulateOrder(cmd: SimulateOrderCommand) {

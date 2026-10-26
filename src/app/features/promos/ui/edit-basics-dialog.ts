@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiField } from '../../../shared/ui/field/field';
 import { UiCheckbox } from '../../../shared/ui/checkbox/checkbox';
+import { UiToggle } from '../../../shared/ui/toggle/toggle';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { PromoService } from '../promo';
 import { PromoDetail } from '../promo.types';
@@ -17,7 +18,7 @@ export type EditBasicsDialogResult = PromoDetail | 'duplicate';
  */
 @Component({
   selector: 'app-edit-basics-dialog',
-  imports: [UiButton, UiField, UiCheckbox],
+  imports: [UiButton, UiField, UiCheckbox, UiToggle],
   template: `
     <div class="ebd">
       <h2 class="ebd-title">Editar promoción · {{ promo.code }}</h2>
@@ -50,6 +51,12 @@ export type EditBasicsDialogResult = PromoDetail | 'duplicate';
       <ui-checkbox label="Sin fecha de fin" [(checked)]="noEndDate" />
 
       <ui-field label="Prioridad" type="select" [(value)]="priority" [options]="priorityOptions" />
+
+      <ui-toggle
+        label="Destacada en la app"
+        [(checked)]="featured"
+        hint="El vendedor la ve entre las primeras. No cambia cómo se aplica la promoción."
+      />
 
       @if (error()) {
         <div class="ebd-error">{{ error() }}</div>
@@ -157,6 +164,7 @@ export class EditBasicsDialog {
   protected endDate = signal(this.promo.endDate ?? '');
   protected noEndDate = signal(!this.promo.endDate);
   protected priority = signal(this.promo.priority ? String(this.promo.priority) : '100');
+  protected featured = signal(this.promo.featured ?? false);
   protected saving = signal(false);
   protected error = signal('');
 
@@ -172,7 +180,8 @@ export class EditBasicsDialog {
     return (
       this.name().trim() !== (this.promo.name ?? '').trim() ||
       newEndDate !== originalEndDate ||
-      Number(this.priority()) !== this.promo.priority
+      Number(this.priority()) !== this.promo.priority ||
+      this.featured() !== (this.promo.featured ?? false)
     );
   });
 
@@ -193,6 +202,7 @@ export class EditBasicsDialog {
         name: this.name().trim(),
         endDate: this.noEndDate() ? null : this.endDate() || null,
         priority: Number(this.priority()),
+        featured: this.featured(),
       })
       .subscribe({
         next: (updated) => {

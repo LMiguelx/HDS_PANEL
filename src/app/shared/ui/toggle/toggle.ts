@@ -29,6 +29,9 @@ let nextId = 0;
         <span class="ui-toggle-knob"></span>
       </button>
     </div>
+    @if (hint()) {
+      <div class="ui-toggle-hint">{{ hint() }}</div>
+    }
   `,
   styles: [
     `
@@ -94,6 +97,11 @@ let nextId = 0;
       .ui-toggle-track.on .ui-toggle-knob {
         transform: translateX(26px);
       }
+      .ui-toggle-hint {
+        margin-top: 6px;
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
     `,
   ],
 })
@@ -101,6 +109,8 @@ export class UiToggle {
   label = input('');
   disabled = input(false);
   saving = input(false);
+  /** Explicación debajo del interruptor, a todo el ancho. */
+  hint = input('');
 
   checked = model(false);
 

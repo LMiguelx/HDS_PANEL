@@ -5,10 +5,22 @@ import type { components } from '../../shared/models/api';
  * No se declaran formas a mano: esto solo nombra lo que ya está en `api.ts`
  * para no repetir `components['schemas']['X']` en cada archivo.
  */
-export type PromoSummary = components['schemas']['PromoSummary'];
-export type PromoPageResponse = components['schemas']['PageResponsePromoSummary'];
-export type CreatePromoCommand = components['schemas']['CreatePromoCommand'];
+export type PromoPageResponse = Omit<
+  components['schemas']['PageResponsePromoSummary'],
+  'content'
+> & { content: PromoSummary[] };
 export type UpdatePromoCommand = components['schemas']['UpdatePromoCommand'];
+
+/**
+ * `featured` (destacada en la app del vendedor) — doc 49, secciones 5.1 y
+ * 8.1. `api.ts` todavía no lo trae en estos tres, así que se extiende a
+ * mano. `UpdatePromoCommand` (edición con el asistente) NO lleva
+ * `featured`: destacar no es parte de la regla (doc 49, sección 8.2).
+ */
+export type PromoSummary = components['schemas']['PromoSummary'] & { featured: boolean };
+export type CreatePromoCommand = components['schemas']['CreatePromoCommand'] & {
+  featured?: boolean;
+};
 
 /**
  * `PromoDetail` gana `usage`, `definitionEditable` y `editBlockReason` —
@@ -26,6 +38,7 @@ export type PromoDetail = components['schemas']['PromoDetail'] & {
   usage: PromoUsageView;
   definitionEditable: boolean; // true cuando usage.orderCount = 0
   editBlockReason: string | null; // por qué no se puede editar todo (null si definitionEditable)
+  featured: boolean; // doc 49, sección 6.1 — destacada en la app del vendedor
 };
 
 /** Edición básica — doc 44, sección 7.3: PATCH /promos/{id}/basics, siempre permitido. */
@@ -33,6 +46,7 @@ export interface UpdatePromoBasicsCommand {
   name: string; // obligatorio, máx. 150
   endDate: string | null; // null = sin fecha de fin; no anterior a startDate
   priority: number; // obligatorio, 1 a 999
+  featured: boolean | null; // doc 49, sección 7.1 — enviar siempre true/false; null = no se cambia
 }
 
 export type ConditionCommand = components['schemas']['ConditionCommand'];
@@ -58,6 +72,17 @@ export type PendingChoiceView = components['schemas']['PendingChoiceView'];
 export type ChoiceOptionView = components['schemas']['ChoiceOptionView'];
 export type PendingCountView = components['schemas']['PendingCountView'];
 export type ResolveChoiceCommand = components['schemas']['ResolveChoiceCommand'];
-export type ApplicationView = components['schemas']['ApplicationView'];
+
+/**
+ * `ApplicationView` gana `customerName`, `benefitTypeName`, `status` y
+ * `statusLabel` — doc 47, sección 12.2 ("Promociones del pedido"). `api.ts`
+ * todavía no los trae.
+ */
+export type ApplicationView = components['schemas']['ApplicationView'] & {
+  customerName: string;
+  benefitTypeName: string;
+  status: string; // GRANTED | PENDING_CHOICE | DECLINED | REVERSED
+  statusLabel: string;
+};
 
 export type LookupItem = components['schemas']['LookupItem'];

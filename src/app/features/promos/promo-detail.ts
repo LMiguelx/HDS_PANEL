@@ -10,6 +10,7 @@ import { UiCard } from '../../shared/ui/card/card';
 import { UiBadge } from '../../shared/ui/badge/badge';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
+import { ToastService } from '../../core/ui/toast';
 import { PromoRuleCard } from './ui/promo-rule-card';
 import { PromoConditionsTable } from './ui/promo-conditions-table';
 import { PromoTiersTable } from './ui/promo-tiers-table';
@@ -68,6 +69,11 @@ import { quantityText } from '../sales-reports/sales-report-format';
             <div class="pd-title-row">
               <h1>{{ p.name }}</h1>
               <ui-status [label]="statusLabel(p)" />
+              @if (p.featured) {
+                <ui-badge tone="accent" class="pd-featured-badge"
+                  ><span class="material-icons" aria-hidden="true">star</span> Destacada</ui-badge
+                >
+              }
             </div>
             <p class="pd-meta">{{ metaLine(p) }}</p>
             @if (p.description) {
@@ -99,6 +105,9 @@ import { quantityText } from '../sales-reports/sales-report-format';
               Editar
             </button>
             <ui-menu label="Más acciones">
+              <button type="button" *hasPermission="'promo.create'" (click)="toggleFeatured(p)">
+                {{ p.featured ? 'Quitar de destacadas' : 'Destacar en la app' }}
+              </button>
               @if (!p.active) {
                 <button type="button" *hasPermission="'promo.approve'" (click)="activate()">
                   Encender
@@ -311,6 +320,14 @@ import { quantityText } from '../sales-reports/sales-report-format';
         align-items: center;
         gap: var(--sp-3);
         flex-wrap: wrap;
+      }
+      .pd-featured-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .pd-featured-badge .material-icons {
+        font-size: 13px;
       }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
@@ -527,6 +544,7 @@ export class PromoDetailPage {
   private router = inject(Router);
   private promoSvc = inject(PromoService);
   private dialog = inject(UiDialogService);
+  private toast = inject(ToastService);
 
   protected dateText = dateText;
   protected dateTimeText = dateTimeText;
@@ -605,6 +623,11 @@ export class PromoDetailPage {
       { label: 'Canal', value: p.salesChannelName ?? 'Todos los canales' },
       { label: 'Se mide en', value: p.measureType === 'AMOUNT' ? 'Monto (S/)' : 'Unidades' },
       { label: 'Prioridad', value: priorityText(p.priority) },
+      {
+        label: 'Destacada en la app',
+        value: p.featured ? 'Sí' : 'No',
+        hint: 'Solo cambia lo que el vendedor ve primero; no cambia cómo se aplica.',
+      },
       { label: 'Se combina con otras', value: p.stackable ? 'Sí' : 'No' },
       { label: 'Se repite por múltiplos', value: repeatsText(p.repeats, p.maxRepeatsPerOrder) },
       {
@@ -679,6 +702,44 @@ export class PromoDetailPage {
     const id = this.promo()?.promoId;
     if (!id) return;
     this.promoSvc.deactivate(id).subscribe(() => this.load());
+  }
+
+  /** Destacar/quitar de destacadas — doc 49, sección 6.2: PATCH basics con name/endDate/priority tal cual y featured invertido. */
+  protected toggleFeatured(p: PromoDetail) {
+    const next = !p.featured;
+    const apply = () => {
+      this.promoSvc
+        .updateBasics(p.promoId!, {
+          name: p.name ?? '',
+          endDate: p.endDate ?? null,
+          priority: p.priority ?? 100,
+          featured: next,
+        })
+        .subscribe({
+          next: (updated) => {
+            this.promo.set(updated);
+            this.toast.success(next ? 'Promoción destacada' : 'Se quitó de destacadas');
+          },
+          error: (err) => {
+            const detalle = err?.error?.detail ?? err?.error?.message;
+            this.toast.error(detalle || 'No pudimos guardar los cambios.');
+          },
+        });
+    };
+    if (next && p.active) {
+      this.dialog
+        .confirm({
+          title: 'Destacar en la app',
+          message:
+            'El vendedor verá esta promoción entre las primeras al atender a sus clientes. ¿Destacar?',
+          confirmLabel: 'Destacar',
+        })
+        .subscribe((confirmed) => {
+          if (confirmed) apply();
+        });
+      return;
+    }
+    apply();
   }
 
   protected remove() {

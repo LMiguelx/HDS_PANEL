@@ -59,6 +59,8 @@ export interface OrderItemView {
   bonus: boolean;
   allocationId: number | null; // con valor: la línea es Dotación — doc 36, sección 3.1
   stockPending: boolean; // true = bonificación otorgada sin stock que la respalde
+  discountAmount: number; // doc 47, sección 12.1 — descuento real de ESTA línea
+  netSubtotal: number; // subtotal - discountAmount
 }
 
 export interface ReturnedLineView {
@@ -142,7 +144,7 @@ export interface BrandSalesView {
   brandId: number;
   brandName: string;
   grossAmount: number; // subtotal de líneas no-bonus
-  discountAmount: number; // descuento del pedido, prorrateado por marca
+  discountAmount: number; // suma del descuento real de cada línea de esta marca — doc 47, sección 16
   netAmount: number; // grossAmount - discountAmount
   bonusUnits: number; // unidades regaladas, sin monto — aparte
 }
