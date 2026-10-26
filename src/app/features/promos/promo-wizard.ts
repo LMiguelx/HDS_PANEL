@@ -35,8 +35,10 @@ import {
   priorityText,
   repeatsText,
 } from './promo-format';
-import { benefitText, thresholdText } from './domain/promo-texts';
+import { benefitText, measureModeText, tierPhraseText, whatCountsText } from './domain/promo-texts';
 import { ToastService } from '../../core/ui/toast';
+import { formatSoles } from '../../shared/pipes/money';
+import { quantityText } from '../sales-reports/sales-report-format';
 import {
   ImportMembersDialog,
   ImportMembersDialogResult,
@@ -67,6 +69,7 @@ interface BenefitDraft {
 }
 
 interface BenefitGroupDraft {
+  key: number;
   benefitGroup: number;
   selectionMode: 'ALL' | 'CHOOSE';
   chooseCount: number;
@@ -76,7 +79,10 @@ interface BenefitGroupDraft {
 interface TierDraft {
   key: number;
   tier: number;
-  fromQuantity: number;
+  /** Interpretado según el `measureType` del asistente (único, no por tramo) — doc 47, sección 6.1. */
+  threshold: number | null;
+  /** El backend trajo el umbral en la columna que no corresponde al measureType actual — sección 7.2. */
+  thresholdMismatch?: boolean;
   benefitGroups: BenefitGroupDraft[];
 }
 
@@ -90,6 +96,7 @@ interface AudienceDraft {
 
 let benefitKeySeq = 0;
 let tierKeySeq = 0;
+let groupKeySeq = 0;
 
 function slugCode(name: string): string {
   const base = name
@@ -102,43 +109,30 @@ function slugCode(name: string): string {
   return `${base || 'PROMO'}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
 }
 
+function emptyBenefit(): BenefitDraft {
+  return { key: benefitKeySeq++, benefitType: 'FREE_PRODUCT', catalog: true, quantity: 1 };
+}
+
 /**
- * Un tramo nace siempre con sus dos grupos («elige 1 de N» y «se entrega
- * siempre»), aunque estén vacíos: así la plantilla los lee sin tener que
- * crearlos, y los grupos sin premios se descartan al armar el comando.
+ * Un tramo nace con un solo grupo "Recibe todo" y un premio vacío listo para
+ * completar — doc 47, sección 6.3. Nunca se crea un grupo "Elige" por
+ * defecto: nace al pulsar "+ Agregar premio a elegir".
  */
 function emptyTier(tierNumber: number): TierDraft {
   return {
     key: tierKeySeq++,
     tier: tierNumber,
-    fromQuantity: 10,
+    threshold: null,
     benefitGroups: [
-      { benefitGroup: 1, selectionMode: 'CHOOSE', chooseCount: 1, benefits: [] },
-      { benefitGroup: 2, selectionMode: 'ALL', chooseCount: 1, benefits: [] },
+      {
+        key: groupKeySeq++,
+        benefitGroup: 1,
+        selectionMode: 'ALL',
+        chooseCount: 1,
+        benefits: [emptyBenefit()],
+      },
     ],
   };
-}
-
-/** Garantiza que un tramo traído del backend tenga los dos grupos. */
-function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
-  const result = [...groups];
-  if (!result.some((g) => g.selectionMode === 'CHOOSE')) {
-    result.push({
-      benefitGroup: result.length + 1,
-      selectionMode: 'CHOOSE',
-      chooseCount: 1,
-      benefits: [],
-    });
-  }
-  if (!result.some((g) => g.selectionMode === 'ALL')) {
-    result.push({
-      benefitGroup: result.length + 1,
-      selectionMode: 'ALL',
-      chooseCount: 1,
-      benefits: [],
-    });
-  }
-  return result;
 }
 
 @Component({
@@ -250,8 +244,8 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
             </div>
           }
           @case (1) {
-            <div>
-              <h2>¿La promoción exige una compra?</h2>
+            <div class="wizard-q-block">
+              <h3 class="wizard-q-title">¿La promoción exige una compra?</h3>
               <p class="wizard-lede">El tipo no se puede cambiar después de crear la promoción.</p>
 
               <div class="wizard-mode-cards">
@@ -262,10 +256,9 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                   [disabled]="!!editingId()"
                   (click)="requiresPurchase.set(true)"
                 >
-                  <span class="wizard-mode-eyebrow">Sí</span>
                   <span class="wizard-mode-title">Por compra</span>
                   <span class="wizard-mode-body"
-                    >Se gana comprando: tiene condiciones (qué comprar) y tramos con umbral.</span
+                    >Se gana comprando: elige qué productos cuentan y los tramos.</span
                   >
                 </button>
                 <button
@@ -275,26 +268,25 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                   [disabled]="!!editingId()"
                   (click)="requiresPurchase.set(false)"
                 >
-                  <span class="wizard-mode-eyebrow">No</span>
                   <span class="wizard-mode-title">Por lista de clientes</span>
                   <span class="wizard-mode-body"
-                    >Se otorga por estar en la lista, sin condición de compra ni umbral. En el paso
-                    4 hay que incluir al menos un segmento o cliente.</span
+                    >Se otorga por estar en la lista, sin condición de compra.</span
                   >
                 </button>
               </div>
+            </div>
 
-              @if (!requiresPurchase()) {
-                <div class="wizard-toggle-card">
-                  <p class="wizard-toggle-text">
-                    Esta promoción no exige compra: se entrega a todos los clientes que se incluyan
-                    en el paso 4 ("A quiénes llega").
-                  </p>
-                </div>
-              } @else {
-                <p class="wizard-lede">
-                  Elige cómo se cuenta la compra. Puedes cambiarlo sin perder lo que agregaste.
+            @if (!requiresPurchase()) {
+              <div class="wizard-toggle-card">
+                <p class="wizard-toggle-text">
+                  Se otorga por estar en la lista: no se mide ninguna compra. En el paso 4 elige a
+                  qué clientes o segmentos llega.
                 </p>
+              </div>
+            } @else {
+              <div class="wizard-q-block">
+                <h3 class="wizard-q-title">¿Qué productos cuentan?</h3>
+                <p class="wizard-lede">Si eliges varios, se suman entre sí.</p>
 
                 <div class="wizard-mode-cards">
                   <button
@@ -303,11 +295,9 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                     [class.selected]="mode() === 'ambito'"
                     (click)="mode.set('ambito')"
                   >
-                    <span class="wizard-mode-eyebrow">Opción A</span>
-                    <span class="wizard-mode-title">Todo de una marca o familia</span>
+                    <span class="wizard-mode-title">Una marca o familia completa</span>
                     <span class="wizard-mode-body"
-                      >«50 unidades de la marca Gaseosas Andinas». Cuenta cualquier producto de la
-                      marca, incluso los que entren al catálogo mañana.</span
+                      >Incluye los productos que se den de alta más adelante.</span
                     >
                   </button>
                   <button
@@ -316,11 +306,9 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                     [class.selected]="mode() === 'surtido'"
                     (click)="mode.set('surtido')"
                   >
-                    <span class="wizard-mode-eyebrow">Opción B · la más usada</span>
-                    <span class="wizard-mode-title">Una lista de productos que se suman</span>
+                    <span class="wizard-mode-title">Productos específicos</span>
                     <span class="wizard-mode-body"
-                      >«10 unidades entre Inca Kola, Coca Cola y Sprite». El cliente los combina
-                      como quiera.</span
+                      >Una lista de productos que se suman entre sí.</span
                     >
                   </button>
                 </div>
@@ -347,7 +335,6 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                                 <div class="wizard-condition-meta">{{ scopeLabel(c.scope) }}</div>
                               </div>
                               <div class="wizard-condition-actions">
-                                <span class="wizard-condition-hint">cuenta cualquier cantidad</span>
                                 <button
                                   uiButton
                                   variant="icon"
@@ -360,25 +347,22 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                             </div>
                           }
                         </div>
-                        <div class="wizard-total-block">
-                          <span class="wizard-total-eq">=</span>
-                          <ui-field label="Total mínimo" type="number" [(value)]="tier1Quantity" />
-                          <span class="wizard-total-text"
-                            >unidades <strong>en total</strong>, repartidas como el cliente
-                            quiera.</span
-                          >
-                        </div>
                       </div>
                     </div>
                     <div class="wizard-side-card">
-                      <div class="wizard-side-eyebrow">Cómo se calcula</div>
-                      <p class="wizard-side-text">
-                        El pedido suma las unidades de {{ conditions().length || 'los' }}
-                        {{
-                          conditions().length === 1 ? 'producto agregado' : 'productos agregados'
-                        }}, en cualquier combinación. Cuando la suma llega a
-                        {{ tier1Quantity() || '—' }}, el cliente califica.
-                      </p>
+                      <div class="wizard-side-eyebrow">Productos que cuentan hoy</div>
+                      @if (conditions().length === 0) {
+                        <p class="wizard-side-text wizard-side-muted">
+                          Agrega al menos un producto.
+                        </p>
+                      } @else {
+                        <p class="wizard-side-text">
+                          <strong>{{ conditions().length }}</strong> producto{{
+                            conditions().length === 1 ? '' : 's'
+                          }}
+                          de {{ code() }}.
+                        </p>
+                      }
                     </div>
                   </div>
                 } @else {
@@ -392,13 +376,6 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                         [selected]="ambitoSelected()"
                         (picked)="setAmbito($event)"
                       />
-                      <div class="wizard-ambito-total">
-                        <ui-field label="Cantidad mínima" type="number" [(value)]="tier1Quantity" />
-                        <span class="wizard-total-text"
-                          >unidades de <strong>cualquier producto</strong> de
-                          {{ ambitoSelected()?.name || 'la marca o familia elegida' }}.</span
-                        >
-                      </div>
                       @if (ambitoSelected()) {
                         <div class="wizard-ambito-hint">
                           Los productos que se den de alta más adelante entran solos, sin tocar la
@@ -408,153 +385,297 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                     </div>
                     <div class="wizard-side-card">
                       <div class="wizard-side-eyebrow">Productos que cuentan hoy</div>
-                      @if (ambitoProductCount() === null) {
+                      @if (!ambitoSelected()) {
                         <p class="wizard-side-text wizard-side-muted">
-                          Elige una marca o familia para ver cuántos.
+                          Elige una marca o familia para ver cuáles.
                         </p>
+                      } @else if (ambitoIsFamily()) {
+                        <p class="wizard-side-text">
+                          Todos los productos de la familia
+                          <strong>{{ ambitoSelected()!.name }}</strong
+                          >, incluso los que se den de alta más adelante.
+                        </p>
+                      } @else if (ambitoProducts() === null) {
+                        <p class="wizard-side-text wizard-side-muted">Cargando…</p>
                       } @else {
                         <p class="wizard-side-text">
-                          <strong>{{ ambitoProductCount() }}</strong> productos hoy.
+                          <strong>{{ ambitoProducts()!.length }}</strong>
+                          producto{{ ambitoProducts()!.length === 1 ? '' : 's' }} de
+                          {{ ambitoSelected()!.name }}.
                         </p>
+                        <ul class="wizard-products-today-list">
+                          @for (
+                            p of ambitoProducts()!.slice(
+                              0,
+                              ambitoProductsExpanded() ? undefined : 3
+                            );
+                            track p.id
+                          ) {
+                            <li>
+                              <span class="wizard-side-muted">{{ p.code }}</span> {{ p.name }}
+                            </li>
+                          }
+                        </ul>
+                        @if (ambitoProducts()!.length > 3 && !ambitoProductsExpanded()) {
+                          <button
+                            type="button"
+                            class="wizard-card-edit"
+                            (click)="ambitoProductsExpanded.set(true)"
+                          >
+                            Ver los {{ ambitoProducts()!.length }} productos
+                          </button>
+                        }
                       }
                     </div>
                   </div>
                 }
-              }
-            </div>
+              </div>
+
+              <div class="wizard-q-block">
+                <h3 class="wizard-q-title">¿Cómo se cuenta la compra?</h3>
+                <div class="wizard-mode-cards">
+                  <button
+                    type="button"
+                    class="wizard-mode-card"
+                    [class.selected]="measureType() === 'QUANTITY'"
+                    (click)="selectMeasureType('QUANTITY')"
+                  >
+                    <span class="wizard-mode-title">Por unidades</span>
+                    <span class="wizard-mode-body"
+                      >Se suman las unidades de todos los productos que cuentan.</span
+                    >
+                  </button>
+                  <button
+                    type="button"
+                    class="wizard-mode-card"
+                    [class.selected]="measureType() === 'AMOUNT'"
+                    (click)="selectMeasureType('AMOUNT')"
+                  >
+                    <span class="wizard-mode-title">Por importe (S/)</span>
+                    <span class="wizard-mode-body"
+                      >Se suma lo que vale cada producto que cuenta, a su precio de lista.</span
+                    >
+                  </button>
+                </div>
+
+                @if (measureType()) {
+                  <div class="wizard-tier-phrase">
+                    <strong>Así se cuenta</strong><br />
+                    {{ measureModePhrase() }}.
+                  </div>
+                }
+              </div>
+            }
           }
           @case (2) {
-            <div>
-              <h2>Tramos y premios</h2>
-              @if (requiresPurchase()) {
+            <div class="wizard-tramos-grid">
+              <div class="wizard-tramos-main">
+                <h2>Tramos y premios</h2>
                 <p class="wizard-lede">
-                  Mientras más compra, mejor premio.
-                  <strong>Se otorga solo el tramo más alto que alcance</strong> — los tramos no se
-                  suman.
+                  Se otorga solo el tramo más alto que alcance el pedido:
+                  <strong>los tramos no se suman</strong>.
                 </p>
 
-                <div class="wizard-2col">
-                  <ui-field
-                    label="Se mide en"
-                    type="select"
-                    [(value)]="measureTypeValue"
-                    [options]="measureTypeOptions"
-                  />
-                </div>
-
-                <div class="wizard-toggle-card">
-                  <ui-toggle label="Se repite por múltiplos" [(checked)]="repeats" />
-                  @if (repeats()) {
-                    <hr class="wizard-hr" />
-                    <ui-field
-                      label="Tope por pedido"
-                      type="number"
-                      [(value)]="maxRepeatsPerOrder"
-                      [error]="repeatsError()"
-                    />
-                    <p class="wizard-toggle-text wizard-toggle-text-muted">
-                      {{ repeatsHelpText() }}
-                    </p>
-                    <div class="wizard-sim-line">
-                      <ui-field label="Si compra" type="number" [(value)]="simRepeatQuantity" />
-                      <span class="wizard-total-text">{{ simRepeatResult() }}</span>
-                    </div>
-                  }
-                </div>
-              } @else {
-                <p class="wizard-lede">
-                  Esta promoción se otorga por estar en la lista: solo define los premios.
-                </p>
-              }
-
-              @if (requiresPurchase()) {
-                <div class="wizard-tier-ladder">
-                  @for (t of tiers(); track t.key; let i = $index) {
-                    <button
-                      type="button"
-                      class="wizard-tier-step"
-                      [class.selected]="i === selectedTier()"
-                      (click)="selectedTier.set(i)"
-                    >
-                      <span class="wizard-tier-step-eyebrow">Tramo {{ t.tier }}</span>
-                      <span class="wizard-tier-step-value">{{ t.fromQuantity }}</span>
-                      <span class="wizard-tier-step-hint">{{ tierBenefitSummary(t) }}</span>
+                <div class="wizard-measure-strip">
+                  <span>
+                    @if (requiresPurchase()) {
+                      Se cuenta por {{ measureType() === 'AMOUNT' ? 'importe (S/)' : 'unidades' }} ·
+                      {{ whatCountsPhrase() }}
+                    } @else {
+                      Se otorga por estar en la lista
+                    }
+                  </span>
+                  @if (requiresPurchase()) {
+                    <button type="button" class="wizard-card-edit" (click)="goToStep(1)">
+                      Cambiar en el paso 2 →
                     </button>
                   }
-                  <div class="wizard-ladder-note">
-                    Un pedido que alcance el tramo más alto disponible gana ese, no todos.
-                  </div>
                 </div>
-              }
 
-              @if (currentTier(); as t) {
-                <div class="wizard-tier-editor">
-                  @if (requiresPurchase()) {
-                    <div class="wizard-tier-editor-head">
+                @if (requiresPurchase()) {
+                  <div class="wizard-toggle-card">
+                    <ui-toggle label="Se repite por múltiplos" [(checked)]="repeats" />
+                    <p class="wizard-toggle-text wizard-toggle-text-muted">
+                      Cada vez que el pedido junta otro mínimo, el premio se entrega otra vez.
+                    </p>
+                    @if (repeats()) {
+                      <hr class="wizard-hr" />
+                      <ui-field
+                        label="Tope por pedido"
+                        type="number"
+                        [(value)]="maxRepeatsPerOrder"
+                        [error]="repeatsError()"
+                      />
+                      <p class="wizard-toggle-text wizard-toggle-text-muted">
+                        {{ repeatsHelpText() }}
+                      </p>
+                      <div class="wizard-sim-line">
+                        <ui-field label="Si compra" type="number" [(value)]="simRepeatQuantity" />
+                        <span class="wizard-total-text">{{ simRepeatResult() }}</span>
+                      </div>
+                    }
+                  </div>
+
+                  <div class="wizard-tier-ladder">
+                    @for (t of tiers(); track t.key; let i = $index) {
+                      <button
+                        type="button"
+                        class="wizard-tier-step"
+                        [class.selected]="i === selectedTier()"
+                        (click)="selectedTier.set(i)"
+                      >
+                        <span class="wizard-tier-step-eyebrow">Tramo {{ t.tier }}</span>
+                        <span class="wizard-tier-step-value">{{ tierThresholdShort(t) }}</span>
+                        <span class="wizard-tier-step-hint">{{ tierBenefitSummary(t) }}</span>
+                      </button>
+                    }
+                    <button type="button" class="wizard-add-tier-ladder" (click)="addTier()">
+                      + Agregar tramo
+                    </button>
+                  </div>
+                }
+
+                @if (currentTier(); as t) {
+                  <div class="wizard-tier-editor">
+                    @if (requiresPurchase()) {
+                      <div class="wizard-tier-editor-head">
+                        <h3>Tramo {{ t.tier }}</h3>
+                        <button uiButton variant="secondary" (click)="duplicateTier()">
+                          Duplicar tramo
+                        </button>
+                      </div>
                       <div class="wizard-tier-editor-from">
-                        <ui-field
-                          label="Desde (unidades)"
-                          type="number"
-                          [(value)]="tierFromQuantityModel"
-                        />
+                        @if (measureType() === 'AMOUNT') {
+                          <ui-field
+                            label="Desde"
+                            type="number"
+                            prefix="S/"
+                            [(value)]="tierThresholdModel"
+                          />
+                        } @else {
+                          <ui-field
+                            label="Desde"
+                            type="number"
+                            [hasSuffix]="true"
+                            [(value)]="tierThresholdModel"
+                          >
+                            <span fieldSuffix class="wizard-field-suffix">unidades</span>
+                          </ui-field>
+                        }
                         <span class="wizard-total-text"
-                          >unidades compradas · el cliente recibe:</span
+                          >de compra en los productos que cuentan</span
                         >
                       </div>
-                      <button uiButton variant="secondary" (click)="duplicateTier()">
-                        Duplicar tramo
+                      @if (t.thresholdMismatch) {
+                        <div class="wizard-save-error">Revisa el mínimo de este tramo.</div>
+                      }
+                      @if (tierValidationError(t, selectedTier())) {
+                        <div class="wizard-save-error">
+                          {{ tierValidationError(t, selectedTier()) }}
+                        </div>
+                      }
+                    }
+
+                    @if (allGroup(t); as ag) {
+                      <div class="wizard-group-card">
+                        <div class="wizard-group-head">
+                          <ui-badge tone="success">Siempre</ui-badge>
+                          <span>Recibe todo</span>
+                          <span class="wizard-group-hint"
+                            >se entregan todos los premios de este grupo</span
+                          >
+                        </div>
+                        <div class="wizard-group-body">
+                          @for (b of ag.benefits; track b.key) {
+                            <div class="wizard-benefit-row">
+                              <ng-container
+                                *ngTemplateOutlet="benefitEditor; context: { $implicit: b }"
+                              />
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    }
+
+                    @for (cg of chooseGroups(t); track cg.key) {
+                      <div class="wizard-group-card">
+                        <div class="wizard-group-head">
+                          <ui-badge tone="neutral"
+                            >Elige {{ cg.chooseCount }} de {{ cg.benefits.length }}</ui-badge
+                          >
+                          <span>Premio a elegir</span>
+                          <span class="wizard-group-hint">
+                            El cliente elige
+                            <input
+                              type="number"
+                              class="wizard-choose-count"
+                              min="1"
+                              [max]="cg.benefits.length"
+                              [value]="cg.chooseCount"
+                              (change)="setChooseCount(cg, $event)"
+                            />
+                            de {{ cg.benefits.length }}
+                          </span>
+                        </div>
+                        <div class="wizard-group-body">
+                          @for (b of cg.benefits; track b.key) {
+                            <div class="wizard-benefit-row">
+                              <ng-container
+                                *ngTemplateOutlet="benefitEditor; context: { $implicit: b }"
+                              />
+                            </div>
+                          }
+                          <p class="wizard-group-note">
+                            Lo elige el vendedor al tomar el pedido. Si no elige, lo resuelve
+                            supervisión en Premios pendientes.
+                          </p>
+                          <button uiButton variant="ghost" (click)="addChoiceOption(cg)">
+                            + Agregar opción
+                          </button>
+                        </div>
+                      </div>
+                    }
+
+                    <div class="wizard-tier-actions">
+                      <button uiButton variant="ghost" (click)="addPremio(t)">
+                        + Agregar premio
+                      </button>
+                      <button uiButton variant="ghost" (click)="addPremioAElegir(t)">
+                        + Agregar premio a elegir
                       </button>
                     </div>
-                  }
 
-                  <div class="wizard-2col">
-                    <div class="wizard-group-card">
-                      <div class="wizard-group-head">
-                        <span>El cliente elige 1 de 2</span>
-                        <span class="wizard-group-hint">se decide al entregar</span>
-                      </div>
-                      <div class="wizard-group-body">
-                        @for (b of chooseGroup(t).benefits; track b.key) {
-                          <div class="wizard-benefit-row">
-                            <ng-container
-                              *ngTemplateOutlet="benefitEditor; context: { $implicit: b }"
-                            />
-                          </div>
-                        }
-                        <button uiButton variant="ghost" (click)="addBenefit(t, 'CHOOSE')">
-                          + Agregar opción
-                        </button>
-                      </div>
-                    </div>
-                    <div class="wizard-group-card">
-                      <div class="wizard-group-head">
-                        <span>Se entrega siempre</span>
-                        <span class="wizard-group-hint">todo lo de este grupo</span>
-                      </div>
-                      <div class="wizard-group-body">
-                        @for (b of allGroup(t).benefits; track b.key) {
-                          <div class="wizard-benefit-row">
-                            <ng-container
-                              *ngTemplateOutlet="benefitEditor; context: { $implicit: b }"
-                            />
-                          </div>
-                        }
-                        <button uiButton variant="ghost" (click)="addBenefit(t, 'ALL')">
-                          + Agregar premio
-                        </button>
-                      </div>
+                    <div class="wizard-tier-phrase">
+                      <strong>Así lo verá el vendedor</strong><br />
+                      {{ tierPhrase(t) }}
                     </div>
                   </div>
+                }
+              </div>
 
-                  <div class="wizard-tier-phrase">{{ tierPhrase(t) }}</div>
+              <div class="wizard-tramos-side">
+                <div class="wizard-side-card">
+                  <div class="wizard-side-eyebrow">Cómo se aplican los tramos</div>
+                  @for (t of tiers(); track t.key) {
+                    <div class="wizard-tier-pill">
+                      <span class="wizard-tier-pill-label">Tramo {{ t.tier }}</span>
+                      <span>{{ tierThresholdShort(t) }} · {{ tierBenefitSummary(t) }}</span>
+                    </div>
+                  }
                 </div>
-              }
-
-              @if (requiresPurchase()) {
-                <button uiButton variant="secondary" class="wizard-add-tier" (click)="addTier()">
-                  + Agregar otro tramo
-                </button>
-              }
+                <div class="wizard-side-card">
+                  <div class="wizard-side-eyebrow">Antes de continuar</div>
+                  <ul class="wizard-checklist">
+                    <li>Cada tramo pide más que el anterior.</li>
+                    <li>Cada tramo tiene al menos un premio.</li>
+                    <li>El premio a elegir ofrece al menos dos opciones.</li>
+                    <li>
+                      Los mínimos están en
+                      {{ measureType() === 'AMOUNT' ? 'soles' : 'unidades' }}, como pide el paso 2.
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </div>
           }
           @case (3) {
@@ -651,15 +772,14 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
             <div class="wizard-step5">
               <div class="wizard-how">
                 <span class="material-icons" aria-hidden="true">auto_awesome</span>
-                <p>
-                  @for (seg of summarySegments(); track $index) {
-                    @if (seg.bold) {
-                      <strong>{{ seg.text }}</strong>
-                    } @else {
-                      {{ seg.text }}
-                    }
+                <div>
+                  <p>{{ firstTierPhrase() }}</p>
+                  @if (extraTiersCount() > 0) {
+                    <p class="wizard-how-extra">
+                      +{{ extraTiersCount() }} tramo{{ extraTiersCount() === 1 ? '' : 's' }} más
+                    </p>
                   }
-                </p>
+                </div>
               </div>
 
               <div class="wizard-step5-grid">
@@ -670,10 +790,10 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                         <div class="wizard-card-eyebrow">Paso 2</div>
                         <h3 class="wizard-card-title">
                           Qué debe comprar
-                          @if (conditions().length) {
+                          @if (conditionsAsViews().length) {
                             <ui-badge tone="neutral"
-                              >{{ conditions().length }} producto{{
-                                conditions().length === 1 ? '' : 's'
+                              >{{ conditionsAsViews().length }} producto{{
+                                conditionsAsViews().length === 1 ? '' : 's'
                               }}</ui-badge
                             >
                           }
@@ -687,6 +807,9 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                       [conditions]="conditionsAsViews()"
                       [promoType]="requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST'"
                     />
+                    @if (requiresPurchase()) {
+                      <p class="wizard-card-note">{{ measureModePhrase() }}.</p>
+                    }
                   </ui-card>
 
                   <ui-card>
@@ -763,10 +886,6 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
                   </ui-card>
                 </div>
               </div>
-
-              @if (saveError()) {
-                <div class="wizard-save-error">{{ saveError() }}</div>
-              }
             </div>
           }
         }
@@ -862,6 +981,7 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
           />
         }
         <button uiButton variant="icon" title="Quitar" (click)="removeBenefit(b)">✕</button>
+        <p class="wizard-benefit-help">{{ benefitHelpText(b) }}</p>
       </div>
     </ng-template>
   `,
@@ -1034,33 +1154,35 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         align-items: center;
         gap: 12px;
       }
-      .wizard-condition-hint {
-        font-size: 13px;
-        color: var(--ink-muted);
-      }
-      .wizard-total-block {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        margin-top: 14px;
-        padding: 14px 16px;
-        border: 2px solid var(--accent);
-      }
-      .wizard-total-eq {
-        font-size: 32px;
-        font-weight: 800;
-        line-height: 1;
-      }
       .wizard-total-text {
         font-size: 15px;
       }
-      .wizard-ambito-total {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        margin-top: 22px;
-        padding: 18px;
-        border: 2px solid var(--accent);
+      .wizard-q-block {
+        margin-bottom: 32px;
+      }
+      .wizard-q-title {
+        font-size: var(--fs-h2);
+        font-weight: var(--fw-h2);
+        margin: 0 0 4px;
+        color: var(--ink);
+      }
+      .wizard-products-today-list {
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+      }
+      .wizard-field-suffix {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--fs-dense);
+        font-weight: 700;
+        color: var(--ink-muted);
+        pointer-events: none;
       }
       .wizard-ambito-hint {
         margin-top: 16px;
@@ -1132,13 +1254,70 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         font-size: 13px;
         color: var(--ink-muted);
       }
-      .wizard-ladder-note {
-        flex: 1;
-        padding: 16px;
+      .wizard-add-tier-ladder {
+        flex: none;
+        align-self: stretch;
+        border: 0;
+        border-left: 1px dashed var(--hairline);
+        background: var(--faint);
+        padding: 14px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--accent-ink);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .wizard-measure-strip {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--sp-3);
+        padding: var(--sp-3) var(--sp-4);
+        background: var(--surface-sunk);
+        border: 1px solid var(--hairline);
+        font-size: var(--fs-dense);
+        color: var(--ink);
+        margin-top: var(--sp-4);
+        flex-wrap: wrap;
+      }
+      .wizard-tramos-grid {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 32px;
+        align-items: start;
+      }
+      .wizard-tramos-main {
+        min-width: 0;
+      }
+      .wizard-tramos-side {
+        display: grid;
+        gap: var(--sp-5);
+        position: sticky;
+        top: var(--sp-6);
+      }
+      .wizard-tier-pill {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: var(--sp-2) 0;
+        border-bottom: 1px solid var(--hairline);
         font-size: 13px;
         color: var(--ink-muted);
-        display: flex;
-        align-items: center;
+      }
+      .wizard-tier-pill:last-child {
+        border-bottom: 0;
+      }
+      .wizard-tier-pill-label {
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .wizard-checklist {
+        margin: 10px 0 0;
+        padding: 0 0 0 18px;
+        font-size: 13px;
+        color: var(--ink-muted);
+        display: grid;
+        gap: 6px;
       }
       .wizard-tier-editor {
         border: 2px solid var(--divider);
@@ -1146,15 +1325,22 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
       }
       .wizard-tier-editor-head {
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         justify-content: space-between;
         gap: 20px;
         flex-wrap: wrap;
+      }
+      .wizard-tier-editor-head h3 {
+        margin: 0;
+        font-size: var(--fs-h2);
+        font-weight: var(--fw-h2);
+        color: var(--ink);
       }
       .wizard-tier-editor-from {
         display: flex;
         align-items: flex-end;
         gap: 14px;
+        margin-top: 14px;
       }
       .wizard-group-card {
         border: 1px solid var(--divider);
@@ -1179,10 +1365,26 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         color: var(--ink-muted);
         letter-spacing: normal;
       }
+      .wizard-choose-count {
+        width: 40px;
+        text-align: center;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 800;
+        border: 1px solid var(--divider);
+        border-radius: var(--radius-control, 0);
+        background: var(--surface-sunk);
+        color: var(--ink);
+      }
       .wizard-group-body {
         padding: 14px 16px;
         display: grid;
         gap: 10px;
+      }
+      .wizard-group-note {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .wizard-benefit-row {
         border: 1px solid var(--hairline);
@@ -1199,15 +1401,23 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         gap: 6px;
         grid-column: 1 / -1;
       }
+      .wizard-benefit-help {
+        grid-column: 1 / -1;
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .wizard-tier-actions {
+        display: flex;
+        gap: var(--sp-3);
+        margin-top: 18px;
+      }
       .wizard-tier-phrase {
         margin-top: 18px;
         padding: 14px 16px;
         background: var(--faint);
         border-left: 3px solid var(--accent);
         font-size: 15px;
-      }
-      .wizard-add-tier {
-        margin-top: 18px;
       }
       .wizard-audience-grid {
         display: grid;
@@ -1268,6 +1478,11 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         line-height: 1.5;
         color: var(--ink);
       }
+      .wizard-how .wizard-how-extra {
+        margin-top: 4px;
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
+      }
       .wizard-step5-grid {
         display: grid;
         grid-template-columns: 1fr 360px;
@@ -1308,6 +1523,11 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
         font-weight: var(--fw-h2);
         color: var(--ink);
         margin: 0;
+      }
+      .wizard-card-note {
+        margin: var(--sp-3) 0 0;
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
       }
       .wizard-card-edit {
         flex: none;
@@ -1371,8 +1591,12 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
       @media (max-width: 900px) {
         .wizard-step1-grid,
         .wizard-2col-wide,
-        .wizard-audience-grid {
+        .wizard-audience-grid,
+        .wizard-tramos-grid {
           grid-template-columns: 1fr;
+        }
+        .wizard-tramos-side {
+          position: static;
         }
       }
 
@@ -1397,18 +1621,16 @@ function withBothGroups(groups: BenefitGroupDraft[]): BenefitGroupDraft[] {
           flex: 1 0 auto;
           min-width: 108px;
         }
-        .wizard-ladder-note {
+        .wizard-add-tier-ladder {
           flex: 1 0 100%;
+          border-left: 0;
           border-top: 1px solid var(--hairline);
         }
-        .wizard-total-block,
-        .wizard-ambito-total,
         .wizard-tier-editor-from {
           flex-wrap: wrap;
         }
-        .wizard-summary-facts div {
-          flex-direction: column;
-          gap: 2px;
+        .wizard-tier-actions {
+          flex-wrap: wrap;
         }
         .wizard-footer-hint {
           display: none;
@@ -1458,15 +1680,13 @@ export class PromoWizardPage {
   protected mode = signal<'surtido' | 'ambito'>('surtido');
   protected conditions = signal<ConditionDraft[]>([]);
   protected ambitoSelected = signal<UiLookupItem | null>(null);
-  protected ambitoProductCount = signal<number | null>(null);
-  protected tier1Quantity = signal('10');
+  protected ambitoProducts = signal<LookupItem[] | null>(null);
+  protected ambitoProductsExpanded = signal(false);
+  protected ambitoIsFamily = computed(() => this.ambitoSelected()?.extraInfo === 'Familia');
+  /** Sin valor por defecto en una promoción nueva — doc 47, sección 6.2: el usuario elige. */
+  protected measureType = signal<'QUANTITY' | 'AMOUNT' | ''>('');
 
   // Paso 3
-  protected measureType = signal<'QUANTITY' | 'AMOUNT'>('QUANTITY');
-  protected measureTypeOptions: UiFieldOption[] = [
-    { value: 'QUANTITY', label: 'Unidades' },
-    { value: 'AMOUNT', label: 'Soles' },
-  ];
   protected repeats = signal(false);
   protected maxRepeatsPerOrder = signal('');
   protected simRepeatQuantity = signal('30');
@@ -1517,12 +1737,14 @@ export class PromoWizardPage {
 
     effect(() => {
       const brand = this.ambitoSelected();
-      if (this.mode() === 'ambito' && brand && brand.name) {
+      this.ambitoProductsExpanded.set(false);
+      this.ambitoProducts.set(null);
+      // El lookup de productos solo filtra por marca (no por familia) — para
+      // una familia se muestra el nombre elegido, sin lista (ver plantilla).
+      if (this.mode() === 'ambito' && brand && brand.name && brand.extraInfo !== 'Familia') {
         this.lookupSvc.products('', { brandId: brand.id, limit: 50 }).subscribe((items) => {
-          this.ambitoProductCount.set(items.length);
+          this.ambitoProducts.set(items);
         });
-      } else {
-        this.ambitoProductCount.set(null);
       }
     });
 
@@ -1678,11 +1900,71 @@ export class PromoWizardPage {
     return this.tiers()[this.selectedTier()] ?? null;
   }
 
-  protected get measureTypeValue() {
-    return this.measureType();
+  /** "Qué cuenta" en forma de condiciones genéricas, para las frases de texto. */
+  protected effectiveConditionsForText(): {
+    scope: 'PRODUCT' | 'FAMILY' | 'BRAND';
+    productCode?: string;
+    productName?: string;
+    familyName?: string;
+    brandName?: string;
+  }[] {
+    if (!this.requiresPurchase()) return [];
+    if (this.mode() === 'ambito' && this.ambitoSelected()) {
+      const sel = this.ambitoSelected()!;
+      return sel.extraInfo === 'Familia'
+        ? [{ scope: 'FAMILY', familyName: sel.name }]
+        : [{ scope: 'BRAND', brandName: sel.name }];
+    }
+    return this.conditions().map((c) => ({
+      scope: c.scope,
+      productCode: c.code,
+      productName: c.name,
+      familyName: c.scope === 'FAMILY' ? c.name : undefined,
+      brandName: c.scope === 'BRAND' ? c.name : undefined,
+    }));
   }
-  protected set measureTypeValue(v: string) {
-    this.measureType.set(v === 'AMOUNT' ? 'AMOUNT' : 'QUANTITY');
+
+  protected whatCountsPhrase(): string {
+    return whatCountsText(
+      this.effectiveConditionsForText(),
+      this.requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST',
+    );
+  }
+
+  protected measureModePhrase(): string {
+    return measureModeText(
+      this.measureType() || 'QUANTITY',
+      this.effectiveConditionsForText(),
+      'TIERED',
+    );
+  }
+
+  /**
+   * Cambiar cómo se cuenta con tramos ya cargados borra sus mínimos — doc
+   * 47, sección 6.2 — porque un mismo número significa algo distinto en
+   * soles que en unidades.
+   */
+  protected selectMeasureType(value: 'QUANTITY' | 'AMOUNT') {
+    if (this.measureType() === value) return;
+    const hasThresholds = this.tiers().some((t) => t.threshold != null);
+    if (!hasThresholds) {
+      this.measureType.set(value);
+      return;
+    }
+    this.dialog
+      .confirm({
+        title: 'Cambiar cómo se cuenta',
+        message:
+          'Los tramos se miden distinto: se borrarán los mínimos de los tramos. Los premios se conservan. ¿Continuar?',
+        confirmLabel: 'Continuar',
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.measureType.set(value);
+        this.tiers.update((list) =>
+          list.map((t) => ({ ...t, threshold: null, thresholdMismatch: false })),
+        );
+      });
   }
 
   protected repeatsError(): string {
@@ -1722,47 +2004,104 @@ export class PromoWizardPage {
       });
   }
 
-  protected get tierFromQuantityModel() {
+  protected get tierThresholdModel() {
     const t = this.currentTier();
-    return String(t?.fromQuantity ?? '');
+    return t?.threshold != null ? String(t.threshold) : '';
   }
-  protected set tierFromQuantityModel(v: string) {
+  protected set tierThresholdModel(v: string) {
     const t = this.currentTier();
     if (!t) return;
-    t.fromQuantity = this.numberOr(t.fromQuantity, v);
+    t.threshold = v === '' ? null : this.numberOr(t.threshold ?? 0, v);
+    t.thresholdMismatch = false;
+    this.resortTiers();
+  }
+
+  /** "S/ 190.00" · "10" — valor corto para la escalera de tramos y el panel lateral. */
+  protected tierThresholdShort(t: TierDraft): string {
+    if (t.threshold == null) return '—';
+    return this.measureType() === 'AMOUNT' ? formatSoles(t.threshold) : quantityText(t.threshold);
+  }
+
+  protected allGroup(t: TierDraft): BenefitGroupDraft | undefined {
+    return t.benefitGroups.find((g) => g.selectionMode === 'ALL');
+  }
+
+  protected chooseGroups(t: TierDraft): BenefitGroupDraft[] {
+    return t.benefitGroups.filter((g) => g.selectionMode === 'CHOOSE');
+  }
+
+  private nextGroupNumber(t: TierDraft): number {
+    return Math.max(0, ...t.benefitGroups.map((g) => g.benefitGroup)) + 1;
+  }
+
+  /** "+ Agregar premio" — doc 47, sección 6.3: agrega al grupo "Recibe todo", creándolo si hace falta. */
+  protected addPremio(t: TierDraft) {
+    let group = this.allGroup(t);
+    if (!group) {
+      group = {
+        key: groupKeySeq++,
+        benefitGroup: this.nextGroupNumber(t),
+        selectionMode: 'ALL',
+        chooseCount: 1,
+        benefits: [],
+      };
+      t.benefitGroups = [group, ...t.benefitGroups];
+    }
+    group.benefits.push(emptyBenefit());
     this.tiers.update((list) => [...list]);
   }
 
-  /** Lectura pura para la plantilla: el grupo siempre existe (ver emptyTier). */
-  protected chooseGroup(t: TierDraft): BenefitGroupDraft {
-    return t.benefitGroups.find((x) => x.selectionMode === 'CHOOSE')!;
+  /** "+ Agregar premio a elegir" — crea un grupo nuevo con dos opciones vacías. */
+  protected addPremioAElegir(t: TierDraft) {
+    const group: BenefitGroupDraft = {
+      key: groupKeySeq++,
+      benefitGroup: this.nextGroupNumber(t),
+      selectionMode: 'CHOOSE',
+      chooseCount: 1,
+      benefits: [emptyBenefit(), emptyBenefit()],
+    };
+    t.benefitGroups = [...t.benefitGroups, group];
+    this.tiers.update((list) => [...list]);
   }
 
-  protected allGroup(t: TierDraft): BenefitGroupDraft {
-    return t.benefitGroups.find((x) => x.selectionMode === 'ALL')!;
+  /** "+ Agregar opción" dentro de un grupo "Elige" ya existente. */
+  protected addChoiceOption(g: BenefitGroupDraft) {
+    g.benefits.push(emptyBenefit());
+    this.tiers.update((list) => [...list]);
   }
 
-  protected addBenefit(t: TierDraft, mode: 'CHOOSE' | 'ALL') {
-    const group = mode === 'CHOOSE' ? this.chooseGroup(t) : this.allGroup(t);
-    group.benefits.push({
-      key: benefitKeySeq++,
-      benefitType: 'FREE_PRODUCT',
-      catalog: true,
-      quantity: 1,
-    });
-    group.chooseCount = Math.min(group.chooseCount, group.benefits.length || 1);
+  protected setChooseCount(g: BenefitGroupDraft, ev: Event) {
+    const raw = Number((ev.target as HTMLInputElement).value);
+    g.chooseCount = Math.min(
+      Math.max(1, Number.isFinite(raw) ? raw : 1),
+      Math.max(1, g.benefits.length),
+    );
     this.tiers.update((list) => [...list]);
   }
 
   protected removeBenefit(b: BenefitDraft) {
-    // Los grupos vacíos se conservan (son el andamiaje de las dos columnas);
-    // buildTiersCommand() ya los descarta al enviar.
+    // Un grupo sin premios desaparece — doc 47, sección 6.3.
     for (const t of this.tiers()) {
       for (const g of t.benefitGroups) {
         g.benefits = g.benefits.filter((x) => x !== b);
       }
+      t.benefitGroups = t.benefitGroups.filter((g) => g.benefits.length > 0);
     }
     this.tiers.update((list) => [...list]);
+  }
+
+  protected benefitHelpText(b: BenefitDraft): string {
+    if (b.benefitType === 'FREE_PRODUCT') {
+      return 'Se agrega como bonificación. Si no hay stock, queda pendiente de stock.';
+    }
+    if (b.benefitType === 'DISCOUNT_PERCENT') {
+      return this.requiresPurchase()
+        ? 'Se descuenta de cada producto que cuenta, no del pedido completo.'
+        : 'Se descuenta de todo el pedido.';
+    }
+    return this.requiresPurchase()
+      ? 'Se reparte entre los productos que cuentan, según lo que vale cada uno.'
+      : 'Se reparte entre todos los productos del pedido.';
   }
 
   protected benefitProductSelected(b: BenefitDraft): UiLookupItem | null {
@@ -1780,27 +2119,83 @@ export class PromoWizardPage {
     return Number.isFinite(n) && raw !== '' ? n : fallback;
   }
 
+  /** Reordena por umbral ascendente y renumera 1..n — doc 47, sección 8.2 regla 3. */
+  private resortTiers() {
+    const current = this.currentTier();
+    const sorted = [...this.tiers()].sort(
+      (a, b) => (a.threshold ?? Infinity) - (b.threshold ?? Infinity),
+    );
+    this.tiers.set(sorted.map((t, i) => ({ ...t, tier: i + 1 })));
+    if (current) {
+      const idx = this.tiers().findIndex((t) => t.key === current.key);
+      if (idx >= 0) this.selectedTier.set(idx);
+    }
+  }
+
   protected addTier() {
-    const nextNum = Math.max(0, ...this.tiers().map((t) => t.tier)) + 1;
-    this.tiers.update((list) => [...list, emptyTier(nextNum)]);
+    this.tiers.update((list) => [...list, emptyTier(list.length + 1)]);
     this.selectedTier.set(this.tiers().length - 1);
   }
 
   protected duplicateTier() {
     const t = this.currentTier();
     if (!t) return;
-    const nextNum = Math.max(0, ...this.tiers().map((x) => x.tier)) + 1;
     const clone: TierDraft = {
       key: tierKeySeq++,
-      tier: nextNum,
-      fromQuantity: t.fromQuantity,
+      tier: 0,
+      threshold: null,
       benefitGroups: t.benefitGroups.map((g) => ({
         ...g,
+        key: groupKeySeq++,
         benefits: g.benefits.map((b) => ({ ...b, key: benefitKeySeq++ })),
       })),
     };
     this.tiers.update((list) => [...list, clone]);
     this.selectedTier.set(this.tiers().length - 1);
+  }
+
+  /** Mensaje de validación del tramo (sección 6.3) — vacío si el tramo está bien armado. */
+  protected tierValidationError(t: TierDraft, index: number): string {
+    if (this.requiresPurchase()) {
+      if (t.threshold == null) return 'Indica desde cuánto se gana este tramo.';
+      if (t.threshold <= 0) return 'El mínimo debe ser mayor a cero.';
+      const prev = this.tiers()[index - 1];
+      if (prev && prev.threshold != null && t.threshold <= prev.threshold) {
+        return `El tramo ${t.tier} debe pedir más que el tramo ${prev.tier} (${this.tierThresholdShort(prev)}).`;
+      }
+    }
+    if (!t.benefitGroups.some((g) => g.benefits.length > 0)) {
+      return 'Agrega al menos un premio a este tramo.';
+    }
+    for (const g of t.benefitGroups) {
+      if (g.selectionMode === 'CHOOSE' && g.benefits.length < 2) {
+        return 'Un premio a elegir necesita al menos dos opciones.';
+      }
+      if (g.selectionMode === 'CHOOSE' && g.chooseCount > g.benefits.length) {
+        return 'No puede pedir elegir más premios de los que ofrece.';
+      }
+    }
+    for (const g of t.benefitGroups) {
+      for (const b of g.benefits) {
+        if (!this.benefitComplete(b)) return this.incompleteBenefitMessage(b);
+      }
+    }
+    if (this.repeats() && !this.maxRepeatsPerOrder()) return 'Indica el tope de veces por pedido.';
+    return '';
+  }
+
+  private benefitComplete(b: BenefitDraft): boolean {
+    if (b.benefitType === 'FREE_PRODUCT') {
+      return (b.catalog ? !!b.productId : !!b.label) && !!b.quantity && b.quantity > 0;
+    }
+    if (b.benefitType === 'DISCOUNT_AMOUNT') return !!b.discountAmount && b.discountAmount > 0;
+    return !!b.discountPercent && b.discountPercent > 0 && b.discountPercent <= 100;
+  }
+
+  private incompleteBenefitMessage(b: BenefitDraft): string {
+    if (b.benefitType === 'FREE_PRODUCT') return 'Elige el producto y la cantidad.';
+    if (b.benefitType === 'DISCOUNT_AMOUNT') return 'Indica el monto del descuento.';
+    return 'Indica el porcentaje (de 0.01 a 100).';
   }
 
   protected tierBenefitSummary(t: TierDraft): string {
@@ -1827,62 +2222,26 @@ export class PromoWizardPage {
     });
   }
 
+  /** Frase del tramo en vivo, al pie de su editor — doc 47, sección 5.4 y 6.3. */
   protected tierPhrase(t: TierDraft): string {
-    const choose = t.benefitGroups.find((g) => g.selectionMode === 'CHOOSE');
-    const all = t.benefitGroups.find((g) => g.selectionMode === 'ALL');
-    const parts: string[] = [];
-    if (choose?.benefits.length) {
-      parts.push(`elige entre ${choose.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
-    }
-    if (all?.benefits.length) {
-      parts.push(`recibe ${all.benefits.map((b) => this.benefitLabel(b)).join(' y ')}`);
-    }
-    if (!parts.length) return 'Agrega al menos un premio para este tramo.';
-    return `Con este tramo: ${parts.join(', y además ')}.`;
+    return tierPhraseText({
+      promoType: this.requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST',
+      measureType: this.measureType() || 'QUANTITY',
+      fromQuantity: this.measureType() === 'QUANTITY' ? t.threshold : null,
+      fromAmount: this.measureType() === 'AMOUNT' ? t.threshold : null,
+      conditions: this.effectiveConditionsForText(),
+      benefits: t.benefitGroups.flatMap((g) => g.benefits),
+    });
   }
 
-  /**
-   * "Así funciona" del paso 5 (sección 3, doc 45): una sola frase con lo
-   * clave en negrita (el umbral y cada premio), nunca HTML a mano.
-   */
-  protected summarySegments(): { text: string; bold: boolean }[] {
+  /** Banner "Así funciona" del paso 5 — doc 47, sección 6.4: la frase del tramo 1. */
+  protected firstTierPhrase(): string {
     const t1 = this.tiers()[0];
-    const benefitTexts = t1
-      ? t1.benefitGroups.flatMap((g) => g.benefits).map((b) => this.benefitLabel(b))
-      : [];
-    const segments: { text: string; bold: boolean }[] = [];
+    return t1 ? this.tierPhrase(t1) : '';
+  }
 
-    if (!this.requiresPurchase()) {
-      segments.push({
-        text: 'Por estar en la lista de clientes incluidos, el cliente recibe ',
-        bold: false,
-      });
-    } else {
-      const threshold = thresholdText({
-        promoType: 'TIERED',
-        measureType: this.measureType(),
-        fromQuantity: t1?.fromQuantity,
-      });
-      const scopeSuffix =
-        this.mode() === 'surtido'
-          ? ` entre ${this.conditions().length} producto${this.conditions().length === 1 ? '' : 's'}`
-          : ` de ${this.ambitoSelected()?.name ?? 'la marca o familia elegida'}`;
-      segments.push({ text: 'Comprando ', bold: false });
-      segments.push({ text: threshold.charAt(0).toLowerCase() + threshold.slice(1), bold: true });
-      segments.push({ text: `${scopeSuffix}, el cliente recibe `, bold: false });
-    }
-
-    if (benefitTexts.length === 0) {
-      segments.push({ text: 'sin premios definidos', bold: false });
-    } else {
-      benefitTexts.forEach((text, i) => {
-        if (i > 0)
-          segments.push({ text: i === benefitTexts.length - 1 ? ' y ' : ', ', bold: false });
-        segments.push({ text, bold: true });
-      });
-    }
-    segments.push({ text: '.', bold: false });
-    return segments;
+  protected extraTiersCount(): number {
+    return Math.max(0, this.tiers().length - 1);
   }
 
   protected vigenciaSummary(): string {
@@ -1917,8 +2276,23 @@ export class PromoWizardPage {
   // SegmentTargetView/CustomerTargetView: el paso 5 reusa las mismas piezas
   // compartidas que el detalle (doc 45, sección 1), no vuelve a dibujar las
   // tablas a mano.
-  protected conditionsAsViews = computed((): ConditionView[] =>
-    this.conditions().map((c, i) => ({
+  protected conditionsAsViews = computed((): ConditionView[] => {
+    if (this.mode() === 'ambito' && this.ambitoSelected()) {
+      const sel = this.ambitoSelected()!;
+      const isFamily = sel.extraInfo === 'Familia';
+      return [
+        {
+          lineNumber: 1,
+          scope: isFamily ? 'FAMILY' : 'BRAND',
+          scopeName: isFamily ? 'Familia' : 'Marca',
+          familyId: isFamily ? sel.id : undefined,
+          familyName: isFamily ? sel.name : undefined,
+          brandId: !isFamily ? sel.id : undefined,
+          brandName: !isFamily ? sel.name : undefined,
+        },
+      ];
+    }
+    return this.conditions().map((c, i) => ({
       lineNumber: i + 1,
       scope: c.scope,
       scopeName: this.scopeLabel(c.scope),
@@ -1929,13 +2303,20 @@ export class PromoWizardPage {
       familyName: c.scope === 'FAMILY' ? c.name : undefined,
       brandId: c.brandId,
       brandName: c.scope === 'BRAND' ? c.name : undefined,
-    })),
-  );
+    }));
+  });
 
   protected tiersAsViews = computed((): TierView[] =>
     this.tiers().map((t) => ({
       tier: t.tier,
-      fromQuantity: this.requiresPurchase() ? t.fromQuantity : undefined,
+      fromQuantity:
+        this.requiresPurchase() && this.measureType() === 'QUANTITY'
+          ? (t.threshold ?? undefined)
+          : undefined,
+      fromAmount:
+        this.requiresPurchase() && this.measureType() === 'AMOUNT'
+          ? (t.threshold ?? undefined)
+          : undefined,
       benefitGroups: t.benefitGroups
         .filter((g) => g.benefits.length > 0)
         .map((g) => ({
@@ -1982,6 +2363,14 @@ export class PromoWizardPage {
         label: 'Tipo',
         value: this.requiresPurchase() ? 'Por compra (tramos)' : 'Por lista de clientes',
       },
+      ...(this.requiresPurchase()
+        ? [
+            {
+              label: 'Se cuenta por',
+              value: this.measureType() === 'AMOUNT' ? 'Importe (S/)' : 'Unidades',
+            },
+          ]
+        : []),
       { label: 'Canal', value: this.selectedChannelName() || 'Todos los canales' },
       { label: 'Vigencia', value: this.vigenciaSummary() },
       { label: 'Prioridad', value: this.priorityLabel() },
@@ -1991,13 +2380,18 @@ export class PromoWizardPage {
     ];
   }
 
+  /** Doc 47, sección 6.4: el pie refleja el estado real del guardado, no un texto fijo. */
   protected stepHint(): string {
+    if (this.step() === 4) {
+      if (this.savingDraft()) return 'Guardando…';
+      if (this.saveError()) return `No se pudo guardar: ${this.saveError()}`;
+      return 'Todo guardado · lista para activar';
+    }
     return [
       'Guarda los datos generales de la campaña.',
       'Define qué compra cuenta para esta promoción.',
       'Arma los tramos y sus premios.',
       'Elige a quién llega la promoción.',
-      'Todo guardado · lista para activar.',
     ][this.step()];
   }
 
@@ -2019,8 +2413,8 @@ export class PromoWizardPage {
   /** Tramo alcanzado con una compra de `quantity`: el más alto cuyo umbral no la supera. */
   private reachedTier(quantity: number): TierDraft | null {
     const eligible = this.tiers()
-      .filter((t) => t.fromQuantity <= quantity)
-      .sort((a, b) => b.fromQuantity - a.fromQuantity);
+      .filter((t) => t.threshold != null && t.threshold <= quantity)
+      .sort((a, b) => (b.threshold ?? 0) - (a.threshold ?? 0));
     return eligible[0] ?? null;
   }
 
@@ -2029,16 +2423,19 @@ export class PromoWizardPage {
     const qty = this.numberOr(0, this.simRepeatQuantity());
     const tier = this.reachedTier(qty);
     const tope = this.numberOr(1, this.maxRepeatsPerOrder());
-    if (!tier || qty < tier.fromQuantity) return 'No alcanza ningún tramo todavía.';
-    const veces = Math.min(Math.floor(qty / tier.fromQuantity), tope);
+    if (!tier || tier.threshold == null || qty < tier.threshold) {
+      return 'No alcanza ningún tramo todavía.';
+    }
+    const veces = Math.min(Math.floor(qty / tier.threshold), tope);
     return `Gana ${veces} ${veces === 1 ? 'vez' : 'veces'} el premio del tramo ${tier.tier}.`;
   }
 
   protected repeatsHelpText(): string {
     const t1 = this.tiers()[0];
-    const umbral = t1?.fromQuantity ?? 10;
+    const umbral = t1?.threshold ?? 10;
+    const unidad = this.measureType() === 'AMOUNT' ? 'soles' : 'unidades';
     const tope = this.numberOr(3, this.maxRepeatsPerOrder());
-    const base = `Cada vez que el pedido junta otras ${umbral} unidades, se entrega el premio otra vez: ${umbral * 2} → 2, ${umbral * 3} → 3. Nunca más de ${tope} veces por pedido.`;
+    const base = `Cada vez que el pedido junta otras ${umbral} ${unidad}, se entrega el premio otra vez: ${umbral * 2} → 2, ${umbral * 3} → 3. Nunca más de ${tope} veces por pedido.`;
     if (this.tiers().length > 1) {
       return `${base} Se repite solo el tramo más alto alcanzado; los tramos no se combinan.`;
     }
@@ -2047,13 +2444,14 @@ export class PromoWizardPage {
 
   private validateStep(n: number): boolean {
     if (n === 0) return !!this.name().trim() && !this.dateRangeError();
+    if (n === 1) {
+      if (!this.requiresPurchase()) return true;
+      const hasCondition =
+        this.mode() === 'ambito' ? !!this.ambitoSelected() : this.conditions().length > 0;
+      return hasCondition && !!this.measureType();
+    }
     if (n === 2) {
-      const hasBenefit = this.tiers().some((t) =>
-        t.benefitGroups.some((g) => g.benefits.length > 0),
-      );
-      if (!hasBenefit) return false;
-      if (this.repeats() && !this.maxRepeatsPerOrder()) return false;
-      return true;
+      return this.tiers().every((t, i) => !this.tierValidationError(t, i));
     }
     if (n === 3) {
       if (!this.requiresPurchase()) return this.audience().some((a) => a.mode === 'INCLUDE');
@@ -2065,6 +2463,10 @@ export class PromoWizardPage {
   protected nextStep() {
     if (!this.validateStep(this.step())) {
       this.errorSteps.update((s) => Array.from(new Set([...s, this.step()])));
+      if (this.step() === 2) {
+        const badIndex = this.tiers().findIndex((t, i) => !!this.tierValidationError(t, i));
+        if (badIndex >= 0) this.selectedTier.set(badIndex);
+      }
       return;
     }
     this.errorSteps.update((s) => s.filter((x) => x !== this.step()));
@@ -2077,10 +2479,11 @@ export class PromoWizardPage {
     // tramos y premios; el paso de "a quiénes llega" guarda el targeting —
     // así en el resumen ya existe y se puede simular sin un guardado aparte.
     if (leavingStep === 2) {
-      this.ensureSaved().subscribe();
+      this.ensureSaved().subscribe({ error: () => {} });
     } else if (leavingStep === 3) {
-      this.ensureSaved().subscribe((id) => {
-        this.promoSvc.setTargets(id, this.buildTargetsCommand()).subscribe();
+      this.ensureSaved().subscribe({
+        next: (id) => this.promoSvc.setTargets(id, this.buildTargetsCommand()).subscribe(),
+        error: () => {},
       });
     }
   }
@@ -2093,25 +2496,37 @@ export class PromoWizardPage {
     if (index === this.step() || this.visited().includes(index)) this.step.set(index);
   }
 
+  /**
+   * Doc 47, sección 8.2: solo la columna de `measureType` lleva valor (nunca
+   * las dos, nunca 0); tramos, grupos y premios se renumeran 1..n al
+   * enviar — `tiers()` ya está ordenado por umbral (ver `resortTiers`).
+   */
   private buildTiersCommand() {
     const source = this.requiresPurchase() ? this.tiers() : this.tiers().slice(0, 1);
     return source
       .filter((t) => t.benefitGroups.some((g) => g.benefits.length > 0))
-      .map((t) => ({
-        tier: t.tier,
-        // CUSTOMER_LIST: un único tramo sin umbral (sección 8.4 del doc).
-        fromQuantity: this.requiresPurchase() ? t.fromQuantity : undefined,
+      .map((t, ti) => ({
+        tier: ti + 1,
+        fromQuantity:
+          this.requiresPurchase() && this.measureType() === 'QUANTITY'
+            ? (t.threshold ?? undefined)
+            : undefined,
+        fromAmount:
+          this.requiresPurchase() && this.measureType() === 'AMOUNT'
+            ? (t.threshold ?? undefined)
+            : undefined,
         benefitGroups: t.benefitGroups
           .filter((g) => g.benefits.length > 0)
-          .map((g) => {
+          .map((g, gi) => {
             // Un grupo «elige» con una sola opción no es una elección: se
             // manda como entrega fija (el backend valida choiceMeaningful).
             const mode =
               g.selectionMode === 'CHOOSE' && g.benefits.length < 2 ? 'ALL' : g.selectionMode;
             return {
-              benefitGroup: g.benefitGroup,
+              benefitGroup: gi + 1,
               selectionMode: mode,
               chooseCount: mode === 'CHOOSE' ? g.chooseCount || 1 : undefined,
+              label: mode === 'CHOOSE' ? 'Premio a elegir' : undefined,
               benefits: g.benefits.map((b, i) => ({
                 benefitLine: i + 1,
                 benefitType: b.benefitType,
@@ -2151,7 +2566,8 @@ export class PromoWizardPage {
       description: this.description() || undefined,
       promoType: this.requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST',
       salesChannelId: this.salesChannelId() ? Number(this.salesChannelId()) : undefined,
-      measureType: this.measureType(),
+      // El backend exige un valor válido aunque no se use (lista de clientes) — sección 6.2.
+      measureType: this.measureType() || 'QUANTITY',
       repeats: this.requiresPurchase() ? this.repeats() : false,
       maxRepeatsPerOrder:
         this.requiresPurchase() && this.repeats()
@@ -2174,7 +2590,7 @@ export class PromoWizardPage {
       name: this.name(),
       description: this.description() || undefined,
       salesChannelId: this.salesChannelId() ? Number(this.salesChannelId()) : undefined,
-      measureType: this.measureType(),
+      measureType: this.measureType() || 'QUANTITY',
       repeats: this.requiresPurchase() ? this.repeats() : false,
       maxRepeatsPerOrder:
         this.requiresPurchase() && this.repeats()
@@ -2225,7 +2641,7 @@ export class PromoWizardPage {
       );
       this.stackable.set(!!p.stackable);
       this.requiresPurchase.set(p.promoType !== 'CUSTOMER_LIST');
-      this.measureType.set((p.measureType as 'QUANTITY' | 'AMOUNT') ?? 'QUANTITY');
+      this.measureType.set((p.measureType as 'QUANTITY' | 'AMOUNT') || 'QUANTITY');
       this.repeats.set(!!p.repeats);
       this.maxRepeatsPerOrder.set(p.maxRepeatsPerOrder != null ? String(p.maxRepeatsPerOrder) : '');
       const brandCond = (p.conditions ?? []).find(
@@ -2236,6 +2652,7 @@ export class PromoWizardPage {
         this.ambitoSelected.set({
           id: (brandCond.brandId ?? brandCond.familyId)!,
           name: brandCond.brandName ?? brandCond.familyName ?? '',
+          extraInfo: brandCond.scope === 'FAMILY' ? 'Familia' : 'Marca',
         });
       } else {
         this.mode.set('surtido');
@@ -2250,34 +2667,40 @@ export class PromoWizardPage {
           })),
         );
       }
-      const firstTier = (p.tiers ?? [])[0];
-      this.tier1Quantity.set(String(firstTier?.fromQuantity ?? 10));
-      this.tiers.set(
-        (p.tiers ?? [emptyTier(1)]).map((t) => ({
+      // Umbral: de la columna que corresponde a measureType. Si por datos
+      // viejos viene en la otra columna, queda vacío con el aviso de la
+      // sección 7.2 (nunca se guarda así: el backend lo rechaza).
+      const measureAmount = this.measureType() === 'AMOUNT';
+      const loadedTiers: TierDraft[] = (p.tiers ?? []).map((t) => {
+        const matching = measureAmount ? t.fromAmount : t.fromQuantity;
+        const other = measureAmount ? t.fromQuantity : t.fromAmount;
+        return {
           key: tierKeySeq++,
           tier: t.tier ?? 1,
-          fromQuantity: t.fromQuantity ?? 10,
-          benefitGroups: withBothGroups(
-            (t.benefitGroups ?? []).map((g) => ({
-              benefitGroup: g.benefitGroup ?? 1,
-              selectionMode: (g.selectionMode as 'ALL' | 'CHOOSE') ?? 'ALL',
-              chooseCount: g.chooseCount ?? 1,
-              benefits: (g.benefits ?? []).map((b) => ({
-                key: benefitKeySeq++,
-                benefitType: (b.benefitType as BenefitDraft['benefitType']) ?? 'FREE_PRODUCT',
-                catalog: !!b.productId,
-                productId: b.productId ?? undefined,
-                productCode: b.productCode ?? undefined,
-                productName: b.productName ?? undefined,
-                quantity: b.quantity ?? undefined,
-                discountAmount: b.discountAmount ?? undefined,
-                discountPercent: b.discountPercent ?? undefined,
-                label: b.label ?? undefined,
-              })),
+          threshold: matching ?? null,
+          thresholdMismatch: matching == null && other != null,
+          benefitGroups: (t.benefitGroups ?? []).map((g) => ({
+            key: groupKeySeq++,
+            benefitGroup: g.benefitGroup ?? 1,
+            selectionMode: (g.selectionMode as 'ALL' | 'CHOOSE') ?? 'ALL',
+            chooseCount: g.chooseCount ?? 1,
+            benefits: (g.benefits ?? []).map((b) => ({
+              key: benefitKeySeq++,
+              benefitType: (b.benefitType as BenefitDraft['benefitType']) ?? 'FREE_PRODUCT',
+              catalog: !!b.productId,
+              productId: b.productId ?? undefined,
+              productCode: b.productCode ?? undefined,
+              productName: b.productName ?? undefined,
+              quantity: b.quantity ?? undefined,
+              discountAmount: b.discountAmount ?? undefined,
+              discountPercent: b.discountPercent ?? undefined,
+              label: b.label ?? undefined,
             })),
-          ),
-        })),
-      );
+          })),
+        };
+      });
+      this.tiers.set(loadedTiers.length ? loadedTiers : [emptyTier(1)]);
+      this.resortTiers();
       if (keepId) {
         this.draftId.set(id);
         this.audience.set([
@@ -2310,6 +2733,90 @@ export class PromoWizardPage {
    * actual del formulario (no se queda con el primer guardado — sección
    * 8.2: cada "Continuar" guarda lo último).
    */
+  /**
+   * Motivo de un error de guardado y a qué paso lleva — doc 47, secciones
+   * 8.4, 17.2 y 17.3. El `detail` del backend se muestra tal cual cuando ya
+   * está en lenguaje de negocio; si trae un nombre técnico, se traduce.
+   */
+  private saveErrorMessage(err: { status?: number; error?: { detail?: string } }): {
+    message: string;
+    step: number;
+  } {
+    const detail: string = err?.error?.detail ?? '';
+    if (err?.status === 409) {
+      if (
+        /se mide en soles|se mide en unidades|está repetido|debe pedir más que el tramo|lleva un solo tramo/i.test(
+          detail,
+        )
+      ) {
+        return { message: detail, step: 2 };
+      }
+      if (/al menos un tramo con un grupo de beneficio no vacío/i.test(detail)) {
+        return { message: 'Cada tramo necesita al menos un premio.', step: 2 };
+      }
+      const chooseOneOption = detail.match(/grupo \d+ del tramo (\d+) .*una sola opción/i);
+      if (chooseOneOption) {
+        return {
+          message: `El premio a elegir del tramo ${chooseOneOption[1]} necesita al menos dos opciones.`,
+          step: 2,
+        };
+      }
+      const chooseTooMany = detail.match(/grupo \d+ del tramo (\d+) pide elegir más premios/i);
+      if (chooseTooMany) {
+        return {
+          message: `En el tramo ${chooseTooMany[1]}, no puede pedir elegir más premios de los que ofrece.`,
+          step: 2,
+        };
+      }
+      if (/fecha de fin no puede ser anterior/i.test(detail)) return { message: detail, step: 0 };
+      if (/ya se aplicó en pedidos/i.test(detail)) return { message: detail, step: 4 };
+      if (/ya existe una promoci[oó]n con ese c[oó]digo/i.test(detail) || /code/i.test(detail)) {
+        return { message: 'Ya existe una promoción con ese código.', step: 0 };
+      }
+      return { message: detail || 'No se pudo completar la operación. Intenta de nuevo.', step: 2 };
+    }
+    if (err?.status === 400) {
+      if (/maxRepeatsPerOrder/i.test(detail) && /solo aplica cuando/i.test(detail)) {
+        return { message: 'El tope por pedido solo se usa si la promoción se repite.', step: 2 };
+      }
+      if (/necesita un tope por pedido/i.test(detail)) {
+        return { message: 'Indica el tope de veces por pedido.', step: 2 };
+      }
+      if (/CUSTOMER_LIST no se repite/i.test(detail)) {
+        return { message: 'Una promoción por lista de clientes no se repite.', step: 2 };
+      }
+      if (/CUSTOMER_LIST no lleva condiciones/i.test(detail)) {
+        return { message: 'Una promoción por lista de clientes no lleva productos.', step: 1 };
+      }
+      if (/TIERED necesita al menos una condición/i.test(detail)) {
+        return { message: 'Elige qué productos cuentan.', step: 1 };
+      }
+      if (/fromQuantity o fromAmount/i.test(detail)) {
+        return { message: 'Indica desde cuánto se gana este tramo.', step: 2 };
+      }
+      if (/selectionMode CHOOSE exige chooseCount/i.test(detail)) {
+        return { message: 'Indica cuántos premios elige el cliente.', step: 2 };
+      }
+      if (/chooseCount no puede ser mayor/i.test(detail)) {
+        return { message: 'No puede pedir elegir más premios de los que ofrece.', step: 2 };
+      }
+      if (/grupo CHOOSE necesita al menos dos opciones/i.test(detail)) {
+        return { message: 'Un premio a elegir necesita al menos dos opciones.', step: 2 };
+      }
+      if (/FREE_PRODUCT exige quantity/i.test(detail)) {
+        return { message: 'Elige el producto y la cantidad.', step: 2 };
+      }
+      if (/scope debe traer su referencia/i.test(detail)) {
+        return { message: 'Elige el producto, la familia o la marca.', step: 1 };
+      }
+      if (/measureType debe ser/i.test(detail)) {
+        return { message: 'Elige cómo se cuenta la compra.', step: 1 };
+      }
+    }
+    if (err?.status === 404) return { message: 'La promoción ya no existe.', step: this.step() };
+    return { message: 'No se pudo completar la operación. Intenta de nuevo.', step: this.step() };
+  }
+
   private ensureSaved(): Observable<number> {
     this.savingDraft.set(true);
     this.saveError.set('');
@@ -2326,7 +2833,14 @@ export class PromoWizardPage {
       }),
       catchError((err) => {
         this.savingDraft.set(false);
-        this.saveError.set('No pudimos guardar la promoción. Revisa los datos e intenta de nuevo.');
+        const { message, step } = this.saveErrorMessage(err);
+        this.saveError.set(message);
+        this.errorSteps.update((s) => Array.from(new Set([...s, step])));
+        if (step !== this.step()) this.step.set(step);
+        if (step === 2) {
+          const badIndex = this.tiers().findIndex((t, i) => !!this.tierValidationError(t, i));
+          if (badIndex >= 0) this.selectedTier.set(badIndex);
+        }
         throw err;
       }),
     );

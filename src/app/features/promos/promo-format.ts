@@ -70,3 +70,11 @@ export function repeatsText(repeats?: boolean | null, maxRepeatsPerOrder?: numbe
 export function applicationsPerCustomerText(value?: number | null): string {
   return value != null ? String(value) : 'Ilimitado';
 }
+
+/** Estado del premio a elegir en un pedido — doc 47, sección 4.5. */
+export function choiceStatusLabel(status?: string | null): string {
+  if (status === 'CHOSEN') return 'Elegido';
+  if (status === 'PENDING') return 'Por elegir';
+  if (status === 'DECLINED') return 'No otorgado';
+  return '—';
+}

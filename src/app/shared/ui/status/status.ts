@@ -36,6 +36,10 @@ const NORMALIZED_MAP: Record<string, string> = {
   'no compró': 'no-purchase',
   cerrado: 'closed',
   'pendiente de visitar': 'pending-visit',
+  // Premio a elegir (choice_status) — doc 47, sección 4.5. "Por elegir" no se
+  // mapea: cae en el "pendiente" por defecto (mismo matiz ámbar).
+  elegido: 'delivered',
+  'no otorgado': 'pending',
 };
 
 function normalize(text: string): string {

@@ -55,14 +55,24 @@ export function benefitText(b: {
   return `${qty} × ${name}`;
 }
 
-/** "Se entrega siempre" · "El cliente elige {chooseCount} de {n}" — sección 3.6. */
+/** "Recibe todo" · "El cliente elige {chooseCount} de {n}" — doc 47, sección 4.3 (texto del asistente). */
 export function groupModeText(
   selectionMode: SelectionModeCode,
   chooseCount: number | null | undefined,
   optionsCount: number,
 ): string {
   if (selectionMode === 'CHOOSE') return `El cliente elige ${chooseCount ?? 1} de ${optionsCount}`;
-  return 'Se entrega siempre';
+  return 'Recibe todo';
+}
+
+/** Insignia de tabla — doc 47, sección 4.3: "Siempre" (verde) · "Elige {chooseCount} de {n}". */
+export function groupModeBadgeText(
+  selectionMode: SelectionModeCode,
+  chooseCount: number | null | undefined,
+  optionsCount: number,
+): string {
+  if (selectionMode === 'CHOOSE') return `Elige ${chooseCount ?? 1} de ${optionsCount}`;
+  return 'Siempre';
 }
 
 /** "Producto {código} {nombre}" · "Familia {nombre}" · "Marca {nombre}". */
@@ -88,7 +98,7 @@ export function benefitProductName(b: {
   return b.productName ?? b.label ?? 'Premio sin nombre';
 }
 
-/** Columna "Cantidad" de la tabla de tramos: unidades, soles o porcentaje según el tipo — sección 6.2. */
+/** Columna "Valor" de la tabla de tramos: unidades, soles o porcentaje según el tipo — doc 47, sección 4.2. */
 export function benefitQuantityText(b: {
   benefitType?: BenefitTypeCode;
   quantity?: number | null;
@@ -97,7 +107,117 @@ export function benefitQuantityText(b: {
 }): string {
   if (b.benefitType === 'DISCOUNT_AMOUNT') return formatSoles(b.discountAmount ?? 0);
   if (b.benefitType === 'DISCOUNT_PERCENT') return `${b.discountPercent ?? 0}%`;
-  return quantityText(b.quantity ?? 0);
+  return `${quantityText(b.quantity ?? 0)} und`;
+}
+
+function isDiscountBenefit(b: { benefitType?: BenefitTypeCode }): boolean {
+  return b.benefitType === 'DISCOUNT_AMOUNT' || b.benefitType === 'DISCOUNT_PERCENT';
+}
+
+/** "{a}, {b} y {c}" — une una lista de frases cortas en español, sin Oxford comma. */
+function joinWithY(parts: string[]): string {
+  const clean = parts.filter(Boolean);
+  if (clean.length === 0) return '';
+  if (clean.length === 1) return clean[0];
+  if (clean.length === 2) return `${clean[0]} y ${clean[1]}`;
+  return `${clean.slice(0, -1).join(', ')} y ${clean[clean.length - 1]}`;
+}
+
+type ConditionLike = {
+  scope?: ScopeCode;
+  productCode?: string | null;
+  productName?: string | null;
+  familyName?: string | null;
+  brandName?: string | null;
+};
+
+function singleWhatCountsText(c: ConditionLike): string {
+  if (c.scope === 'BRAND') return `todos los productos de ${c.brandName ?? 'la marca'}`;
+  if (c.scope === 'FAMILY') {
+    return `todos los productos de la familia ${c.familyName ?? 'sin nombre'}`;
+  }
+  return c.productCode
+    ? `${c.productCode} ${c.productName ?? ''}`.trimEnd()
+    : (c.productName ?? 'el producto');
+}
+
+/**
+ * "Qué cuenta" — doc 47, sección 5.4: marca/familia completas, un producto,
+ * varios productos ("{n} productos") o, si mezclan alcances, la lista unida.
+ */
+export function whatCountsText(conditions: ConditionLike[], promoType?: string | null): string {
+  if (promoType === 'CUSTOMER_LIST') return 'la lista de clientes';
+  if (conditions.length === 0) return 'cualquier compra';
+  if (conditions.length === 1) return singleWhatCountsText(conditions[0]);
+  if (conditions.every((c) => c.scope === 'PRODUCT')) return `${conditions.length} productos`;
+  return joinWithY(conditions.map(singleWhatCountsText));
+}
+
+/** "Cómo se cuenta" — doc 47, sección 5.4. */
+export function measureModeText(
+  measureType: MeasureTypeCode,
+  conditions: ConditionLike[],
+  promoType?: string | null,
+): string {
+  const qc = whatCountsText(conditions, promoType);
+  return measureType === 'AMOUNT'
+    ? `Se suma el importe de ${qc}, a su precio de lista`
+    : `Se suman las unidades de ${qc}`;
+}
+
+/** "Desde S/ 190.00" sin el prefijo "Desde", con "o más" — para la frase del tramo (sección 5.4). */
+export function thresholdOrMoreText(opts: {
+  measureType?: MeasureTypeCode;
+  fromQuantity?: number | null;
+  fromAmount?: number | null;
+}): string {
+  if (opts.measureType === 'AMOUNT') {
+    return opts.fromAmount != null ? `${formatSoles(opts.fromAmount)} o más` : '—';
+  }
+  if (opts.fromQuantity == null) return '—';
+  return opts.fromQuantity === 1
+    ? '1 unidad o más'
+    : `${quantityText(opts.fromQuantity)} unidades o más`;
+}
+
+/** "en esos productos" · "en todo el pedido" — alcance del descuento (sección 5.4). */
+export function discountScopeText(promoType?: string | null): string {
+  return promoType === 'CUSTOMER_LIST' ? 'en todo el pedido' : 'en esos productos';
+}
+
+type BenefitLike = {
+  benefitType?: BenefitTypeCode;
+  quantity?: number | null;
+  productCode?: string | null;
+  productName?: string | null;
+  label?: string | null;
+  discountAmount?: number | null;
+  discountPercent?: number | null;
+};
+
+/**
+ * Frase del tramo / frase de lista de clientes — doc 47, sección 5.4:
+ * "Si compra {umbral} o más de {qué cuenta}, recibe {premios}{alcance si hay
+ * descuento}" · "Por estar en la lista, el cliente recibe {premios} en todo
+ * el pedido".
+ */
+export function tierPhraseText(opts: {
+  promoType?: string | null;
+  measureType?: MeasureTypeCode;
+  fromQuantity?: number | null;
+  fromAmount?: number | null;
+  conditions: ConditionLike[];
+  benefits: BenefitLike[];
+}): string {
+  const premios = joinWithY(opts.benefits.map((b) => benefitText(b))) || 'premios por definir';
+  if (opts.promoType === 'CUSTOMER_LIST') {
+    return `Por estar en la lista, el cliente recibe ${premios} en todo el pedido.`;
+  }
+  const umbral = thresholdOrMoreText(opts);
+  const qc = whatCountsText(opts.conditions, opts.promoType);
+  const hasDiscount = opts.benefits.some(isDiscountBenefit);
+  const alcance = hasDiscount ? ` ${discountScopeText(opts.promoType)}` : '';
+  return `Si compra ${umbral} de ${qc}, recibe ${premios}${alcance}.`;
 }
 
 /** Una fila: su propio texto. Varias: "Surtido de N productos" (frases cortas, p. ej. el resumen del asistente). */

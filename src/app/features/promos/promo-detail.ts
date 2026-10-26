@@ -15,6 +15,7 @@ import { PromoConditionsTable } from './ui/promo-conditions-table';
 import { PromoTiersTable } from './ui/promo-tiers-table';
 import { PromoConfigList, PromoConfigRow } from './ui/promo-config-list';
 import { PromoTargetsBlock } from './ui/promo-targets-block';
+import { PromoReachTab } from './promo-reach-tab';
 import { PromoService } from './promo';
 import { PromoDetail } from './promo.types';
 import {
@@ -46,6 +47,7 @@ import { quantityText } from '../sales-reports/sales-report-format';
     PromoTiersTable,
     PromoConfigList,
     PromoTargetsBlock,
+    PromoReachTab,
   ],
   template: `
     <section class="pd-page">
@@ -119,127 +121,158 @@ import { quantityText } from '../sales-reports/sales-report-format';
           <div class="pd-error">{{ deleteError() }}</div>
         }
 
-        <div class="pd-usage">
-          <div class="pd-usage-cell">
-            <span class="pd-usage-label">Pedidos</span>
-            <span class="pd-usage-value">{{ p.usage.orderCount }}</span>
-            <span class="pd-usage-caption">no anulados</span>
-          </div>
-          <div class="pd-usage-cell">
-            <span class="pd-usage-label">Unidades bonificadas</span>
-            <span class="pd-usage-value">{{ quantityText(p.usage.grantedUnits) }}</span>
-            <span class="pd-usage-caption">productos gratis entregados</span>
-          </div>
-          <div class="pd-usage-cell">
-            <span class="pd-usage-label">Descuentos</span>
-            <span class="pd-usage-value">{{ formatSoles(p.usage.discountAmount) }}</span>
-            <span class="pd-usage-caption">en soles</span>
-          </div>
-          <div class="pd-usage-cell">
-            <span class="pd-usage-label">Última aplicación</span>
-            <span class="pd-usage-value pd-usage-value-sm">
-              {{
-                p.usage.lastAppliedAt ? dateTimeText(p.usage.lastAppliedAt) : 'Todavía no se aplicó'
-              }}
-            </span>
-          </div>
-        </div>
+        <nav class="pd-tabs" *hasPermission="'promo.create'">
+          <button
+            type="button"
+            class="pd-tab"
+            [class.active]="activeTab() === 'resumen'"
+            (click)="setTab('resumen')"
+          >
+            Resumen
+          </button>
+          <button
+            type="button"
+            class="pd-tab"
+            [class.active]="activeTab() === 'alcance'"
+            (click)="setTab('alcance')"
+          >
+            Alcance
+          </button>
+        </nav>
 
-        <div class="pd-grid">
-          <div class="pd-main">
-            <ui-card title="La regla">
-              <app-promo-rule-card [source]="p" />
-            </ui-card>
+        @if (activeTab() === 'alcance') {
+          <app-promo-reach-tab
+            [promoId]="p.promoId!"
+            [initialFrom]="initialFrom()"
+            [initialTo]="initialTo()"
+          />
+        } @else {
+          <div class="pd-usage">
+            <div class="pd-usage-cell">
+              <span class="pd-usage-label">Pedidos</span>
+              <span class="pd-usage-value">{{ p.usage.orderCount }}</span>
+              <span class="pd-usage-caption">no anulados</span>
+            </div>
+            <div class="pd-usage-cell">
+              <span class="pd-usage-label">Unidades bonificadas</span>
+              <span class="pd-usage-value">{{ quantityText(p.usage.grantedUnits) }}</span>
+              <span class="pd-usage-caption">productos gratis entregados</span>
+            </div>
+            <div class="pd-usage-cell">
+              <span class="pd-usage-label">Descuentos</span>
+              <span class="pd-usage-value">{{ formatSoles(p.usage.discountAmount) }}</span>
+              <span class="pd-usage-caption">en soles</span>
+            </div>
+            <div class="pd-usage-cell">
+              <span class="pd-usage-label">Última aplicación</span>
+              <span class="pd-usage-value pd-usage-value-sm">
+                {{
+                  p.usage.lastAppliedAt
+                    ? dateTimeText(p.usage.lastAppliedAt)
+                    : 'Todavía no se aplicó'
+                }}
+              </span>
+            </div>
+          </div>
 
-            <ui-card>
-              <div class="pd-card-head">
-                <h3 class="pd-card-title">
-                  Qué debe comprar
-                  @if (p.conditions?.length) {
-                    <ui-badge tone="neutral"
-                      >{{ p.conditions!.length }} producto{{
-                        p.conditions!.length === 1 ? '' : 's'
-                      }}</ui-badge
-                    >
+          <div class="pd-grid">
+            <div class="pd-main">
+              <ui-card title="La regla">
+                <app-promo-rule-card [source]="p" />
+              </ui-card>
+
+              <ui-card>
+                <div class="pd-card-head">
+                  <h3 class="pd-card-title">
+                    Qué debe comprar
+                    @if (p.conditions?.length) {
+                      <ui-badge tone="neutral"
+                        >{{ p.conditions!.length }} producto{{
+                          p.conditions!.length === 1 ? '' : 's'
+                        }}</ui-badge
+                      >
+                    }
+                  </h3>
+                  @if (showSumNote(p)) {
+                    <span class="pd-card-note">+ Las cantidades se suman entre sí</span>
                   }
-                </h3>
-                @if (showSumNote(p)) {
-                  <span class="pd-card-note">+ Las cantidades se suman entre sí</span>
-                }
-              </div>
-              <app-promo-conditions-table [conditions]="p.conditions" [promoType]="p.promoType" />
-            </ui-card>
+                </div>
+                <app-promo-conditions-table [conditions]="p.conditions" [promoType]="p.promoType" />
+              </ui-card>
 
-            <ui-card>
-              <div class="pd-card-head">
-                <h3 class="pd-card-title">
-                  Tramos y premios
-                  @if (p.tiers?.length) {
-                    <ui-badge tone="neutral"
-                      >{{ p.tiers!.length }} tramo{{ p.tiers!.length === 1 ? '' : 's' }}</ui-badge
-                    >
-                  }
-                </h3>
-                <span class="pd-card-note">Se mide en {{ measureLabel(p) }}</span>
-              </div>
-              <app-promo-tiers-table
-                [tiers]="p.tiers"
-                [measureType]="p.measureType"
-                [promoType]="p.promoType"
-              />
-            </ui-card>
-          </div>
-
-          <div class="pd-side">
-            <div class="pd-edit-status" [class.pd-edit-ok]="p.definitionEditable">
-              <span class="material-icons" aria-hidden="true">{{
-                p.definitionEditable ? 'task_alt' : 'info'
-              }}</span>
-              <div class="pd-edit-status-body">
-                @if (p.definitionEditable) {
-                  <strong>Se puede editar todo</strong>
-                  <p>Todavía no se aplicó en pedidos. Los cambios valen para los pedidos nuevos.</p>
-                } @else {
-                  <p>{{ p.editBlockReason }}</p>
-                  <button
-                    uiButton
-                    variant="secondary"
-                    size="sm"
-                    *hasPermission="'promo.create'"
-                    (click)="duplicate()"
-                  >
-                    Duplicar
-                  </button>
-                }
-              </div>
+              <ui-card>
+                <div class="pd-card-head">
+                  <h3 class="pd-card-title">
+                    Tramos y premios
+                    @if (p.tiers?.length) {
+                      <ui-badge tone="neutral"
+                        >{{ p.tiers!.length }} tramo{{ p.tiers!.length === 1 ? '' : 's' }}</ui-badge
+                      >
+                    }
+                  </h3>
+                  <span class="pd-card-note">Se mide en {{ measureLabel(p) }}</span>
+                </div>
+                <app-promo-tiers-table
+                  [tiers]="p.tiers"
+                  [measureType]="p.measureType"
+                  [promoType]="p.promoType"
+                />
+              </ui-card>
             </div>
 
-            <ui-card title="Vigencia">
-              <div class="pd-vigencia-dates">
-                <span>{{ p.startDate ? dateText(p.startDate) : 'Sin fecha de inicio' }}</span>
-                <span>{{ p.endDate ? dateText(p.endDate) : 'Sin fecha de fin' }}</span>
-              </div>
-              @if (vigenciaPercent(p); as percent) {
-                <div class="pd-vigencia-track">
-                  <div class="pd-vigencia-fill" [style.width.%]="percent"></div>
+            <div class="pd-side">
+              <div class="pd-edit-status" [class.pd-edit-ok]="p.definitionEditable">
+                <span class="material-icons" aria-hidden="true">{{
+                  p.definitionEditable ? 'task_alt' : 'info'
+                }}</span>
+                <div class="pd-edit-status-body">
+                  @if (p.definitionEditable) {
+                    <strong>Se puede editar todo</strong>
+                    <p>
+                      Todavía no se aplicó en pedidos. Los cambios valen para los pedidos nuevos.
+                    </p>
+                  } @else {
+                    <p>{{ p.editBlockReason }}</p>
+                    <button
+                      uiButton
+                      variant="secondary"
+                      size="sm"
+                      *hasPermission="'promo.create'"
+                      (click)="duplicate()"
+                    >
+                      Duplicar
+                    </button>
+                  }
                 </div>
-              }
-              <p class="pd-vigencia-status">{{ vigenciaStatusText(p) }}</p>
-            </ui-card>
+              </div>
 
-            <ui-card title="Configuración">
-              <app-promo-config-list [rows]="configRows(p)" />
-            </ui-card>
+              <ui-card title="Vigencia">
+                <div class="pd-vigencia-dates">
+                  <span>{{ p.startDate ? dateText(p.startDate) : 'Sin fecha de inicio' }}</span>
+                  <span>{{ p.endDate ? dateText(p.endDate) : 'Sin fecha de fin' }}</span>
+                </div>
+                @if (vigenciaPercent(p); as percent) {
+                  <div class="pd-vigencia-track">
+                    <div class="pd-vigencia-fill" [style.width.%]="percent"></div>
+                  </div>
+                }
+                <p class="pd-vigencia-status">{{ vigenciaStatusText(p) }}</p>
+              </ui-card>
 
-            <ui-card title="A quiénes llega">
-              <app-promo-targets-block
-                [segments]="p.segments"
-                [customers]="p.customers"
-                [salesChannelName]="p.salesChannelName"
-              />
-            </ui-card>
+              <ui-card title="Configuración">
+                <app-promo-config-list [rows]="configRows(p)" />
+              </ui-card>
+
+              <ui-card title="A quiénes llega">
+                <app-promo-targets-block
+                  [segments]="p.segments"
+                  [customers]="p.customers"
+                  [salesChannelName]="p.salesChannelName"
+                />
+              </ui-card>
+            </div>
           </div>
-        </div>
+        }
       }
     </section>
   `,
@@ -311,6 +344,30 @@ import { quantityText } from '../sales-reports/sales-report-format';
         margin-top: var(--sp-3);
         color: var(--status-danger);
         font-size: var(--fs-dense);
+      }
+      .pd-tabs {
+        display: flex;
+        gap: var(--sp-5);
+        margin-top: var(--sp-5);
+        border-bottom: var(--border-rule);
+      }
+      .pd-tab {
+        font-family: var(--font-sans);
+        font-weight: 800;
+        font-size: 14px;
+        padding: var(--sp-3) 0;
+        background: none;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        color: var(--ink-muted);
+        cursor: pointer;
+      }
+      .pd-tab:hover {
+        color: var(--ink);
+      }
+      .pd-tab.active {
+        color: var(--ink);
+        border-bottom-color: var(--accent);
       }
       .pd-usage {
         display: grid;
@@ -481,8 +538,26 @@ export class PromoDetailPage {
   protected error = signal(false);
   protected deleteError = signal('');
 
+  /** Pestañas Resumen/Alcance — doc 47, sección 10. `?tab=alcance` entra directo (desde Comparar promociones). */
+  protected activeTab = signal<'resumen' | 'alcance'>('resumen');
+  protected initialFrom = signal<string | null>(null);
+  protected initialTo = signal<string | null>(null);
+
   constructor() {
+    const qp = this.route.snapshot.queryParamMap;
+    if (qp.get('tab') === 'alcance') this.activeTab.set('alcance');
+    this.initialFrom.set(qp.get('from'));
+    this.initialTo.set(qp.get('to'));
     this.load();
+  }
+
+  protected setTab(tab: 'resumen' | 'alcance') {
+    this.activeTab.set(tab);
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: tab === 'alcance' ? 'alcance' : null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   load() {

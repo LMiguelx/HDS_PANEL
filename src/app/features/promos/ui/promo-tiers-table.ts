@@ -1,16 +1,22 @@
 import { Component, input } from '@angular/core';
 import { UiBadge } from '../../../shared/ui/badge/badge';
 import { TierView } from '../promo.types';
-import { benefitProductName, benefitQuantityText, thresholdText } from '../domain/promo-texts';
+import {
+  benefitProductName,
+  benefitQuantityText,
+  groupModeBadgeText,
+  thresholdText,
+} from '../domain/promo-texts';
 
 interface TierRow {
   entrega: string;
   entregaTone: 'success' | 'neutral';
   groupLabel: string | null;
+  groupNote: string | null;
   benefitTypeName: string;
   productCode: string;
   premio: string;
-  cantidad: string;
+  valor: string;
 }
 
 /**
@@ -37,7 +43,7 @@ interface TierRow {
                 <th>Tipo</th>
                 <th>Código</th>
                 <th>Premio</th>
-                <th class="ptt-col-right">Cantidad</th>
+                <th class="ptt-col-right">Valor</th>
               </tr>
             </thead>
             <tbody>
@@ -53,8 +59,11 @@ interface TierRow {
                       <div class="ptt-group-label">{{ row.groupLabel }}</div>
                     }
                     {{ row.premio }}
+                    @if (row.groupNote) {
+                      <div class="ptt-group-note">{{ row.groupNote }}</div>
+                    }
                   </td>
-                  <td class="ptt-col-right ptt-strong">{{ row.cantidad }}</td>
+                  <td class="ptt-col-right ptt-strong">{{ row.valor }}</td>
                 </tr>
               }
             </tbody>
@@ -118,6 +127,11 @@ interface TierRow {
         font-size: var(--fs-meta);
         color: var(--ink-muted);
       }
+      .ptt-group-note {
+        margin-top: 2px;
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
+      }
 
       @media (max-width: 767px) {
         .ptt-tier-head {
@@ -165,16 +179,17 @@ export class PromoTiersTable {
       const benefits = group.benefits ?? [];
       benefits.forEach((b, i) => {
         rows.push({
-          entrega:
-            group.selectionMode === 'CHOOSE'
-              ? `Elige ${group.chooseCount ?? 1} de ${benefits.length}`
-              : 'Siempre',
+          entrega: groupModeBadgeText(group.selectionMode, group.chooseCount, benefits.length),
           entregaTone: group.selectionMode === 'CHOOSE' ? 'neutral' : 'success',
           groupLabel: i === 0 ? (group.label ?? null) : null,
+          groupNote:
+            i === 0 && group.selectionMode === 'CHOOSE'
+              ? 'Lo elige el vendedor al tomar el pedido.'
+              : null,
           benefitTypeName: b.benefitTypeName ?? '',
           productCode: b.productCode ?? '—',
           premio: benefitProductName(b),
-          cantidad: benefitQuantityText(b),
+          valor: benefitQuantityText(b),
         });
       });
     }

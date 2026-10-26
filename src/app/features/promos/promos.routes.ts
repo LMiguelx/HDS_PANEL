@@ -28,5 +28,10 @@ export const PROMO_ROUTES: Routes = [
     canActivate: [permissionGuard('promo.allocate')],
     loadComponent: () => import('./allocations-admin').then((m) => m.AllocationsAdminPage),
   },
+  {
+    path: 'alcance',
+    canActivate: [permissionGuard('promo.create')],
+    loadComponent: () => import('./promo-reach-summary').then((m) => m.PromoReachSummaryPage),
+  },
   { path: ':id', loadComponent: () => import('./promo-detail').then((m) => m.PromoDetailPage) },
 ];
