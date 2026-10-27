@@ -78,15 +78,21 @@ const UNATTENDED_FILTER_VALUE = '__none__';
               {{ b.vehiclePlate ? b.vehiclePlate + ' · ' + b.driverName : 'Sin equipo asignado' }}
             </p>
           </div>
-          <div class="dbd-actions" *hasPermission="'delivery.settle'">
+          <div class="dbd-actions">
             @if (b.statusCode === 'OPEN') {
-              <button uiButton variant="secondary" (click)="openAssignTeam(b)">
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="'delivery.manage'"
+                (click)="openAssignTeam(b)"
+              >
                 Asignar equipo
               </button>
             }
             <button
               uiButton
               variant="primary"
+              *hasPermission="'delivery.settle'"
               [disabled]="!canSettle(b)"
               [loading]="settling()"
               (click)="settle(b)"
@@ -106,6 +112,9 @@ const UNATTENDED_FILTER_VALUE = '__none__';
             Faltan {{ pendingCount() }} comprobante{{ pendingCount() === 1 ? '' : 's' }} en
             Pendiente para poder liquidar.
           </p>
+          @if (!canSettlePermission() && b.statusCode === 'IN_ROUTE') {
+            <p class="dbd-hint">La liquida el conductor desde la app.</p>
+          }
         }
 
         <div class="dbd-metrics">
@@ -875,7 +884,8 @@ export class DeliveryBatchDetailPage {
   id = input('');
 
   protected canViewInvoice = computed(() => this.auth.hasAny('customer.view', 'invoice.reconcile'));
-  protected canAssignTeam = computed(() => this.auth.hasAny('delivery.settle'));
+  protected canAssignTeam = computed(() => this.auth.hasAny('delivery.manage'));
+  protected canSettlePermission = computed(() => this.auth.hasAny('delivery.settle'));
 
   protected dateText = dateText;
   protected dateTimeText = dateTimeText;

@@ -158,14 +158,14 @@ export const NAV: NavItem[] = [
     label: 'Reparto',
     icon: 'local_shipping',
     route: '/reparto',
-    anyOf: ['delivery.deliver', 'delivery.settle'],
+    anyOf: ['delivery.deliver', 'delivery.settle', 'delivery.manage'],
     group: 'Reparto y facturación',
   },
   {
     label: 'Flota',
     icon: 'directions_car',
     route: '/flota',
-    anyOf: ['delivery.settle'],
+    anyOf: ['delivery.settle', 'delivery.manage'],
     group: 'Reparto y facturación',
   },
   {
@@ -203,6 +203,16 @@ export const NAV: NavItem[] = [
     icon: 'inventory',
     route: '/inventario',
     anyOf: ['report.view', 'config.edit', 'stock.advance'],
+    group: 'Administración',
+  },
+  // Acceso a Reportes de ventas para quien solo tiene `report.view` (p. ej.
+  // Jefe de reparto) — doc 50, sección 4: no tiene `order.view_all`, así que
+  // no ve la entrada de "Ventas", pero sí puede consultar estos reportes.
+  {
+    label: 'Reportes',
+    icon: 'bar_chart',
+    route: '/reportes-ventas',
+    anyOf: ['report.view'],
     group: 'Administración',
   },
   {

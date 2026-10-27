@@ -5,6 +5,7 @@ import { NAV, NavItem } from '../../core/layout/nav.config';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiButton } from '../../shared/ui/button/button';
 import { DashboardAdminService } from './dashboard-admin';
 import {
   DashboardCustomersView,
@@ -45,7 +46,7 @@ const ROLE_AVATAR_COLORS = [
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, HasPermissionDirective, UiField, UiEmpty],
+  imports: [RouterLink, HasPermissionDirective, UiField, UiEmpty, UiButton],
   template: `
     <section class="home-page">
       <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
@@ -54,6 +55,16 @@ const ROLE_AVATAR_COLORS = [
       @if (showDashboard()) {
         <div class="home-toolbar">
           <ui-field label="Fecha" type="date" [(value)]="date" />
+          @if (canGoToReparto()) {
+            <button
+              uiButton
+              variant="secondary"
+              routerLink="/inicio-reparto"
+              class="home-reparto-link"
+            >
+              Ir al reparto del día
+            </button>
+          }
         </div>
 
         @if (loading()) {
@@ -348,12 +359,16 @@ const ROLE_AVATAR_COLORS = [
         <a
           class="home-tile is-ready"
           routerLink="/reparto"
-          *hasPermission="['delivery.deliver', 'delivery.settle']"
+          *hasPermission="['delivery.deliver', 'delivery.settle', 'delivery.manage']"
         >
           <span class="home-tile-name">Reparto</span>
           <span class="home-tile-note">Planillas, mapa de entregas y devoluciones.</span>
         </a>
-        <a class="home-tile is-ready" routerLink="/flota" *hasPermission="'delivery.settle'">
+        <a
+          class="home-tile is-ready"
+          routerLink="/flota"
+          *hasPermission="['delivery.settle', 'delivery.manage']"
+        >
           <span class="home-tile-name">Flota</span>
           <span class="home-tile-note">Vehículos y equipos de reparto.</span>
         </a>
@@ -422,7 +437,17 @@ const ROLE_AVATAR_COLORS = [
 
       .home-toolbar {
         margin-top: 20px;
+        max-width: 620px;
+        display: flex;
+        align-items: flex-end;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .home-toolbar ui-field {
         max-width: 220px;
+      }
+      .home-reparto-link {
+        white-space: nowrap;
       }
       .home-dash-skeleton {
         height: 320px;
@@ -907,6 +932,8 @@ export class DashboardPage {
 
   protected formatSoles = formatSoles;
   protected showDashboard = computed(() => this.auth.hasAny('report.view'));
+  /** Doc 50, sección 5.1: también tiene reparto (p. ej. el Administrador) — acceso directo a su inicio. */
+  protected canGoToReparto = computed(() => this.auth.hasAny('delivery.manage'));
 
   protected date = signal(todayIso());
   protected data = signal<DashboardTodayView | null>(null);

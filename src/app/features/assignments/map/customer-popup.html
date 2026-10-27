@@ -118,7 +118,7 @@
             <button uiButton variant="secondary" size="sm" (click)="assignVendor.emit()">
               Asignar vendedor
             </button>
-          } @else if (lastOrderId()) {
+          } @else if (lastOrderId() && canViewOrder()) {
             <button uiButton variant="secondary" size="sm" (click)="viewOrder()">Ver pedido</button>
           }
           @if (canViewFicha()) {

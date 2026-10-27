@@ -16,6 +16,7 @@ export interface BatchSummary {
   number: number;
   deliveryTeamId: number | null; // null = sin equipo asignado
   vehiclePlate: string | null;
+  driverName: string | null; // doc 50, sección 5.3 — "placa · conductor" en el inicio de reparto
   statusCode: string; // OPEN | IN_ROUTE | SETTLED
   totalAmount: number;
   totalWeight: number;

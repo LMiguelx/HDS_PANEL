@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
 import { permissionGuard } from './core/auth/permission-guard';
 import { telesalesRouteGuard } from './core/auth/telesales-guard';
+import { repartoHomeRouteGuard } from './core/auth/reparto-home-guard';
 
 export const routes: Routes = [
   {
@@ -16,7 +17,7 @@ export const routes: Routes = [
   {
     path: '',
     canActivate: [authGuard],
-    canActivateChild: [telesalesRouteGuard],
+    canActivateChild: [telesalesRouteGuard, repartoHomeRouteGuard],
     loadComponent: () => import('./core/layout/shell/shell').then((m) => m.ShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
@@ -64,10 +65,12 @@ export const routes: Routes = [
         canActivate: [permissionGuard('order.view_all', 'order.create')],
         loadChildren: () => import('./features/orders/order.routes').then((m) => m.ORDER_ROUTES),
       },
-      // Reportes de ventas — nuevo, separa operación (Pedidos) de análisis
+      // Reportes de ventas — nuevo, separa operación (Pedidos) de análisis.
+      // `report.view` también entra (doc 50, sección 2): el Jefe de reparto
+      // los usa para verificar faltantes y devoluciones, sin ver Pedidos.
       {
         path: 'reportes-ventas',
-        canActivate: [permissionGuard('order.view_all')],
+        canActivate: [permissionGuard('order.view_all', 'report.view')],
         loadChildren: () =>
           import('./features/sales-reports/sales-reports.routes').then(
             (m) => m.SALES_REPORTS_ROUTES,
@@ -88,17 +91,26 @@ export const routes: Routes = [
           import('./features/segments/segments.routes').then((m) => m.SEGMENT_ROUTES),
       },
 
-      // Reparto (módulo 5) — rediseñado
+      // Reparto (módulo 5) — rediseñado. `delivery.manage` (doc 50): Jefe de
+      // reparto ve todas las planillas y asigna equipo, sin liquidar.
       {
         path: 'reparto',
-        canActivate: [permissionGuard('delivery.deliver', 'delivery.settle')],
+        canActivate: [permissionGuard('delivery.deliver', 'delivery.settle', 'delivery.manage')],
         loadChildren: () =>
           import('./features/delivery/delivery.routes').then((m) => m.DELIVERY_ROUTES),
       },
       {
         path: 'flota',
-        canActivate: [permissionGuard('delivery.settle')],
+        canActivate: [permissionGuard('delivery.settle', 'delivery.manage')],
         loadChildren: () => import('./features/fleet/fleet.routes').then((m) => m.FLEET_ROUTES),
+      },
+      // Inicio de reparto (doc 50, sección 5) — home de quien organiza el
+      // reparto del día y no vende (sin `order.view_all`).
+      {
+        path: 'inicio-reparto',
+        canActivate: [permissionGuard('delivery.manage')],
+        loadComponent: () =>
+          import('./features/delivery/delivery-home').then((m) => m.DeliveryHomePage),
       },
 
       // Facturación (módulo 6) — rediseñado

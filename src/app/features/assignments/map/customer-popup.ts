@@ -43,6 +43,7 @@ export class MapCustomerPopup {
   assignVendor = output<void>();
 
   protected canViewFicha = computed(() => this.auth.hasAny('customer.view'));
+  protected canViewOrder = computed(() => this.auth.hasAny('order.view_all'));
   protected mapVendorColorVar = mapVendorColorVar;
   protected pointStatusInfo = pointStatusInfo;
   protected distanceText = distanceText;

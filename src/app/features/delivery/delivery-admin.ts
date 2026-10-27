@@ -18,6 +18,12 @@ export class DeliveryAdminService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/deliveries`;
 
+  /** Planillas de un día (doc 50, sección 5.2) — inicio de reparto. */
+  batchesToday(date: string) {
+    const params = new HttpParams().set('date', date);
+    return this.http.get<BatchSummary[]>(`${this.base}/batches`, { params });
+  }
+
   /** Todas las planillas del tenant, sin filtro de fecha — browse histórico completo. */
   batchesAll(filters: BatchListFilters = {}) {
     let params = new HttpParams();
