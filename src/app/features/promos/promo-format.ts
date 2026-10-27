@@ -71,6 +71,43 @@ export function applicationsPerCustomerText(value?: number | null): string {
   return value != null ? String(value) : 'Ilimitado';
 }
 
+/** Porcentaje transcurrido de la vigencia; `null` sin `endDate` (sin barra) — listado de promociones. */
+export function vigenciaPercent(startDate?: string | null, endDate?: string | null): number | null {
+  if (!endDate) return null;
+  const today = new Date();
+  const end = parseISO(endDate);
+  const start = startDate ? parseISO(startDate) : end;
+  if (today < start) return 0;
+  if (end < today) return 100;
+  if (end.getTime() === start.getTime()) return 100;
+  return Math.round(
+    ((today.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100,
+  );
+}
+
+/**
+ * Segunda línea de la celda Vigencia del listado — doc 44/47 en espíritu,
+ * boceto "Promociones (lista mejorada)": avisa cuando un borrador debió
+ * empezar y cuánto falta para vencer una promoción vigente.
+ */
+export function vigenciaHintText(p: {
+  active?: boolean | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}): string {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  if (!p.active && p.startDate && p.startDate < today) {
+    return `⚠ Sin publicar · debió iniciar el ${dateText(p.startDate)}`;
+  }
+  if (p.active && p.endDate) {
+    const days = differenceInCalendarDays(parseISO(p.endDate), new Date());
+    if (days < 0) return '';
+    if (days === 0) return 'Vence hoy';
+    return days === 1 ? 'Vence en 1 día' : `Vence en ${days} días`;
+  }
+  return '';
+}
+
 /** Estado del premio a elegir en un pedido — doc 47, sección 4.5. */
 export function choiceStatusLabel(status?: string | null): string {
   if (status === 'CHOSEN') return 'Elegido';
