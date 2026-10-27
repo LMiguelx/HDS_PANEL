@@ -1,6 +1,8 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { map } from 'rxjs/operators';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField } from '../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
@@ -48,7 +50,49 @@ const SEND_CHUNK = 100;
         <div class="bpt-head">
           <div>
             <h1>Validación de pedidos</h1>
-            <p class="bpt-sub">{{ countText() }}</p>
+            <p class="bpt-sub">Pedidos abiertos del {{ dayLongText() }}</p>
+          </div>
+          <div class="bpt-toolbar-actions">
+            <button
+              uiButton
+              variant="secondary"
+              [disabled]="selectedCount() === 0"
+              (click)="validateSelected()"
+            >
+              Validar seleccionados ({{ selectedCount() }})
+            </button>
+            <button
+              uiButton
+              variant="primary"
+              [disabled]="totalElements() === 0"
+              (click)="validateAllDay()"
+            >
+              Validar todos
+            </button>
+          </div>
+        </div>
+
+        <div class="bpt-info-banner">
+          <span class="material-icons" aria-hidden="true">info</span>
+          <span
+            >Validar revisa el pedido, el cliente y vendedor, los productos, los precios, los
+            totales y las promociones antes de dejarlos listos para enviar.</span
+          >
+        </div>
+
+        <div class="bpt-stat-cards">
+          <div class="bpt-stat-card">
+            <span class="bpt-stat-label">Pedidos abiertos</span>
+            <span class="bpt-stat-value">{{ totalElements() }}</span>
+          </div>
+          <div class="bpt-stat-card">
+            <span class="bpt-stat-label">Seleccionados</span>
+            <span class="bpt-stat-value">{{ selectedCount() }}</span>
+            <span class="bpt-stat-sub">{{ formatSoles(selectedNetTotal()) }}</span>
+          </div>
+          <div class="bpt-stat-card">
+            <span class="bpt-stat-label">Neto por validar</span>
+            <span class="bpt-stat-value">{{ formatSoles(pageNetTotal()) }}</span>
           </div>
         </div>
 
@@ -61,28 +105,12 @@ const SEND_CHUNK = 100;
             [search]="userSearch"
             [(selected)]="vendorFilter"
           />
-        </div>
-
-        <div class="bpt-toolbar">
-          <span class="bpt-muted">{{ countText() }}</span>
-          <div class="bpt-toolbar-actions">
-            <button
-              uiButton
-              variant="secondary"
-              [disabled]="selectedIds().size === 0"
-              (click)="validateSelected()"
-            >
-              Validar seleccionados ({{ selectedIds().size }})
-            </button>
-            <button
-              uiButton
-              variant="primary"
-              [disabled]="totalElements() === 0"
-              (click)="validateAllDay()"
-            >
-              Validar todos
-            </button>
-          </div>
+          <ui-field
+            label="Buscar"
+            icon="search"
+            placeholder="Cliente o número de pedido"
+            [(value)]="searchQuery"
+          />
         </div>
 
         @if (loading()) {
@@ -97,6 +125,13 @@ const SEND_CHUNK = 100;
           />
         } @else if (rows().length === 0) {
           <ui-empty title="Sin pedidos abiertos" body="No hay pedidos abiertos en esta fecha." />
+        } @else if (filteredRows().length === 0) {
+          <ui-empty
+            title="Sin resultados"
+            body="Prueba con otro texto de búsqueda."
+            actionLabel="Limpiar búsqueda"
+            (action)="searchQuery.set('')"
+          />
         } @else {
           <table class="ui-table-grid bpt-table-desktop">
             <thead>
@@ -114,36 +149,40 @@ const SEND_CHUNK = 100;
                 <th>Hora</th>
                 <th>Origen</th>
                 <th>Neto</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              @for (o of rows(); track o.orderId) {
-                <tr>
-                  <td class="bpt-check-cell">
+              @for (o of filteredRows(); track o.orderId) {
+                <tr class="bpt-order-row" (click)="toggleSelect(o)">
+                  <td class="bpt-check-cell" (click)="$event.stopPropagation()">
                     <input
                       type="checkbox"
                       [checked]="selectedIds().has(o.orderId)"
-                      (change)="toggleSelect(o.orderId)"
+                      (change)="toggleSelect(o)"
                     />
                   </td>
                   <td class="bpt-cell-strong">{{ o.orderId }}</td>
                   <td>{{ o.customerName }}</td>
                   <td class="bpt-muted">{{ o.salespersonName }}</td>
                   <td class="bpt-muted">{{ timeText(o.orderDate) }}</td>
-                  <td class="bpt-muted">{{ originName(o.originCode) }}</td>
-                  <td class="bpt-muted">{{ formatSoles(o.netAmount) }}</td>
+                  <td class="bpt-muted">
+                    <span class="bpt-origin-pill">{{ originName(o.originCode) }}</span>
+                  </td>
+                  <td class="bpt-cell-strong">{{ formatSoles(o.netAmount) }}</td>
+                  <td class="bpt-chevron">›</td>
                 </tr>
               }
             </tbody>
           </table>
 
           <div class="bpt-cards-mobile">
-            @for (o of rows(); track o.orderId) {
+            @for (o of filteredRows(); track o.orderId) {
               <label class="bpt-card-mobile">
                 <input
                   type="checkbox"
                   [checked]="selectedIds().has(o.orderId)"
-                  (change)="toggleSelect(o.orderId)"
+                  (change)="toggleSelect(o)"
                 />
                 <div>
                   <div class="bpt-card-mobile-head">
@@ -169,7 +208,9 @@ const SEND_CHUNK = 100;
             >
               Anterior
             </button>
-            <span class="bpt-pager-label">Página {{ page() + 1 }} de {{ totalPages() || 1 }}</span>
+            <span class="bpt-pager-label"
+              >Página {{ page() + 1 }} de {{ totalPages() || 1 }} · {{ countText() }}</span
+            >
             <button
               uiButton
               variant="secondary"
@@ -179,6 +220,7 @@ const SEND_CHUNK = 100;
             >
               Siguiente
             </button>
+            <span class="bpt-pager-total">Total neto {{ formatSoles(pageNetTotal()) }}</span>
           </div>
         }
       }
@@ -201,9 +243,13 @@ const SEND_CHUNK = 100;
       @if (phase() === 'results') {
         <div class="bpt-head">
           <div>
-            <h1>Validación de pedidos{{ validationDate() ? ' · ' + validationDate() : '' }}</h1>
+            <h1>Resultado de la validación</h1>
+            <p class="bpt-sub">{{ dayLongText() }}</p>
           </div>
-          <button uiButton variant="secondary" (click)="backToBrowse()">Validar de nuevo</button>
+          <button uiButton variant="secondary" (click)="backToBrowse()">
+            <span class="material-icons" aria-hidden="true">refresh</span>
+            Validar de nuevo
+          </button>
         </div>
 
         @if (notFoundCount() > 0) {
@@ -211,6 +257,64 @@ const SEND_CHUNK = 100;
             {{ notFoundCount() }} pedido{{ notFoundCount() === 1 ? '' : 's' }} ya no
             {{ notFoundCount() === 1 ? 'está disponible' : 'están disponibles' }}.
           </p>
+        }
+
+        @if (invalidCount() === 0) {
+          <div class="bpt-ok-banner">
+            <span class="material-icons" aria-hidden="true">check_circle</span>
+            <div>
+              <strong>Todo en orden</strong>
+              <div>
+                Los {{ validCount() }} pedido{{ validCount() === 1 ? '' : 's' }} pasaron las 6
+                validaciones y {{ validCount() === 1 ? 'está listo' : 'están listos' }} para enviar.
+              </div>
+            </div>
+          </div>
+        } @else {
+          <div class="bpt-warn-banner">
+            <span class="material-icons" aria-hidden="true">warning</span>
+            <div class="bpt-warn-banner-text">
+              <strong
+                >{{ invalidCount() }} pedido{{ invalidCount() === 1 ? '' : 's' }} con
+                motivos</strong
+              >
+              <div>
+                @if (eligibleForRecalc().length > 0) {
+                  {{ eligibleForRecalc().length }} se corrige{{
+                    eligibleForRecalc().length === 1 ? '' : 'n'
+                  }}
+                  recalculando el pedido.
+                } @else {
+                  Revísalos uno por uno abajo.
+                }
+              </div>
+            </div>
+            @if (eligibleForRecalc().length > 0) {
+              <button
+                uiButton
+                variant="secondary"
+                size="sm"
+                [loading]="recalculatingAll()"
+                (click)="recalculateAllPending()"
+              >
+                Recalcular pendientes ({{ eligibleForRecalc().length }})
+              </button>
+            }
+          </div>
+        }
+
+        @if (recalculatingAll()) {
+          <div class="bpt-progress-block">
+            <div class="bpt-progress-head">
+              <span
+                >Recalculando {{ recalculateAllProgress().done }} de
+                {{ recalculateAllProgress().total }} pedidos…</span
+              >
+            </div>
+            <div class="bpt-progress-track">
+              <div class="bpt-progress-fill" [style.width.%]="recalculateAllPct()"></div>
+            </div>
+          </div>
         }
 
         <div class="bpt-summary-row">
@@ -226,26 +330,16 @@ const SEND_CHUNK = 100;
             <span class="bpt-summary-value">{{ invalidCount() }}</span>
             <span class="bpt-summary-label">Con motivos</span>
           </div>
-          <button
-            uiButton
-            variant="primary"
-            class="bpt-send-btn"
-            [disabled]="validCount() === 0"
-            (click)="confirmSend()"
-          >
-            Enviar {{ validCount() }} válidos
-          </button>
         </div>
 
         <div class="bpt-show-filter">
-          <span class="bpt-muted">Mostrar:</span>
           <button
             type="button"
             class="bpt-chip"
             [class.on]="showFilter() === 'issues'"
             (click)="showFilter.set('issues')"
           >
-            Con motivos
+            Con motivos <span class="bpt-chip-count">{{ invalidCount() }}</span>
           </button>
           <button
             type="button"
@@ -253,7 +347,7 @@ const SEND_CHUNK = 100;
             [class.on]="showFilter() === 'valid'"
             (click)="showFilter.set('valid')"
           >
-            Válidos
+            Válidos <span class="bpt-chip-count">{{ validCount() }}</span>
           </button>
           <button
             type="button"
@@ -261,7 +355,7 @@ const SEND_CHUNK = 100;
             [class.on]="showFilter() === 'all'"
             (click)="showFilter.set('all')"
           >
-            Todos
+            Todos <span class="bpt-chip-count">{{ validatedTotal() }}</span>
           </button>
         </div>
 
@@ -276,28 +370,60 @@ const SEND_CHUNK = 100;
           <div class="bpt-result-list">
             @for (o of filteredValidationOrders(); track o.orderId) {
               <div class="bpt-result-row">
-                <button type="button" class="bpt-result-summary" (click)="toggleExpand(o.orderId)">
-                  <span class="bpt-expand-arrow">{{
-                    expandedIds().has(o.orderId) ? '▾' : '▸'
-                  }}</span>
-                  <span class="bpt-cell-strong">{{ o.orderId }}</span>
-                  <span class="bpt-result-customer">{{ o.customerName }}</span>
-                  <span class="bpt-muted">{{ o.salespersonName }}</span>
+                <div class="bpt-result-summary">
+                  <button
+                    type="button"
+                    class="bpt-expand-btn"
+                    (click)="toggleExpand(o.orderId)"
+                    [attr.aria-label]="
+                      expandedIds().has(o.orderId) ? 'Ocultar detalle' : 'Ver detalle'
+                    "
+                  >
+                    <span class="bpt-expand-arrow">{{
+                      expandedIds().has(o.orderId) ? '▾' : '▸'
+                    }}</span>
+                    <span class="bpt-cell-strong">{{ o.orderId }}</span>
+                  </button>
+                  <div class="bpt-result-customer">
+                    <div>{{ o.customerName }}</div>
+                    <div class="bpt-checks-sub" [class.fail]="!o.valid">
+                      {{ o.valid ? '✓' : '✗' }} {{ passedChecksCount(o) }}/{{ o.checks.length }}
+                      validaciones
+                    </div>
+                  </div>
+                  <span class="bpt-muted bpt-result-zone">{{ o.salespersonName }}</span>
                   <span class="bpt-cell-strong">{{ formatSoles(o.netAmount) }}</span>
                   @if (o.valid) {
-                    <span class="bpt-badge bpt-badge-ok">Válido</span>
+                    <span class="bpt-badge bpt-badge-ok">● Válido</span>
                   } @else {
                     <span class="bpt-badge bpt-badge-warn"
-                      >Con motivos ({{ o.issues.length }})</span
+                      >● Con motivos ({{ o.issues.length }})</span
                     >
                   }
-                </button>
+                  <button
+                    uiButton
+                    variant="secondary"
+                    size="sm"
+                    [routerLink]="['/pedidos/detalle', o.orderId]"
+                  >
+                    Ver pedido
+                  </button>
+                  <button
+                    type="button"
+                    class="bpt-cancel-link"
+                    [disabled]="cancelingId() === o.orderId"
+                    (click)="cancelOrder(o)"
+                  >
+                    Anular
+                  </button>
+                </div>
 
                 @if (expandedIds().has(o.orderId)) {
                   <div class="bpt-result-detail">
                     <div class="bpt-checks-row">
+                      <div class="bpt-checks-row-title">Validaciones realizadas</div>
                       @for (c of o.checks; track c.group) {
-                        <span class="bpt-check" [class.fail]="!c.passed">
+                        <span class="bpt-check-pill" [class.fail]="!c.passed">
                           {{ c.passed ? '✓' : '✗' }} {{ c.groupName }}
                         </span>
                       }
@@ -321,8 +447,8 @@ const SEND_CHUNK = 100;
                       }
                     }
 
-                    <div class="bpt-row-actions">
-                      @if (hasRecalcFix(o)) {
+                    @if (hasRecalcFix(o)) {
+                      <div class="bpt-row-actions">
                         <button
                           uiButton
                           variant="secondary"
@@ -332,31 +458,31 @@ const SEND_CHUNK = 100;
                         >
                           Recalcular pedido
                         </button>
-                      }
-                      <button
-                        uiButton
-                        variant="ghost"
-                        size="sm"
-                        [routerLink]="['/pedidos/detalle', o.orderId]"
-                      >
-                        Ver pedido
-                      </button>
-                      <button
-                        uiButton
-                        variant="ghost"
-                        size="sm"
-                        [loading]="cancelingId() === o.orderId"
-                        (click)="cancelOrder(o)"
-                      >
-                        Anular
-                      </button>
-                    </div>
+                      </div>
+                    }
                   </div>
                 }
               </div>
             }
           </div>
         }
+
+        <div class="bpt-send-footer">
+          <span
+            >{{ validCount() }} pedido{{ validCount() === 1 ? '' : 's' }} válido{{
+              validCount() === 1 ? '' : 's'
+            }}</span
+          >
+          <span class="bpt-send-footer-net">Neto total {{ formatSoles(validNetTotal()) }}</span>
+          <button
+            uiButton
+            variant="primary"
+            [disabled]="validCount() === 0"
+            (click)="confirmSend()"
+          >
+            Enviar {{ validCount() }} válidos
+          </button>
+        </div>
       }
 
       @if (phase() === 'sending') {
@@ -431,6 +557,7 @@ const SEND_CHUNK = 100;
         width: 100%;
         box-sizing: border-box;
         padding: var(--sp-8);
+        padding-bottom: 100px;
       }
       .bpt-head {
         display: flex;
@@ -449,33 +576,74 @@ const SEND_CHUNK = 100;
         color: var(--ink-muted);
         font-size: 14px;
       }
-      .bpt-filters {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
-        gap: 12px;
-        margin: 20px 0 0;
-      }
-      .bpt-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin: 20px 0;
-        padding-bottom: 16px;
-        border-bottom: var(--border-hair);
-      }
       .bpt-toolbar-actions {
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
       }
+      .bpt-info-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-top: 20px;
+        padding: 12px 16px;
+        border: 1px solid var(--hairline);
+        background: var(--faint);
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+      .bpt-info-banner .material-icons {
+        flex: none;
+        font-size: 18px;
+        color: var(--ink-muted);
+      }
+      .bpt-stat-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .bpt-stat-card {
+        border: 1px solid var(--hairline);
+        padding: 16px 20px;
+      }
+      .bpt-stat-label {
+        display: block;
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+      .bpt-stat-value {
+        display: block;
+        margin-top: 6px;
+        font-size: var(--fs-metric);
+        font-weight: var(--fw-metric);
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .bpt-stat-sub {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .bpt-filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+        gap: 12px;
+        margin: 20px 0 0;
+        padding-bottom: 20px;
+        border-bottom: var(--border-hair);
+      }
       .bpt-skeleton {
         height: 200px;
         background: var(--faint);
+        margin-top: 16px;
       }
       .bpt-table-desktop {
         width: 100%;
+        margin-top: 16px;
       }
       .bpt-check-cell {
         width: 36px;
@@ -488,16 +656,43 @@ const SEND_CHUNK = 100;
         color: var(--ink-muted);
         font-size: 13px;
       }
+      .bpt-origin-pill {
+        display: inline-block;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        background: var(--faint);
+        border: 1px solid var(--hairline);
+      }
+      .bpt-order-row {
+        cursor: pointer;
+      }
+      .bpt-order-row:hover {
+        background: var(--faint);
+      }
+      .bpt-chevron {
+        color: var(--ink-muted);
+        text-align: right;
+        font-size: 18px;
+      }
       .bpt-pager {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 16px;
         margin-top: 24px;
+        flex-wrap: wrap;
       }
       .bpt-pager-label {
         font-size: 13px;
         color: var(--ink-muted);
+        font-variant-numeric: var(--tnum);
+      }
+      .bpt-pager-total {
+        margin-left: auto;
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
         font-variant-numeric: var(--tnum);
       }
       .bpt-cards-mobile {
@@ -535,6 +730,41 @@ const SEND_CHUNK = 100;
         background: color-mix(in srgb, var(--st-pendiente) 10%, transparent);
         font-size: 13px;
       }
+      .bpt-ok-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-top: 20px;
+        padding: 14px 18px;
+        border: 1px solid var(--success);
+        background: color-mix(in srgb, var(--success) 10%, transparent);
+        color: var(--ink);
+        font-size: 13px;
+      }
+      .bpt-ok-banner .material-icons {
+        flex: none;
+        font-size: 22px;
+        color: var(--success);
+      }
+      .bpt-warn-banner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 20px;
+        padding: 14px 18px;
+        border: 1px solid var(--accent);
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        color: var(--ink);
+        font-size: 13px;
+      }
+      .bpt-warn-banner .material-icons {
+        flex: none;
+        font-size: 22px;
+        color: var(--accent-ink);
+      }
+      .bpt-warn-banner-text {
+        flex: 1;
+      }
       .bpt-summary-row {
         display: flex;
         align-items: stretch;
@@ -566,10 +796,6 @@ const SEND_CHUNK = 100;
         font-size: 12px;
         color: var(--ink-muted);
       }
-      .bpt-send-btn {
-        margin-left: auto;
-        align-self: center;
-      }
       .bpt-show-filter {
         display: flex;
         align-items: center;
@@ -577,19 +803,34 @@ const SEND_CHUNK = 100;
         margin: 20px 0 16px;
       }
       .bpt-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         font-family: var(--font-sans);
         font-size: 13px;
         font-weight: 700;
-        padding: 6px 14px;
-        border: 1px solid var(--divider);
-        background: transparent;
+        padding: 7px 14px;
+        border: 2px solid var(--divider);
+        border-radius: var(--radius-pill);
+        background: var(--surface);
         color: var(--ink-muted);
         cursor: pointer;
       }
       .bpt-chip.on {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: var(--on-accent);
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--bg);
+      }
+      .bpt-chip-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: var(--radius-pill);
+        background: color-mix(in srgb, currentColor 16%, transparent);
+        font-size: 11px;
       }
 
       .bpt-result-list {
@@ -607,14 +848,17 @@ const SEND_CHUNK = 100;
         align-items: center;
         gap: 14px;
         padding: 12px 16px;
+        flex-wrap: wrap;
+      }
+      .bpt-expand-btn {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         border: 0;
         background: transparent;
         font-family: var(--font-sans);
-        text-align: left;
         cursor: pointer;
-      }
-      .bpt-result-summary:hover {
-        background: var(--faint);
+        padding: 0;
       }
       .bpt-expand-arrow {
         color: var(--ink-muted);
@@ -624,19 +868,52 @@ const SEND_CHUNK = 100;
       .bpt-result-customer {
         flex: 1;
         color: var(--ink);
-        min-width: 0;
+        min-width: 160px;
+      }
+      .bpt-checks-sub {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--success);
+      }
+      .bpt-checks-sub.fail {
+        color: var(--st-vencida, #d13b3b);
+      }
+      .bpt-result-zone {
+        flex: none;
       }
       .bpt-badge {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
         font-size: 11px;
         font-weight: 800;
-        padding: 2px 8px;
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
         white-space: nowrap;
       }
       .bpt-badge-ok {
-        color: var(--st-vigente);
+        color: var(--success);
+        background: color-mix(in srgb, var(--success) 14%, transparent);
       }
       .bpt-badge-warn {
         color: var(--st-vencida, #d13b3b);
+        background: color-mix(in srgb, var(--st-vencida, #d13b3b) 12%, transparent);
+      }
+      .bpt-cancel-link {
+        flex: none;
+        appearance: none;
+        background: none;
+        border: 0;
+        cursor: pointer;
+        color: var(--st-vencida, #d13b3b);
+        font-weight: 700;
+        font-size: 13px;
+        padding: 6px 4px;
+      }
+      .bpt-cancel-link:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
       .bpt-result-detail {
         padding: 0 16px 16px 44px;
@@ -646,14 +923,27 @@ const SEND_CHUNK = 100;
       .bpt-checks-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 14px;
-        font-size: 13px;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
       }
-      .bpt-check {
-        color: var(--st-vigente);
+      .bpt-checks-row-title {
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        width: 100%;
       }
-      .bpt-check.fail {
+      .bpt-check-pill {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        color: var(--success);
+        background: color-mix(in srgb, var(--success) 12%, transparent);
+      }
+      .bpt-check-pill.fail {
         color: var(--st-vencida, #d13b3b);
+        background: color-mix(in srgb, var(--st-vencida, #d13b3b) 12%, transparent);
         font-weight: 700;
       }
       .bpt-issue-group {
@@ -689,10 +979,30 @@ const SEND_CHUNK = 100;
         padding: 12px 16px;
         flex-wrap: wrap;
       }
+      .bpt-send-footer {
+        position: sticky;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-top: 24px;
+        padding: 16px 20px;
+        border: 1px solid var(--hairline);
+        background: var(--surface);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .bpt-send-footer-net {
+        margin-left: auto;
+        color: var(--ink-muted);
+        font-variant-numeric: var(--tnum);
+      }
 
       @media (max-width: 767px) {
         .bpt-page {
           padding: var(--sp-4);
+          padding-bottom: 100px;
         }
         .bpt-table-desktop {
           display: none;
@@ -719,6 +1029,13 @@ const SEND_CHUNK = 100;
         }
         .bpt-result-summary {
           flex-wrap: wrap;
+        }
+        .bpt-send-footer {
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .bpt-send-footer-net {
+          margin-left: 0;
         }
       }
     `,
@@ -747,16 +1064,37 @@ export class BillingPendingTab {
   // — Fase "browse" —
   protected dayFilter = signal(todayIso());
   protected vendorFilter = signal<UiLookupItem | null>(null);
+  protected searchQuery = signal('');
   protected rows = signal<AdminOrderSummary[]>([]);
   protected totalElements = signal(0);
   protected totalPages = signal(0);
   protected page = signal(0);
   protected loading = signal(true);
   protected error = signal(false);
-  protected selectedIds = signal<Set<number>>(new Set());
+  /** Guarda la fila completa (no solo el id) para poder sumar el neto seleccionado entre páginas. */
+  protected selectedOrders = signal<Map<number, AdminOrderSummary>>(new Map());
+  protected selectedIds = computed(() => new Set(this.selectedOrders().keys()));
+  protected selectedCount = computed(() => this.selectedOrders().size);
+  protected selectedNetTotal = computed(() =>
+    Array.from(this.selectedOrders().values()).reduce((sum, o) => sum + o.netAmount, 0),
+  );
+
+  protected filteredRows = computed(() => {
+    const q = this.searchQuery().trim().toLowerCase();
+    if (!q) return this.rows();
+    return this.rows().filter(
+      (o) => o.customerName.toLowerCase().includes(q) || String(o.orderId).includes(q),
+    );
+  });
+
+  protected pageNetTotal = computed(() =>
+    this.filteredRows().reduce((sum, o) => sum + o.netAmount, 0),
+  );
 
   protected allPageSelected = computed(
-    () => this.rows().length > 0 && this.rows().every((o) => this.selectedIds().has(o.orderId)),
+    () =>
+      this.filteredRows().length > 0 &&
+      this.filteredRows().every((o) => this.selectedIds().has(o.orderId)),
   );
 
   private filtersEffect = effect(() => {
@@ -770,7 +1108,12 @@ export class BillingPendingTab {
 
   protected countText(): string {
     const n = this.totalElements();
-    return n === 1 ? '1 pedido abierto' : `${n} pedidos abiertos`;
+    return n === 1 ? '1 pedido' : `${n} pedidos`;
+  }
+
+  protected dayLongText(): string {
+    const [y, m, d] = this.dayFilter().split('-').map(Number);
+    return format(new Date(y, m - 1, d), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
   }
 
   load() {
@@ -810,21 +1153,21 @@ export class BillingPendingTab {
     this.load();
   }
 
-  protected toggleSelect(orderId: number) {
-    const next = new Set(this.selectedIds());
-    if (next.has(orderId)) next.delete(orderId);
-    else next.add(orderId);
-    this.selectedIds.set(next);
+  protected toggleSelect(o: AdminOrderSummary) {
+    const next = new Map(this.selectedOrders());
+    if (next.has(o.orderId)) next.delete(o.orderId);
+    else next.set(o.orderId, o);
+    this.selectedOrders.set(next);
   }
 
   protected toggleSelectPage(ev: Event) {
     const checked = (ev.target as HTMLInputElement).checked;
-    const next = new Set(this.selectedIds());
-    for (const o of this.rows()) {
-      if (checked) next.add(o.orderId);
+    const next = new Map(this.selectedOrders());
+    for (const o of this.filteredRows()) {
+      if (checked) next.set(o.orderId, o);
       else next.delete(o.orderId);
     }
-    this.selectedIds.set(next);
+    this.selectedOrders.set(next);
   }
 
   // — Validación por tandas (sección 6.4/6.5) —
@@ -847,6 +1190,21 @@ export class BillingPendingTab {
   protected expandedIds = signal<Set<number>>(new Set());
   protected recalculatingId = signal<number | null>(null);
   protected cancelingId = signal<number | null>(null);
+  protected recalculatingAll = signal(false);
+  protected recalculateAllProgress = signal({ done: 0, total: 0 });
+  protected recalculateAllPct = computed(() => {
+    const p = this.recalculateAllProgress();
+    return p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+  });
+
+  protected eligibleForRecalc = computed(() =>
+    this.validationOrders().filter((o) => !o.valid && this.hasRecalcFix(o)),
+  );
+  protected validNetTotal = computed(() =>
+    this.validationOrders()
+      .filter((o) => o.valid)
+      .reduce((sum, o) => sum + o.netAmount, 0),
+  );
 
   protected filteredValidationOrders = computed(() => {
     const filter = this.showFilter();
@@ -855,6 +1213,10 @@ export class BillingPendingTab {
     if (filter === 'issues') return orders.filter((o) => !o.valid);
     return orders;
   });
+
+  protected passedChecksCount(o: OrderBillingValidation): number {
+    return o.checks.filter((c) => c.passed).length;
+  }
 
   private resetValidationState() {
     this.validationOrders.set([]);
@@ -947,7 +1309,7 @@ export class BillingPendingTab {
 
   protected backToBrowse() {
     this.phase.set('browse');
-    this.selectedIds.set(new Set());
+    this.selectedOrders.set(new Map());
     this.load();
   }
 
@@ -997,6 +1359,31 @@ export class BillingPendingTab {
     this.validationOrders.update((list) => list.filter((o) => o.orderId !== orderId));
   }
 
+  /** Recalcula un pedido: precios/promociones frescos y vuelve a validar solo ese. */
+  private recalculateOne(o: OrderBillingValidation, onDone: () => void) {
+    this.orderSvc.detail(o.orderId).subscribe({
+      next: (detail) => {
+        const catalogItems = detail.items
+          .filter((i) => !i.bonus)
+          .map((i) => ({ productId: i.productId, newQuantity: i.quantity }));
+        this.orderSvc.updateItems(o.orderId, { catalogItems, predictedItems: [] }).subscribe({
+          next: () => {
+            this.billingSvc.validate({ orderIds: [o.orderId] }).subscribe({
+              next: (result) => {
+                const updated = result.orders[0];
+                if (updated) this.replaceValidationOrder(updated);
+                onDone();
+              },
+              error: () => onDone(),
+            });
+          },
+          error: () => onDone(),
+        });
+      },
+      error: () => onDone(),
+    });
+  }
+
   protected recalculate(o: OrderBillingValidation) {
     this.dialog
       .confirm({
@@ -1007,33 +1394,43 @@ export class BillingPendingTab {
       .subscribe((confirmed) => {
         if (!confirmed) return;
         this.recalculatingId.set(o.orderId);
-        this.orderSvc.detail(o.orderId).subscribe({
-          next: (detail) => {
-            const catalogItems = detail.items
-              .filter((i) => !i.bonus)
-              .map((i) => ({ productId: i.productId, newQuantity: i.quantity }));
-            this.orderSvc.updateItems(o.orderId, { catalogItems, predictedItems: [] }).subscribe({
-              next: () => {
-                this.billingSvc.validate({ orderIds: [o.orderId] }).subscribe({
-                  next: (result) => {
-                    this.recalculatingId.set(null);
-                    const updated = result.orders[0];
-                    if (updated) this.replaceValidationOrder(updated);
-                    this.toast.success(`Pedido ${o.orderId} recalculado.`);
-                  },
-                  error: () => this.recalculatingId.set(null),
-                });
-              },
-              error: (err) => {
-                this.recalculatingId.set(null);
-                const detalle = err?.error?.detail ?? err?.error?.message;
-                this.toast.error(detalle || 'No pudimos recalcular el pedido.');
-              },
-            });
-          },
-          error: () => this.recalculatingId.set(null),
+        this.recalculateOne(o, () => {
+          this.recalculatingId.set(null);
+          this.toast.success(`Pedido ${o.orderId} recalculado.`);
         });
       });
+  }
+
+  /** Recalcular pendientes (sección pedida aparte): todos los que tienen un motivo que se corrige recalculando, en una sola tanda. */
+  protected recalculateAllPending() {
+    const targets = this.eligibleForRecalc();
+    if (targets.length === 0) return;
+    this.dialog
+      .confirm({
+        title: 'Recalcular pedidos con motivo',
+        message: `Se recalcularán ${targets.length} pedido${targets.length === 1 ? '' : 's'}: los precios y las promociones se actualizan y el total puede cambiar. ¿Recalcular?`,
+        confirmLabel: 'Recalcular',
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.recalculatingAll.set(true);
+        this.recalculateAllProgress.set({ done: 0, total: targets.length });
+        this.runRecalculateAll(targets, 0);
+      });
+  }
+
+  private runRecalculateAll(targets: OrderBillingValidation[], index: number) {
+    if (index >= targets.length) {
+      this.recalculatingAll.set(false);
+      this.toast.success(
+        `${targets.length} pedido${targets.length === 1 ? '' : 's'} recalculado${targets.length === 1 ? '' : 's'}.`,
+      );
+      return;
+    }
+    this.recalculateOne(targets[index], () => {
+      this.recalculateAllProgress.update((p) => ({ ...p, done: p.done + 1 }));
+      this.runRecalculateAll(targets, index + 1);
+    });
   }
 
   protected cancelOrder(o: OrderBillingValidation) {
