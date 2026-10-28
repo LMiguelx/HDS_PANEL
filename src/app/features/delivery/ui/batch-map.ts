@@ -17,6 +17,7 @@ import { AuthService } from '../../../core/auth/auth';
 import { BatchCustomerView } from '../../../shared/models/delivery.models';
 import { formatSoles } from '../../../shared/pipes/money';
 import { itemStatusName } from '../delivery-format';
+import { timeText } from '../../assignments/assignment-format';
 
 const DEFAULT_CENTER: [number, number] = [-16.409, -71.537];
 
@@ -238,11 +239,20 @@ export class BatchMap implements AfterViewInit, OnChanges, OnDestroy {
     const viewLink = this.canViewInvoice()
       ? `<button type="button" class="bm-popup-view-btn" data-invoice-id="${escapeHtml(c.invoiceId)}">Ver factura</button>`
       : '';
+    const chargeLine =
+      c.chargeAmount > 0
+        ? `<br><span style="color:var(--st-pendiente);font-weight:700;">⚠ Descuento perdido ${formatSoles(c.chargeAmount)}</span>`
+        : '';
+    const attendedLine = c.registeredByName
+      ? `<br>Atendido por ${escapeHtml(c.registeredByName)} · ${timeText(c.registeredAt)}`
+      : '';
     return `
-      <strong>${escapeHtml(c.businessName)}</strong><br>
-      ${escapeHtml(c.address || 'Sin dirección')}<br>
-      ${formatSoles(c.amount)}<br>
-      ${escapeHtml(itemStatusName(c.itemStatusCode))}
+      <strong>${escapeHtml(c.businessName)}</strong> · ${escapeHtml(c.code)}<br>
+      ${escapeHtml(c.invoiceId)} · ${escapeHtml(itemStatusName(c.itemStatusCode))}<br>
+      Monto ${formatSoles(c.amount)} · Devuelto ${formatSoles(c.returnedAmount)}
+      ${chargeLine}<br>
+      <strong>A cobrar ${formatSoles(c.amountToCollect)}</strong>
+      ${attendedLine}
       ${viewLink ? '<br>' + viewLink : ''}
     `;
   }

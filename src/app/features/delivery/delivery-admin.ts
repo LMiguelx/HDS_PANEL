@@ -9,6 +9,7 @@ import {
   BatchListFilters,
   BatchReturnsReport,
   BatchSummary,
+  PromoInsight,
   ReturnReasonView,
   ReturnView,
 } from '../../shared/models/delivery.models';
@@ -66,5 +67,12 @@ export class DeliveryAdminService {
 
   returnReasons() {
     return this.http.get<ReturnReasonView[]>(`${this.base}/return-reasons`);
+  }
+
+  /** Promociones del comprobante, con lo que conserva hoy — doc 53, sección 12.1. */
+  promoInsights(invoiceId: string) {
+    return this.http.get<PromoInsight[]>(
+      `${this.base}/invoices/${encodeURIComponent(invoiceId)}/promo-insights`,
+    );
   }
 }

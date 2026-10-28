@@ -50,3 +50,26 @@ export function itemStatusName(code: string | null | undefined): string {
 export function roleInTeamName(code: string | null | undefined): string {
   return code ? nameFor(ROLE_IN_TEAM_OPTIONS, code) : 'Ya no está en el equipo';
 }
+
+// — Descuento perdido / A cobrar (doc 53, secciones 2 y 14) —
+
+export const CHARGE_AMOUNT_TOOLTIP =
+  'Descuento que el cliente pierde porque, después de devolver, ya no cumple la promoción (o baja de tramo). Se le cobra de más.';
+export const AMOUNT_TO_COLLECT_TOOLTIP =
+  'Lo que realmente hay que cobrar: el neto del comprobante más el descuento perdido.';
+export const NET_AMOUNT_TOOLTIP = 'Monto del comprobante menos lo devuelto, como figura en el ERP.';
+export const DISCOUNT_CHARGE_TOOLTIP =
+  'Del pedido: descuento facturado. Quedaba: el que sigue en el comprobante después de devolver. Ahora: el que le corresponde con lo que se queda. A cobrar: la diferencia.';
+
+/** `benefitType` — doc 53, sección 4.3 (Promociones del comprobante). */
+export function benefitTypeName(code: string | null | undefined): string {
+  if (code === 'FREE_PRODUCT') return 'Bonificación';
+  if (code === 'DISCOUNT_PERCENT') return 'Descuento %';
+  if (code === 'DISCOUNT_AMOUNT') return 'Descuento S/';
+  return code ?? '—';
+}
+
+/** `measureType` — doc 53, sección 4.4. */
+export function measureTypeName(code: string | null | undefined): string {
+  return code === 'AMOUNT' ? 'Soles' : 'Unidades';
+}

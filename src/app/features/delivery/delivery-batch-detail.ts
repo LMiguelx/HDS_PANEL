@@ -7,6 +7,7 @@ import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiCard } from '../../shared/ui/card/card';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { UiInfoTip } from '../../shared/ui/info-tip/info-tip';
 import { ToastService } from '../../core/ui/toast';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { AuthService } from '../../core/auth/auth';
@@ -14,6 +15,7 @@ import { DeliveryAdminService } from './delivery-admin';
 import { AssignTeamDialog } from './ui/assign-team-dialog';
 import { ReturnsDialog } from './ui/returns-dialog';
 import { BatchMap } from './ui/batch-map';
+import { PromoInsightsDialog, PromoInsightsDialogData } from './ui/promo-insights-dialog';
 import {
   BatchCustomerView,
   BatchDetail,
@@ -22,6 +24,9 @@ import {
   MemberTotals,
 } from '../../shared/models/delivery.models';
 import {
+  AMOUNT_TO_COLLECT_TOOLTIP,
+  CHARGE_AMOUNT_TOOLTIP,
+  DISCOUNT_CHARGE_TOOLTIP,
   ITEM_STATUS_OPTIONS,
   batchStatusName,
   itemStatusName,
@@ -54,6 +59,7 @@ const UNATTENDED_FILTER_VALUE = '__none__';
     UiEmpty,
     UiCard,
     BatchMap,
+    UiInfoTip,
     HasPermissionDirective,
   ],
   template: `
@@ -126,9 +132,30 @@ const UNATTENDED_FILTER_VALUE = '__none__';
             <span class="dbd-metric-value">{{ formatSoles(b.returnedAmount) }}</span>
             <span class="dbd-metric-label">Devuelto</span>
           </div>
-          <div class="dbd-metric">
-            <span class="dbd-metric-value">{{ formatSoles(b.netAmount) }}</span>
-            <span class="dbd-metric-label">Neto a liquidar</span>
+          <div
+            class="dbd-metric"
+            [class.dbd-metric-click]="b.chargeAmount > 0"
+            [class.dbd-metric-alert]="b.chargeAmount > 0"
+            (click)="b.chargeAmount > 0 && openChargeAmountReturns()"
+          >
+            <span class="dbd-metric-value">{{ formatSoles(b.chargeAmount) }}</span>
+            <span class="dbd-metric-label"
+              >Descuento perdido <span [uiInfoTip]="chargeAmountTooltip"></span
+            ></span>
+            @if (b.chargeAmount > 0) {
+              <span class="dbd-metric-sub"
+                >{{ chargedItemCount(b) }} comprobante{{
+                  chargedItemCount(b) === 1 ? '' : 's'
+                }}</span
+              >
+            }
+          </div>
+          <div class="dbd-metric dbd-metric-primary">
+            <span class="dbd-metric-value">{{ formatSoles(b.amountToCollect) }}</span>
+            <span class="dbd-metric-label"
+              >A cobrar <span [uiInfoTip]="amountToCollectTooltip"></span
+            ></span>
+            <span class="dbd-metric-sub">Neto {{ formatSoles(b.netAmount) }}</span>
           </div>
           <div class="dbd-metric">
             <span class="dbd-metric-value">{{ b.totalWeight }} kg</span>
@@ -219,6 +246,14 @@ const UNATTENDED_FILTER_VALUE = '__none__';
               [(value)]="attendedByFilter"
               [options]="attendedByOptions()"
             />
+            <button
+              type="button"
+              class="dbd-chip"
+              [class.on]="onlyChargeAmountItems()"
+              (click)="onlyChargeAmountItems.set(!onlyChargeAmountItems())"
+            >
+              Con descuento perdido
+            </button>
           </div>
 
           <table class="ui-table-grid dbd-table-desktop">
@@ -229,6 +264,8 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                 <th>Cliente</th>
                 <th>Monto</th>
                 <th>Estado</th>
+                <th>Desc. perdido <span [uiInfoTip]="chargeAmountTooltip"></span></th>
+                <th>A cobrar <span [uiInfoTip]="amountToCollectTooltip"></span></th>
                 <th>Atendido por</th>
                 <th></th>
               </tr>
@@ -256,6 +293,22 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                     }
                   </td>
                   <td><ui-status [label]="itemStatusText(item.statusCode)" /></td>
+                  <td>
+                    @if (item.chargeAmount > 0 && canViewInvoice()) {
+                      <button
+                        type="button"
+                        class="dbd-charge-link"
+                        (click)="openPromoInsights(item)"
+                      >
+                        ⚠ {{ formatSoles(item.chargeAmount) }}
+                      </button>
+                    } @else if (item.chargeAmount > 0) {
+                      <span class="dbd-charge">⚠ {{ formatSoles(item.chargeAmount) }}</span>
+                    } @else {
+                      <span class="dbd-muted">—</span>
+                    }
+                  </td>
+                  <td class="dbd-cell-strong">{{ formatSoles(item.amountToCollect) }}</td>
                   <td class="dbd-muted">
                     @if (item.registeredByName) {
                       {{ item.registeredByName }}
@@ -302,6 +355,10 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                     {{ formatSoles(item.amount) }}
                   }
                 </div>
+                @if (item.chargeAmount > 0) {
+                  <div class="dbd-charge">Desc. perdido {{ formatSoles(item.chargeAmount) }}</div>
+                }
+                <div class="dbd-cell-strong">A cobrar {{ formatSoles(item.amountToCollect) }}</div>
                 <div class="dbd-muted">
                   Atendido por:
                   @if (item.registeredByName) {
@@ -310,16 +367,29 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                     —
                   }
                 </div>
-                <button
-                  uiButton
-                  variant="ghost"
-                  size="sm"
-                  class="dbd-card-mobile-action"
-                  *hasPermission="['delivery.return', 'delivery.settle', 'customer.view']"
-                  (click)="viewReturns(item)"
-                >
-                  Devoluciones
-                </button>
+                <div class="dbd-card-mobile-actions">
+                  <button
+                    uiButton
+                    variant="ghost"
+                    size="sm"
+                    class="dbd-card-mobile-action"
+                    *hasPermission="['delivery.return', 'delivery.settle', 'customer.view']"
+                    (click)="viewReturns(item)"
+                  >
+                    Devoluciones
+                  </button>
+                  @if (item.chargeAmount > 0 && canViewInvoice()) {
+                    <button
+                      uiButton
+                      variant="ghost"
+                      size="sm"
+                      class="dbd-card-mobile-action"
+                      (click)="openPromoInsights(item)"
+                    >
+                      Promociones
+                    </button>
+                  }
+                </div>
               </div>
             }
           </div>
@@ -340,7 +410,9 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                   <th>Comprob.</th>
                   <th>Monto</th>
                   <th>Devuelto</th>
-                  <th>Neto a rendir</th>
+                  <th>Neto</th>
+                  <th>Desc. perdido <span [uiInfoTip]="chargeAmountTooltip"></span></th>
+                  <th>A rendir <span [uiInfoTip]="amountToCollectTooltip"></span></th>
                 </tr>
               </thead>
               <tbody>
@@ -351,13 +423,19 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                     <td class="dbd-muted">{{ m.invoices }}</td>
                     <td class="dbd-muted">{{ formatSoles(m.amount) }}</td>
                     <td class="dbd-muted">{{ formatSoles(m.returnedAmount) }}</td>
-                    <td class="dbd-cell-strong">{{ formatSoles(m.netAmount) }}</td>
+                    <td class="dbd-muted">{{ formatSoles(m.netAmount) }}</td>
+                    <td [class.dbd-charge]="m.chargeAmount > 0" [class.dbd-muted]="!m.chargeAmount">
+                      {{ m.chargeAmount > 0 ? formatSoles(m.chargeAmount) : '—' }}
+                    </td>
+                    <td class="dbd-cell-strong">{{ formatSoles(m.amountToCollect) }}</td>
                   </tr>
                 }
                 @if (b.pendingAmount > 0) {
                   <tr class="dbd-team-row dbd-team-row-dim" (click)="openUnattended()">
                     <td class="dbd-cell-strong" colspan="2">Sin atender</td>
                     <td class="dbd-muted">{{ unattendedCount() }}</td>
+                    <td class="dbd-muted">{{ formatSoles(b.pendingAmount) }}</td>
+                    <td class="dbd-muted">—</td>
                     <td class="dbd-muted">{{ formatSoles(b.pendingAmount) }}</td>
                     <td class="dbd-muted">—</td>
                     <td class="dbd-cell-strong">{{ formatSoles(b.pendingAmount) }}</td>
@@ -369,6 +447,8 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                   <td class="dbd-cell-strong">{{ formatSoles(b.totalAmount) }}</td>
                   <td class="dbd-cell-strong">{{ formatSoles(b.returnedAmount) }}</td>
                   <td class="dbd-cell-strong">{{ formatSoles(b.netAmount) }}</td>
+                  <td class="dbd-cell-strong">{{ formatSoles(b.chargeAmount) }}</td>
+                  <td class="dbd-cell-strong">{{ formatSoles(b.amountToCollect) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -386,7 +466,10 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                     {{ m.invoices }} comprob. · {{ formatSoles(m.amount) }} · devuelto
                     {{ formatSoles(m.returnedAmount) }}
                   </div>
-                  <div class="dbd-cell-strong">Neto a rendir: {{ formatSoles(m.netAmount) }}</div>
+                  @if (m.chargeAmount > 0) {
+                    <div class="dbd-charge">Desc. perdido {{ formatSoles(m.chargeAmount) }}</div>
+                  }
+                  <div class="dbd-cell-strong">A rendir: {{ formatSoles(m.amountToCollect) }}</div>
                 </div>
               }
               @if (b.pendingAmount > 0) {
@@ -461,6 +544,12 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                   >
                   <span class="dbd-metric-label">Comprobantes con devolución</span>
                 </div>
+                <div class="dbd-metric" [class.dbd-metric-alert]="r.chargeAmount > 0">
+                  <span class="dbd-metric-value">{{ formatSoles(r.chargeAmount) }}</span>
+                  <span class="dbd-metric-label"
+                    >Descuento perdido <span [uiInfoTip]="chargeAmountTooltip"></span
+                  ></span>
+                </div>
                 <div
                   class="dbd-metric"
                   [class.dbd-metric-click]="r.pendingInvoices > 0"
@@ -471,6 +560,15 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                   <span class="dbd-metric-label">Sin atender</span>
                 </div>
               </div>
+
+              <button
+                type="button"
+                class="dbd-chip"
+                [class.on]="onlyChargeAmount()"
+                (click)="onlyChargeAmount.set(!onlyChargeAmount())"
+              >
+                Con descuento perdido
+              </button>
 
               <div class="dbd-ret-grid">
                 <ui-card title="Qué vuelve al almacén">
@@ -529,7 +627,7 @@ const UNATTENDED_FILTER_VALUE = '__none__';
 
                 <ui-card title="Comprobantes con devolución">
                   <div class="dbd-ret-invoices">
-                    @for (inv of r.invoices; track inv.lineNumber) {
+                    @for (inv of filteredInvoices(r); track inv.lineNumber) {
                       <div
                         class="dbd-ret-invoice"
                         [class.dbd-ret-row-highlight]="
@@ -557,10 +655,18 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                           @if (inv.registeredByName) {
                             {{ inv.registeredByName }} · {{ timeText(inv.registeredAt) }}
                           }
-                          Monto {{ formatSoles(inv.amount) }} · Neto
-                          {{ formatSoles(inv.netAmount) }}
+                          Monto {{ formatSoles(inv.amount) }} · Devuelto
+                          {{ formatSoles(inv.returnedAmount) }}
+                          @if (inv.chargeAmount > 0) {
+                            ·
+                            <span class="dbd-charge"
+                              >⚠ Desc. perdido {{ formatSoles(inv.chargeAmount) }}</span
+                            >
+                          }
+                          · <strong>A cobrar {{ formatSoles(inv.amountToCollect) }}</strong>
                         </div>
                         @if (expandedInvoiceLine() === inv.lineNumber) {
+                          <div class="dbd-ret-subtitle">Devuelto</div>
                           <table class="ui-table-grid dbd-ret-lines">
                             <tbody>
                               @for (l of inv.lines; track l.productId) {
@@ -568,7 +674,7 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                                   <td>
                                     {{ l.productName }}
                                     @if (l.bonus) {
-                                      <span class="dbd-ret-bonus-tag">Bonificación</span>
+                                      <span class="dbd-ret-bonus-tag">Bonificación recuperada</span>
                                     }
                                   </td>
                                   <td class="dbd-muted">{{ l.quantity }}</td>
@@ -578,6 +684,40 @@ const UNATTENDED_FILTER_VALUE = '__none__';
                               }
                             </tbody>
                           </table>
+
+                          @if (inv.discounts.length > 0) {
+                            <div class="dbd-ret-subtitle">
+                              Descuento perdido <span [uiInfoTip]="discountChargeTooltip"></span>
+                            </div>
+                            <table class="ui-table-grid dbd-ret-lines">
+                              <thead>
+                                <tr>
+                                  <th>Promoción</th>
+                                  <th>Producto</th>
+                                  <th>Del pedido</th>
+                                  <th>Quedaba</th>
+                                  <th>Ahora</th>
+                                  <th>A cobrar</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                @for (d of inv.discounts; track d.promoId + '-' + d.productId) {
+                                  <tr>
+                                    <td>{{ d.promoName }}</td>
+                                    <td class="dbd-muted">
+                                      {{ d.productCode }} {{ d.productName }}
+                                    </td>
+                                    <td class="dbd-muted">{{ formatSoles(d.orderDiscount) }}</td>
+                                    <td class="dbd-muted">{{ formatSoles(d.keptDiscount) }}</td>
+                                    <td class="dbd-muted">{{ formatSoles(d.currentDiscount) }}</td>
+                                    <td class="dbd-cell-strong">
+                                      {{ formatSoles(d.chargeAmount) }}
+                                    </td>
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          }
                         }
                       </div>
                     }
@@ -654,6 +794,19 @@ const UNATTENDED_FILTER_VALUE = '__none__';
         font-size: 12px;
         color: var(--ink-muted);
       }
+      .dbd-metric-sub {
+        display: block;
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+      .dbd-metric-primary {
+        border-color: var(--accent);
+      }
+      .dbd-metric-primary .dbd-metric-value {
+        color: var(--accent-ink);
+        font-weight: 900;
+      }
       .dbd-tabs {
         display: flex;
         gap: 0;
@@ -684,6 +837,50 @@ const UNATTENDED_FILTER_VALUE = '__none__';
       }
       .dbd-filters ui-field {
         width: 220px;
+      }
+      .dbd-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 700;
+        padding: 9px 14px;
+        border: 2px solid var(--divider);
+        border-radius: var(--radius-pill);
+        background: var(--surface);
+        color: var(--ink-muted);
+        cursor: pointer;
+        align-self: flex-end;
+      }
+      .dbd-chip.on {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--bg);
+      }
+      .dbd-charge-link {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--st-pendiente);
+      }
+      .dbd-charge-link:hover {
+        text-decoration: underline;
+      }
+      .dbd-charge {
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--st-pendiente);
+      }
+      .dbd-card-mobile-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       .dbd-cell-strong {
         font-weight: 800;
@@ -835,6 +1032,16 @@ const UNATTENDED_FILTER_VALUE = '__none__';
       .dbd-ret-lines {
         margin-top: 10px;
       }
+      .dbd-ret-subtitle {
+        margin-top: 12px;
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
 
       @media (max-width: 767px) {
         .dbd-page {
@@ -895,6 +1102,9 @@ export class DeliveryBatchDetailPage {
   protected itemStatusText = itemStatusName;
   protected roleInTeamName = roleInTeamName;
   protected itemStatusOptions = ITEM_STATUS_FILTER_OPTIONS;
+  protected chargeAmountTooltip = CHARGE_AMOUNT_TOOLTIP;
+  protected amountToCollectTooltip = AMOUNT_TO_COLLECT_TOOLTIP;
+  protected discountChargeTooltip = DISCOUNT_CHARGE_TOOLTIP;
 
   protected batch = signal<BatchDetail | null>(null);
   protected customers = signal<BatchCustomerView[]>([]);
@@ -906,6 +1116,7 @@ export class DeliveryBatchDetailPage {
   protected itemStatusFilter = signal('');
   /** '' = todos, UNATTENDED_FILTER_VALUE = sin atender, o el registeredByUserId como texto. */
   protected attendedByFilter = signal('');
+  protected onlyChargeAmountItems = signal(false);
 
   protected returnsReport = signal<BatchReturnsReport | null>(null);
   protected loadingReturns = signal(false);
@@ -917,6 +1128,19 @@ export class DeliveryBatchDetailPage {
   protected pendingCount = computed(
     () => this.batch()?.items.filter((i) => i.statusCode === 'PENDING').length ?? 0,
   );
+
+  /** Comprobantes con descuento perdido — subtítulo de la tarjeta (sección 7.3). */
+  protected chargedItemCount(b: BatchDetail): number {
+    return b.items.filter((i) => i.chargeAmount > 0).length;
+  }
+
+  /** Filtro "Con descuento perdido" de la pestaña Devoluciones — secciones 7.3 y 11.3. */
+  protected onlyChargeAmount = signal(false);
+
+  protected openChargeAmountReturns() {
+    this.onlyChargeAmount.set(true);
+    this.view.set('returns');
+  }
 
   /** Cantidad de comprobantes pendientes — lo mismo que `pendingCount`, con el nombre que usa la pestaña Equipo. */
   protected unattendedCount = this.pendingCount;
@@ -941,10 +1165,12 @@ export class DeliveryBatchDetailPage {
     const items = this.batch()?.items ?? [];
     const statusFilter = this.itemStatusFilter();
     const attendedFilter = this.attendedByFilter();
+    const chargeOnly = this.onlyChargeAmountItems();
     return items.filter((i) => {
       if (statusFilter && i.statusCode !== statusFilter) return false;
       if (attendedFilter === UNATTENDED_FILTER_VALUE) return i.registeredByUserId == null;
       if (attendedFilter && String(i.registeredByUserId) !== attendedFilter) return false;
+      if (chargeOnly && i.chargeAmount <= 0) return false;
       return true;
     });
   });
@@ -1055,6 +1281,14 @@ export class DeliveryBatchDetailPage {
     });
   }
 
+  /** Panel "Promociones" del comprobante — doc 53, sección 12. */
+  protected openPromoInsights(item: { invoiceId: string; customerName: string }) {
+    this.dialog.open<PromoInsightsDialog, PromoInsightsDialogData, void>(PromoInsightsDialog, {
+      data: { invoiceId: item.invoiceId, customerName: item.customerName },
+      width: '560px',
+    });
+  }
+
   /** Clic en un integrante de Equipo → Comprobantes filtrado por esa persona — sección 9.4. */
   protected openMember(m: MemberTotals) {
     this.itemStatusFilter.set('');
@@ -1103,6 +1337,11 @@ export class DeliveryBatchDetailPage {
 
   protected toggleInvoiceExpand(lineNumber: number) {
     this.expandedInvoiceLine.set(this.expandedInvoiceLine() === lineNumber ? null : lineNumber);
+  }
+
+  /** Chip "Con descuento perdido" — doc 53, sección 11.3. */
+  protected filteredInvoices(r: BatchReturnsReport): BatchReturnInvoiceView[] {
+    return this.onlyChargeAmount() ? r.invoices.filter((i) => i.chargeAmount > 0) : r.invoices;
   }
 
   protected invoiceHasProduct(inv: BatchReturnInvoiceView, productId: number | null): boolean {

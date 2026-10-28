@@ -95,10 +95,18 @@ function todayStr(): string {
                     <div
                       class="nt-message"
                       [class.nt-message-open]="expandedId() === n.notificationId"
-                      (click)="toggleExpand(n.notificationId)"
                     >
                       {{ n.message }}
                     </div>
+                    @if (n.message.length > 140) {
+                      <button
+                        type="button"
+                        class="nt-message-toggle"
+                        (click)="toggleExpand(n.notificationId)"
+                      >
+                        {{ expandedId() === n.notificationId ? 'Ver menos' : 'Ver más' }}
+                      </button>
+                    }
                   </td>
                   <td>
                     @if (n.read) {
@@ -180,15 +188,28 @@ function todayStr(): string {
       .nt-message {
         max-width: 360px;
         font-size: 13px;
-        cursor: pointer;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow: hidden;
       }
       .nt-message-open {
         -webkit-line-clamp: unset;
         overflow: visible;
+      }
+      .nt-message-toggle {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 2px 0 0;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--accent-ink);
+      }
+      .nt-message-toggle:hover {
+        text-decoration: underline;
       }
       .nt-pager {
         display: flex;

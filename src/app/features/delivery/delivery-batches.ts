@@ -5,9 +5,15 @@ import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiTable } from '../../shared/ui/table/table';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiInfoTip } from '../../shared/ui/info-tip/info-tip';
 import { DeliveryAdminService } from './delivery-admin';
 import { BatchSummary } from '../../shared/models/delivery.models';
-import { BATCH_STATUS_OPTIONS, batchStatusName } from './delivery-format';
+import {
+  AMOUNT_TO_COLLECT_TOOLTIP,
+  BATCH_STATUS_OPTIONS,
+  CHARGE_AMOUNT_TOOLTIP,
+  batchStatusName,
+} from './delivery-format';
 import { dateText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 
@@ -23,7 +29,7 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
  */
 @Component({
   selector: 'app-delivery-batches',
-  imports: [RouterLink, UiButton, UiField, UiTable, UiStatus, UiEmpty],
+  imports: [RouterLink, UiButton, UiField, UiTable, UiStatus, UiEmpty, UiInfoTip],
   template: `
     <section class="db-page">
       <div class="db-head">
@@ -66,6 +72,8 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               <th>Estado</th>
               <th>Devuelto</th>
               <th>Neto</th>
+              <th>Desc. perdido <span [uiInfoTip]="chargeAmountTooltip"></span></th>
+              <th>A cobrar <span [uiInfoTip]="amountToCollectTooltip"></span></th>
               <th>Ítems</th>
               <th></th>
             </tr>
@@ -78,7 +86,11 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
                 <td class="db-muted">{{ b.vehiclePlate || 'Sin asignar' }}</td>
                 <td><ui-status [label]="statusName(b.statusCode)" /></td>
                 <td class="db-muted">{{ formatSoles(b.returnedAmount) }}</td>
-                <td class="db-net">{{ formatSoles(b.netAmount) }}</td>
+                <td class="db-muted">{{ formatSoles(b.netAmount) }}</td>
+                <td [class.db-charge]="b.chargeAmount > 0" [class.db-muted]="!b.chargeAmount">
+                  {{ b.chargeAmount > 0 ? formatSoles(b.chargeAmount) : '—' }}
+                </td>
+                <td class="db-collect">{{ formatSoles(b.amountToCollect) }}</td>
                 <td class="db-muted">{{ pct(b) }}%</td>
                 <td class="db-row-action">
                   <button uiButton variant="ghost" size="sm" [routerLink]="['/reparto', b.batchId]">
@@ -104,6 +116,10 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
               @if (b.returnedAmount > 0) {
                 <div class="db-muted">Devuelto {{ formatSoles(b.returnedAmount) }}</div>
               }
+              @if (b.chargeAmount > 0) {
+                <div class="db-charge">Desc. perdido {{ formatSoles(b.chargeAmount) }}</div>
+              }
+              <div class="db-collect">A cobrar {{ formatSoles(b.amountToCollect) }}</div>
             </a>
           }
         </div>
@@ -178,6 +194,16 @@ const STATUS_FILTER_OPTIONS: UiFieldOption[] = [
         color: var(--ink);
         font-variant-numeric: var(--tnum);
       }
+      .db-charge {
+        color: var(--st-pendiente);
+        font-weight: 700;
+        font-variant-numeric: var(--tnum);
+      }
+      .db-collect {
+        font-weight: 800;
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
       .db-row-action {
         text-align: right;
       }
@@ -242,6 +268,8 @@ export class DeliveryBatchesPage {
   protected formatSoles = formatSoles;
   protected statusName = batchStatusName;
   protected statusOptions = STATUS_FILTER_OPTIONS;
+  protected chargeAmountTooltip = CHARGE_AMOUNT_TOOLTIP;
+  protected amountToCollectTooltip = AMOUNT_TO_COLLECT_TOOLTIP;
 
   protected rows = signal<BatchSummary[]>([]);
   protected totalElements = signal(0);

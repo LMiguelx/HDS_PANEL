@@ -1,6 +1,10 @@
 // Contratos de Planillas de reparto y Devoluciones (/api/deliveries). Ver
 // 16-panel-supervision-reparto-facturas.md. Las planillas y sus líneas nacen
 // en el ERP externo — el backend solo las lee y actualiza equipo/estado.
+//
+// `chargeAmount`/`amountToCollect` — doc 53: descuento perdido por
+// devolución y lo que realmente hay que cobrar (`netAmount + chargeAmount`).
+// Siempre llegan (nunca opcionales); el panel no los recalcula.
 
 export interface ItemStatusCounts {
   pending: number;
@@ -27,6 +31,8 @@ export interface BatchSummary {
   totalItems: number;
   statusCounts: ItemStatusCounts;
   itemsProgressPercentage: number; // (delivered+partial+rejected)/totalItems * 100
+  chargeAmount: number; // doc 53 — descuento perdido de toda la planilla
+  amountToCollect: number; // doc 53 — netAmount + chargeAmount
 }
 
 export interface BatchListFilters {
@@ -50,6 +56,8 @@ export interface BatchItemView {
   registeredByUserId: number | null;
   registeredByName: string | null;
   registeredAt: string | null; // ISO datetime
+  chargeAmount: number; // doc 53 — 0 si el cliente no perdió descuento
+  amountToCollect: number; // doc 53 — netAmount + chargeAmount
 }
 
 /**
@@ -65,7 +73,9 @@ export interface MemberTotals {
   invoices: number;
   amount: number;
   returnedAmount: number;
-  netAmount: number; // lo que le corresponde rendir
+  netAmount: number; // lo que le corresponde rendir, como figura en el ERP
+  chargeAmount: number; // doc 53 — descuento perdido de SUS comprobantes
+  amountToCollect: number; // doc 53 — lo que le toca rendir de verdad
 }
 
 export interface BatchDetail {
@@ -88,6 +98,8 @@ export interface BatchDetail {
   items: BatchItemView[];
   pendingAmount: number; // monto de los comprobantes que nadie atendió todavía
   memberTotals: MemberTotals[];
+  chargeAmount: number; // doc 53 — tarjeta "Descuento perdido"
+  amountToCollect: number; // doc 53 — tarjeta "A cobrar"
 }
 
 export interface BatchCustomerView {
@@ -101,9 +113,17 @@ export interface BatchCustomerView {
   // normal, no como error (lista aparte de "sin ubicación").
   latitude: number | null;
   longitude: number | null;
+  routeSequence: number | null;
   invoiceId: string;
   amount: number;
+  returnedAmount: number;
+  netAmount: number;
   itemStatusCode: string; // PENDING | DELIVERED | PARTIAL | REJECTED
+  registeredByUserId: number | null;
+  registeredByName: string | null;
+  registeredAt: string | null; // ISO datetime
+  chargeAmount: number; // doc 53
+  amountToCollect: number; // doc 53
 }
 
 export interface AssignTeamCommand {
@@ -156,6 +176,19 @@ export interface BatchReturnLineView {
   bonus: boolean; // true = bonificación recuperada, no una venta devuelta
 }
 
+/** Descuento que el cliente pierde en una línea por una promoción — doc 53, sección 11.2. */
+export interface DiscountChargeView {
+  promoId: number; // NO mostrar
+  promoName: string;
+  productId: number; // NO mostrar
+  productCode: string;
+  productName: string;
+  orderDiscount: number; // "Descuento del pedido"
+  keptDiscount: number; // "Quedaba tras devolver"
+  currentDiscount: number; // "Le corresponde ahora"
+  chargeAmount: number; // "A cobrar" = keptDiscount - currentDiscount
+}
+
 export interface BatchReturnInvoiceView {
   lineNumber: number; // posición del comprobante en la planilla
   invoiceId: string;
@@ -169,6 +202,9 @@ export interface BatchReturnInvoiceView {
   registeredByName: string | null;
   registeredAt: string | null; // ISO datetime
   lines: BatchReturnLineView[];
+  chargeAmount: number; // doc 53
+  amountToCollect: number; // doc 53
+  discounts: DiscountChargeView[]; // doc 53 — vacío si no perdió descuentos
 }
 
 export interface BatchReturnsReport {
@@ -188,4 +224,53 @@ export interface BatchReturnsReport {
   productCount: number; // productos distintos devueltos
   products: BatchReturnProductView[]; // consolidado, ordenado por nombre
   invoices: BatchReturnInvoiceView[]; // comprobantes con devolución, en orden de planilla
+  chargeAmount: number; // doc 53 — descuento perdido de la planilla
+}
+
+// ─────────────────────── Promociones del comprobante (doc 53, sección 12) ───────────────────────
+
+export interface BenefitInsight {
+  benefitType: string; // FREE_PRODUCT | DISCOUNT_PERCENT | DISCOUNT_AMOUNT (sección 4.3)
+  productId: number | null; // NO mostrar
+  productName: string | null;
+  quantity: number | null;
+  discountAmount: number | null;
+  discountPercent: number | null;
+  label: string;
+}
+
+export interface TierInsight {
+  tier: number;
+  fromQuantity: number | null;
+  fromAmount: number | null;
+  thresholdText: string;
+  benefits: BenefitInsight[];
+}
+
+/** Bonificación que el cliente conserva. `originalProductId` con valor = es un sustituto (doc 51). */
+export interface GrantedInsight {
+  productId: number; // NO mostrar
+  productName: string;
+  quantity: number;
+  originalProductId: number | null; // NO mostrar
+  originalProductName: string | null;
+}
+
+/** Descuento que el cliente conserva en un producto. */
+export interface DiscountInsight {
+  productId: number; // NO mostrar
+  productName: string;
+  amount: number;
+}
+
+export interface PromoInsight {
+  promoId: number; // NO mostrar
+  promoName: string;
+  measureType: string; // QUANTITY | AMOUNT (sección 4.4)
+  tiers: TierInsight[];
+  currentMeasured: number;
+  currentTier: number | null; // null = ningún tramo alcanzado hoy
+  currentlyGranted: GrantedInsight[];
+  currentDiscounts: DiscountInsight[]; // doc 53
+  chargeAmount: number; // doc 53 — descuento perdido de esta promoción
 }
