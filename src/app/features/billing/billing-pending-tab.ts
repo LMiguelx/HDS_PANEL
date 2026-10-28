@@ -24,9 +24,10 @@ import {
   BillingIssue,
   OrderBillingSendOutcome,
   OrderBillingValidation,
+  OrderRecalculationOutcome,
 } from '../../shared/models/billing-validation.models';
 import { originName } from '../orders/order-format';
-import { elsewhereLinkFor, hasRecalcFix as issuesHaveRecalcFix } from './billing-validation-format';
+import { elsewhereLinkFor, recalcOutcomeText } from './billing-validation-format';
 import { dateTimeText, timeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 
@@ -36,10 +37,11 @@ function todayIso(): string {
 }
 
 type Phase = 'browse' | 'validating' | 'results' | 'sending' | 'sent';
-type ShowFilter = 'issues' | 'valid' | 'all';
+type ShowFilter = 'issues' | 'valid' | 'all' | 'recalculable';
 
 const VALIDATE_CHUNK = 200;
 const SEND_CHUNK = 100;
+const RECALCULATE_CHUNK = 100;
 
 /**
  * Validación de pedidos — "Por enviar" (doc 32, secciones 5 a 8). Reúne en
@@ -252,7 +254,12 @@ const SEND_CHUNK = 100;
             <h1>Resultado de la validación</h1>
             <p class="bpt-sub">{{ dayLongText() }}</p>
           </div>
-          <button uiButton variant="secondary" (click)="backToBrowse()">
+          <button
+            uiButton
+            variant="secondary"
+            [disabled]="recalculatingBatch()"
+            (click)="backToBrowse()"
+          >
             <span class="material-icons" aria-hidden="true">refresh</span>
             Validar de nuevo
           </button>
@@ -285,40 +292,99 @@ const SEND_CHUNK = 100;
                 motivos</strong
               >
               <div>
-                @if (eligibleForRecalc().length > 0) {
-                  {{ eligibleForRecalc().length }} se corrige{{
-                    eligibleForRecalc().length === 1 ? '' : 'n'
-                  }}
-                  recalculando el pedido.
+                @if (recalculableCount() > 0) {
+                  {{ recalculableCount() }} se corrige{{ recalculableCount() === 1 ? '' : 'n' }}
+                  recalculando sus promociones.
                 } @else {
                   Revísalos uno por uno abajo.
                 }
               </div>
             </div>
-            @if (eligibleForRecalc().length > 0) {
-              <button
-                uiButton
-                variant="secondary"
-                size="sm"
-                [loading]="recalculatingAll()"
-                (click)="recalculateAllPending()"
-              >
-                Recalcular pendientes ({{ eligibleForRecalc().length }})
-              </button>
-            }
           </div>
         }
 
-        @if (recalculatingAll()) {
-          <div class="bpt-progress-block">
-            <div class="bpt-progress-head">
-              <span
-                >Recalculando {{ recalculateAllProgress().done }} de
-                {{ recalculateAllProgress().total }} pedidos…</span
+        @if (recalculatingBatch()) {
+          <div class="bpt-recalc-progress">
+            <span class="bpt-recalc-spinner" aria-hidden="true">⟳</span>
+            <div class="bpt-recalc-progress-text">
+              <strong>Recalculando promociones…</strong>
+              <span class="bpt-muted"
+                >{{ recalculateBatchProgress().done }} de
+                {{ recalculateBatchProgress().total }} pedidos</span
               >
             </div>
-            <div class="bpt-progress-track">
-              <div class="bpt-progress-fill" [style.width.%]="recalculateAllPct()"></div>
+            <div class="bpt-progress-track bpt-recalc-track">
+              <div
+                class="bpt-progress-fill bpt-recalc-fill"
+                [style.width.%]="recalculateBatchPct()"
+              ></div>
+            </div>
+          </div>
+        }
+
+        @if (showRecalculateResult() && recalculateResultView(); as rr) {
+          <div class="bpt-recalc-result">
+            <div class="bpt-recalc-result-head">
+              <h3>Recálculo terminado</h3>
+            </div>
+            <p class="bpt-recalc-result-summary">
+              <span class="bpt-recalc-ok"
+                >✓ {{ rr.recalculatedCount }} recalculado{{
+                  rr.recalculatedCount === 1 ? '' : 's'
+                }}</span
+              >
+              @if (rr.failedOutcomes.length > 0) {
+                <span class="bpt-recalc-fail"
+                  >✕ {{ rr.failedOutcomes.length }} no recalculado{{
+                    rr.failedOutcomes.length === 1 ? '' : 's'
+                  }}</span
+                >
+              }
+              @if (rr.alreadyValidCount > 0) {
+                <span class="bpt-muted"
+                  >{{ rr.alreadyValidCount }} ya estaba{{
+                    rr.alreadyValidCount === 1 ? '' : 'n'
+                  }}
+                  correcto{{ rr.alreadyValidCount === 1 ? '' : 's' }}</span
+                >
+              }
+            </p>
+
+            @if (rr.stockPendingCount > 0 || rr.choicePendingCount > 0) {
+              <div class="bpt-recalc-pending">
+                <div class="bpt-recalc-pending-title">Quedaron pendientes</div>
+                @if (rr.stockPendingCount > 0) {
+                  <div class="bpt-recalc-pending-row">
+                    <span>{{ rr.stockPendingCount }} con bonificaciones sin stock</span>
+                    <a routerLink="/pedidos/bonificaciones-sin-stock" class="bpt-issue-link"
+                      >Ir a la bandeja</a
+                    >
+                  </div>
+                }
+                @if (rr.choicePendingCount > 0) {
+                  <div class="bpt-recalc-pending-row">
+                    <span>{{ rr.choicePendingCount }} con premio por elegir</span>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (rr.failedOutcomes.length > 0) {
+              <div class="bpt-recalc-pending">
+                <div class="bpt-recalc-pending-title">No recalculados</div>
+                @for (o of rr.failedOutcomes; track o.orderId) {
+                  <div class="bpt-issue-row">
+                    <span class="bpt-cell-strong">{{ o.orderId }}</span>
+                    {{ o.customerName }} — {{ recalcOutcomeText(o) }}
+                  </div>
+                }
+              </div>
+            }
+
+            <div class="bpt-recalc-result-actions">
+              <button uiButton variant="secondary" size="sm" (click)="closeRecalculateResult()">
+                Cerrar
+              </button>
             </div>
           </div>
         }
@@ -336,6 +402,20 @@ const SEND_CHUNK = 100;
             <span class="bpt-summary-value">{{ invalidCount() }}</span>
             <span class="bpt-summary-label">Con motivos</span>
           </div>
+          @if (recalculableCount() > 0) {
+            <div class="bpt-summary-card bpt-summary-card-recalc">
+              <span class="bpt-summary-value">{{ recalculableCount() }}</span>
+              <span class="bpt-summary-label">Recalculables</span>
+              <button
+                type="button"
+                class="bpt-summary-action"
+                [disabled]="recalculatingBatch()"
+                (click)="recalculateAllRecalculable()"
+              >
+                <span class="material-icons" aria-hidden="true">autorenew</span> Recalcular
+              </button>
+            </div>
+          }
         </div>
 
         <div class="bpt-show-filter">
@@ -347,6 +427,16 @@ const SEND_CHUNK = 100;
           >
             Con motivos <span class="bpt-chip-count">{{ invalidCount() }}</span>
           </button>
+          @if (recalculableCount() > 0) {
+            <button
+              type="button"
+              class="bpt-chip bpt-chip-recalc"
+              [class.on]="showFilter() === 'recalculable'"
+              (click)="showFilter.set('recalculable')"
+            >
+              Recalculables <span class="bpt-chip-count">{{ recalculableCount() }}</span>
+            </button>
+          }
           <button
             type="button"
             class="bpt-chip"
@@ -377,6 +467,13 @@ const SEND_CHUNK = 100;
             @for (o of filteredValidationOrders(); track o.orderId) {
               <div class="bpt-result-row">
                 <div class="bpt-result-summary">
+                  <input
+                    type="checkbox"
+                    class="bpt-result-check"
+                    [checked]="resultsSelected().has(o.orderId)"
+                    (click)="$event.stopPropagation()"
+                    (change)="toggleResultSelect(o.orderId)"
+                  />
                   <button
                     type="button"
                     class="bpt-expand-btn"
@@ -401,6 +498,10 @@ const SEND_CHUNK = 100;
                   <span class="bpt-cell-strong">{{ formatSoles(o.netAmount) }}</span>
                   @if (o.valid) {
                     <span class="bpt-badge bpt-badge-ok">● Válido</span>
+                  } @else if (o.recalculable) {
+                    <span class="bpt-badge bpt-badge-recalc" title="Recalculable"
+                      >⟳ Recalculable</span
+                    >
                   } @else {
                     <span class="bpt-badge bpt-badge-warn"
                       >● Con motivos ({{ o.issues.length }})</span
@@ -469,16 +570,17 @@ const SEND_CHUNK = 100;
                       }
                     }
 
-                    @if (hasRecalcFix(o)) {
+                    @if (o.recalculable) {
                       <div class="bpt-row-actions">
                         <button
                           uiButton
                           variant="secondary"
                           size="sm"
                           [loading]="recalculatingId() === o.orderId"
-                          (click)="recalculate(o)"
+                          (click)="recalculateRow(o)"
                         >
-                          Recalcular pedido
+                          <span class="material-icons" aria-hidden="true">autorenew</span>
+                          Recalcular promociones
                         </button>
                       </div>
                     }
@@ -490,6 +592,20 @@ const SEND_CHUNK = 100;
         }
 
         <div class="bpt-send-footer">
+          <button
+            uiButton
+            variant="secondary"
+            [disabled]="resultsSelectedRecalculableIds().length === 0 || recalculatingBatch()"
+            [title]="
+              resultsSelectedRecalculableIds().length === 0
+                ? 'Ninguno de los pedidos seleccionados se corrige recalculando'
+                : ''
+            "
+            (click)="recalculateSelected()"
+          >
+            <span class="material-icons" aria-hidden="true">autorenew</span>
+            Recalcular seleccionados ({{ resultsSelectedRecalculableIds().length }})
+          </button>
           <span
             >{{ validCount() }} pedido{{ validCount() === 1 ? '' : 's' }} válido{{
               validCount() === 1 ? '' : 's'
@@ -499,7 +615,7 @@ const SEND_CHUNK = 100;
           <button
             uiButton
             variant="primary"
-            [disabled]="validCount() === 0"
+            [disabled]="validCount() === 0 || recalculatingBatch()"
             (click)="confirmSend()"
           >
             Enviar {{ validCount() }} válidos
@@ -786,6 +902,148 @@ const SEND_CHUNK = 100;
       }
       .bpt-warn-banner-text {
         flex: 1;
+      }
+      .bpt-recalc-progress {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 20px;
+        padding: 14px 18px;
+        border: 1px solid var(--accent);
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+      }
+      .bpt-recalc-spinner {
+        flex: none;
+        font-size: 24px;
+        color: var(--accent-ink);
+        animation: bpt-recalc-spin 1.1s linear infinite;
+      }
+      @keyframes bpt-recalc-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .bpt-recalc-progress-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 220px;
+      }
+      .bpt-recalc-progress-text strong {
+        font-size: 14px;
+        color: var(--ink);
+      }
+      .bpt-recalc-track {
+        flex: 1;
+      }
+      .bpt-recalc-fill {
+        background: var(--accent-ink);
+      }
+      .bpt-recalc-result {
+        margin-top: 20px;
+        border: 2px solid var(--divider);
+        padding: 16px 20px;
+        display: grid;
+        gap: 12px;
+      }
+      .bpt-recalc-result-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .bpt-recalc-result-head h3 {
+        margin: 0;
+        font-size: var(--fs-h2);
+        color: var(--ink);
+      }
+      .bpt-recalc-result-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .bpt-recalc-result-summary {
+        margin: 0;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .bpt-recalc-ok {
+        color: var(--success);
+      }
+      .bpt-recalc-fail {
+        color: var(--status-danger);
+      }
+      .bpt-recalc-pending {
+        border-top: 1px dashed var(--hairline);
+        padding-top: 10px;
+        display: grid;
+        gap: 6px;
+      }
+      .bpt-recalc-pending-title {
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+      .bpt-recalc-pending-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .bpt-result-check {
+        flex: none;
+        accent-color: var(--accent);
+      }
+      .bpt-badge-recalc {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        white-space: nowrap;
+        color: var(--st-pendiente);
+        background: color-mix(in srgb, var(--st-pendiente) 14%, transparent);
+      }
+      .bpt-chip-recalc.on {
+        background: var(--st-pendiente);
+        border-color: var(--st-pendiente);
+      }
+      .bpt-summary-card-recalc {
+        border-color: var(--st-pendiente);
+        display: flex;
+        flex-direction: column;
+      }
+      .bpt-summary-card-recalc .bpt-summary-value {
+        color: var(--st-pendiente);
+      }
+      .bpt-summary-action {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        margin-top: 6px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--accent-ink);
+      }
+      .bpt-summary-action .material-icons {
+        font-size: 14px;
+      }
+      .bpt-summary-action:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
       .bpt-summary-row {
         display: flex;
@@ -1078,9 +1336,8 @@ export class BillingPendingTab {
   protected dateTimeText = dateTimeText;
   protected timeText = timeText;
   protected originName = originName;
-  protected hasRecalcFix = (o: OrderBillingValidation) =>
-    issuesHaveRecalcFix(o.issues.map((i) => i.code));
   protected elsewhereLink = elsewhereLinkFor;
+  protected recalcOutcomeText = recalcOutcomeText;
 
   protected userSearch = (q: string) =>
     this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
@@ -1217,16 +1474,52 @@ export class BillingPendingTab {
   protected recalculatingId = signal<number | null>(null);
   protected resolvingBonusKey = signal<string | null>(null);
   protected cancelingId = signal<number | null>(null);
-  protected recalculatingAll = signal(false);
-  protected recalculateAllProgress = signal({ done: 0, total: 0 });
-  protected recalculateAllPct = computed(() => {
-    const p = this.recalculateAllProgress();
+
+  // — Recalcular (lote) — doc 55 —
+  protected resultsSelected = signal<Set<number>>(new Set());
+  protected resultsSelectedRecalculableIds = computed(() =>
+    this.validationOrders()
+      .filter((o) => this.resultsSelected().has(o.orderId) && o.recalculable)
+      .map((o) => o.orderId),
+  );
+  protected recalculableOrders = computed(() =>
+    this.validationOrders().filter((o) => o.recalculable),
+  );
+  protected recalculableCount = computed(() => this.recalculableOrders().length);
+  protected recalculatingBatch = signal(false);
+  protected recalculateBatchProgress = signal({ done: 0, total: 0 });
+  protected recalculateBatchPct = computed(() => {
+    const p = this.recalculateBatchProgress();
     return p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
   });
+  protected recalculateOutcomes = signal<OrderRecalculationOutcome[]>([]);
+  protected showRecalculateResult = signal(false);
+  protected recalculateResultView = computed(() => {
+    const outcomes = this.recalculateOutcomes();
+    const recalculatedCount = outcomes.filter((o) => o.recalculated).length;
+    const alreadyValidCount = outcomes.filter(
+      (o) => !o.recalculated && o.reasonCode === 'ALREADY_VALID',
+    ).length;
+    const failedOutcomes = outcomes.filter(
+      (o) => !o.recalculated && o.reasonCode !== 'ALREADY_VALID',
+    );
+    const involvedIds = new Set(outcomes.map((o) => o.orderId));
+    const involvedOrders = this.validationOrders().filter((o) => involvedIds.has(o.orderId));
+    const stockPendingCount = involvedOrders.filter((o) =>
+      o.issues.some((i) => i.code === 'BONUS_STOCK_PENDING'),
+    ).length;
+    const choicePendingCount = involvedOrders.filter((o) =>
+      o.issues.some((i) => i.code === 'PROMO_CHOICE_PENDING'),
+    ).length;
+    return {
+      recalculatedCount,
+      alreadyValidCount,
+      failedOutcomes,
+      stockPendingCount,
+      choicePendingCount,
+    };
+  });
 
-  protected eligibleForRecalc = computed(() =>
-    this.validationOrders().filter((o) => !o.valid && this.hasRecalcFix(o)),
-  );
   protected validNetTotal = computed(() =>
     this.validationOrders()
       .filter((o) => o.valid)
@@ -1238,11 +1531,19 @@ export class BillingPendingTab {
     const orders = this.validationOrders();
     if (filter === 'valid') return orders.filter((o) => o.valid);
     if (filter === 'issues') return orders.filter((o) => !o.valid);
+    if (filter === 'recalculable') return orders.filter((o) => o.recalculable);
     return orders;
   });
 
   protected passedChecksCount(o: OrderBillingValidation): number {
     return o.checks.filter((c) => c.passed).length;
+  }
+
+  protected toggleResultSelect(orderId: number) {
+    const next = new Set(this.resultsSelected());
+    if (next.has(orderId)) next.delete(orderId);
+    else next.add(orderId);
+    this.resultsSelected.set(next);
   }
 
   private resetValidationState() {
@@ -1255,6 +1556,9 @@ export class BillingPendingTab {
     this.cancelRequested.set(false);
     this.expandedIds.set(new Set());
     this.showFilter.set('issues');
+    this.resultsSelected.set(new Set());
+    this.recalculateOutcomes.set([]);
+    this.showRecalculateResult.set(false);
   }
 
   private accumulate(result: {
@@ -1386,46 +1690,34 @@ export class BillingPendingTab {
     this.validationOrders.update((list) => list.filter((o) => o.orderId !== orderId));
   }
 
-  /** Recalcula un pedido: precios/promociones frescos y vuelve a validar solo ese. */
-  private recalculateOne(o: OrderBillingValidation, onDone: () => void) {
-    this.orderSvc.detail(o.orderId).subscribe({
-      next: (detail) => {
-        const catalogItems = detail.items
-          .filter((i) => !i.bonus)
-          .map((i) => ({ productId: i.productId, newQuantity: i.quantity }));
-        this.orderSvc.updateItems(o.orderId, { catalogItems, predictedItems: [] }).subscribe({
-          next: () => {
-            this.billingSvc.validate({ orderIds: [o.orderId] }).subscribe({
-              next: (result) => {
-                const updated = result.orders[0];
-                if (updated) this.replaceValidationOrder(updated);
-                onDone();
-              },
-              error: () => onDone(),
-            });
-          },
-          error: () => onDone(),
-        });
-      },
-      error: () => onDone(),
-    });
-  }
-
-  protected recalculate(o: OrderBillingValidation) {
-    this.dialog
-      .confirm({
-        title: 'Recalcular pedido',
-        message: `Se actualizarán los precios y las promociones del pedido ${o.orderId}. Su total puede cambiar. ¿Recalcular?`,
-        confirmLabel: 'Recalcular',
-      })
-      .subscribe((confirmed) => {
-        if (!confirmed) return;
-        this.recalculatingId.set(o.orderId);
-        this.recalculateOne(o, () => {
-          this.recalculatingId.set(null);
+  /** Un solo pedido, sin confirmación — doc 55, sección 7.2 (fila ya marca "Recalculable"). */
+  protected recalculateRow(o: OrderBillingValidation) {
+    this.recalculatingId.set(o.orderId);
+    this.billingSvc.recalculate({ orderIds: [o.orderId] }).subscribe({
+      next: (result) => {
+        this.recalculatingId.set(null);
+        const updated = result.validation.orders[0];
+        if (updated) this.replaceValidationOrder(updated);
+        const outcome = result.orders[0];
+        if (outcome?.recalculated) {
           this.toast.success(`Pedido ${o.orderId} recalculado.`);
-        });
-      });
+        } else {
+          this.toast.error(
+            recalcOutcomeText(
+              outcome ?? { recalculated: false, reasonCode: 'ERROR', reason: null },
+            ),
+          );
+        }
+      },
+      error: (err) => {
+        this.recalculatingId.set(null);
+        this.toast.error(
+          err?.status === 403
+            ? 'No tiene permiso para recalcular pedidos.'
+            : 'No se pudo completar la acción. Inténtalo de nuevo.',
+        );
+      },
+    });
   }
 
   /** Abre el modal "Sustituir premio" directo desde el aviso — doc 51, sección 10.2. */
@@ -1505,36 +1797,77 @@ export class BillingPendingTab {
       });
   }
 
-  /** Recalcular pendientes (sección pedida aparte): todos los que tienen un motivo que se corrige recalculando, en una sola tanda. */
-  protected recalculateAllPending() {
-    const targets = this.eligibleForRecalc();
-    if (targets.length === 0) return;
+  /** Tarjeta "Recalculables" — doc 55, sección 7.2: TODOS los recalculables validados, no solo la página. */
+  protected recalculateAllRecalculable() {
+    this.confirmAndRecalculateBatch(this.recalculableOrders().map((o) => o.orderId));
+  }
+
+  /** "Recalcular seleccionados (N)" — doc 55, sección 7.2: solo los seleccionados con recalculable = true. */
+  protected recalculateSelected() {
+    this.confirmAndRecalculateBatch(this.resultsSelectedRecalculableIds());
+  }
+
+  private confirmAndRecalculateBatch(orderIds: number[]) {
+    if (orderIds.length === 0) return;
     this.dialog
       .confirm({
-        title: 'Recalcular pedidos con motivo',
-        message: `Se recalcularán ${targets.length} pedido${targets.length === 1 ? '' : 's'}: los precios y las promociones se actualizan y el total puede cambiar. ¿Recalcular?`,
+        title: `¿Recalcular las promociones de ${orderIds.length} pedido${orderIds.length === 1 ? '' : 's'}?`,
+        message:
+          'Se volverán a calcular bonificaciones, descuentos y totales. Los precios y las cantidades no cambian. Las bonificaciones sin stock quedarán pendientes en su bandeja.',
         confirmLabel: 'Recalcular',
       })
       .subscribe((confirmed) => {
-        if (!confirmed) return;
-        this.recalculatingAll.set(true);
-        this.recalculateAllProgress.set({ done: 0, total: targets.length });
-        this.runRecalculateAll(targets, 0);
+        if (confirmed) this.startRecalculateBatch(orderIds);
       });
   }
 
-  private runRecalculateAll(targets: OrderBillingValidation[], index: number) {
-    if (index >= targets.length) {
-      this.recalculatingAll.set(false);
-      this.toast.success(
-        `${targets.length} pedido${targets.length === 1 ? '' : 's'} recalculado${targets.length === 1 ? '' : 's'}.`,
-      );
+  private startRecalculateBatch(orderIds: number[]) {
+    this.recalculateOutcomes.set([]);
+    this.showRecalculateResult.set(false);
+    this.recalculatingBatch.set(true);
+    this.recalculateBatchProgress.set({ done: 0, total: orderIds.length });
+    const chunks: number[][] = [];
+    for (let i = 0; i < orderIds.length; i += RECALCULATE_CHUNK) {
+      chunks.push(orderIds.slice(i, i + RECALCULATE_CHUNK));
+    }
+    this.runRecalculateBatchChunks(chunks, 0, new Set(orderIds));
+  }
+
+  private runRecalculateBatchChunks(chunks: number[][], index: number, target: Set<number>) {
+    if (index >= chunks.length) {
+      this.recalculatingBatch.set(false);
+      this.showRecalculateResult.set(true);
+      this.resultsSelected.update((set) => {
+        const next = new Set(set);
+        for (const id of target) next.delete(id);
+        return next;
+      });
       return;
     }
-    this.recalculateOne(targets[index], () => {
-      this.recalculateAllProgress.update((p) => ({ ...p, done: p.done + 1 }));
-      this.runRecalculateAll(targets, index + 1);
+    this.billingSvc.recalculate({ orderIds: chunks[index] }).subscribe({
+      next: (result) => {
+        this.recalculateOutcomes.update((list) => [...list, ...result.orders]);
+        for (const updated of result.validation.orders) this.replaceValidationOrder(updated);
+        this.recalculateBatchProgress.update((p) => ({
+          ...p,
+          done: p.done + chunks[index].length,
+        }));
+        this.runRecalculateBatchChunks(chunks, index + 1, target);
+      },
+      error: (err) => {
+        this.recalculatingBatch.set(false);
+        this.showRecalculateResult.set(true);
+        this.toast.error(
+          err?.status === 403
+            ? 'No tiene permiso para recalcular pedidos.'
+            : 'No se pudo completar la acción. Inténtalo de nuevo.',
+        );
+      },
     });
+  }
+
+  protected closeRecalculateResult() {
+    this.showRecalculateResult.set(false);
   }
 
   protected cancelOrder(o: OrderBillingValidation) {

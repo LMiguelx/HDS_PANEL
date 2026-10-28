@@ -25,10 +25,9 @@ import { CatalogLookupService } from '../catalog/catalog-lookup';
 import { BillingValidationAdminService } from '../billing/billing-validation-admin';
 import { OrderDetail, OrderItemView, ReturnedLineView } from '../../shared/models/order.models';
 import {
-  BillingIssue,
+  BillingRecalculationResult,
   OrderBillingValidation,
 } from '../../shared/models/billing-validation.models';
-import { hasRecalcFix } from '../billing/billing-validation-format';
 import { ApplicationView, PendingChoiceView } from '../promos/promo.types';
 import { PromoChoiceDialog, PromoChoiceDialogResult } from '../promos/ui/promo-choice-dialog';
 import { quantityText } from '../sales-reports/sales-report-format';
@@ -232,17 +231,29 @@ import { formatSoles } from '../../shared/pipes/money';
                 {{ issue.message }}
               </div>
             }
-            @if (billingHasRecalcFix(bv)) {
-              <button
-                uiButton
-                variant="secondary"
-                size="sm"
-                class="od-recalc-btn"
-                [loading]="recalculating()"
-                (click)="recalculateAndRevalidate(o)"
-              >
-                Recalcular pedido
-              </button>
+            @if (bv.recalculable) {
+              <div class="od-recalc-band">
+                <span class="material-icons od-recalc-icon" aria-hidden="true">autorenew</span>
+                <p class="od-recalc-band-text">
+                  Estos motivos se corrigen recalculando las promociones del pedido. Precios y
+                  cantidades no cambian.
+                </p>
+                <button
+                  uiButton
+                  variant="primary"
+                  size="sm"
+                  [loading]="recalculatingPromos()"
+                  (click)="recalculatePromotions(o)"
+                >
+                  Recalcular promociones
+                </button>
+              </div>
+            } @else if (hasPromoNotApplied(bv)) {
+              <div class="od-recalc-band od-recalc-band-neutral">
+                <p class="od-recalc-band-text">
+                  Tiene promociones por aplicar, pero primero corrija los otros motivos.
+                </p>
+              </div>
             }
           </div>
         }
@@ -907,8 +918,32 @@ import { formatSoles } from '../../shared/pipes/money';
         font-size: 13px;
         padding: 2px 0;
       }
-      .od-recalc-btn {
-        margin-top: 10px;
+      .od-recalc-band {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid var(--accent);
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+      }
+      .od-recalc-icon {
+        flex: none;
+        font-size: 20px;
+        color: var(--accent-ink);
+      }
+      .od-recalc-band-text {
+        flex: 1;
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .od-recalc-band-neutral {
+        border-color: var(--hairline);
+        background: var(--faint);
+      }
+      .od-recalc-band-neutral .od-recalc-band-text {
+        color: var(--ink-muted);
       }
 
       @media (max-width: 900px) {
@@ -998,6 +1033,7 @@ export class OrderDetailPage {
   protected sendingToBilling = signal(false);
   protected cancelling = signal(false);
   protected recalculating = signal(false);
+  protected recalculatingPromos = signal(false);
   protected billingValidation = signal<OrderBillingValidation | null>(null);
 
   private paymentConditionNames = signal<Map<number, string>>(new Map());
@@ -1255,8 +1291,38 @@ export class OrderDetailPage {
       });
   }
 
-  protected billingHasRecalcFix(bv: OrderBillingValidation): boolean {
-    return hasRecalcFix(bv.issues.map((i: BillingIssue) => i.code));
+  /** `PROMO_NOT_APPLIED` sin ser recalculable: otro motivo lo bloquea — doc 55, sección 8.2. */
+  protected hasPromoNotApplied(bv: OrderBillingValidation): boolean {
+    return bv.issues.some((i) => i.code === 'PROMO_NOT_APPLIED');
+  }
+
+  /** "Recalcular promociones" — doc 55, sección 8.2. Sin confirmación: un solo pedido. */
+  protected recalculatePromotions(o: OrderDetail) {
+    this.recalculatingPromos.set(true);
+    this.billingSvc.recalculate({ orderIds: [o.orderId] }).subscribe({
+      next: (result: BillingRecalculationResult) => {
+        this.recalculatingPromos.set(false);
+        const outcome = result.orders[0];
+        const updatedValidation = result.validation.orders[0] ?? null;
+        if (updatedValidation) this.billingValidation.set(updatedValidation);
+        if (outcome?.recalculated) {
+          this.toast.success('Promociones recalculadas');
+        } else if (outcome?.reasonCode === 'ALREADY_VALID') {
+          this.toast.info(outcome.reason || 'El pedido ya estaba correcto.');
+        } else {
+          this.toast.error(outcome?.reason || 'No se pudo recalcular; intente de nuevo');
+        }
+        this.load();
+      },
+      error: (err) => {
+        this.recalculatingPromos.set(false);
+        this.toast.error(
+          err?.status === 403
+            ? 'No tiene permiso para recalcular pedidos.'
+            : 'No se pudo recalcular; intente de nuevo',
+        );
+      },
+    });
   }
 
   /** Valida antes de enviar (doc 32, sección 10.3): si falla, muestra los motivos en vez de enviar. */

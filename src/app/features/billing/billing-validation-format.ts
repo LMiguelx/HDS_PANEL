@@ -1,20 +1,7 @@
-// Doc 32, sección 3.3 — qué motivos se resuelven con "Recalcular pedido" y
-// cuáles se resuelven en otra pantalla (con un enlace directo a ella).
-
-const RECALC_CODES = new Set([
-  'PRICE_MISMATCH',
-  'BONUS_WITH_PRICE',
-  'TOTAL_MISMATCH',
-  'DISCOUNT_MISMATCH',
-  'LINE_DISCOUNT_MISMATCH', // doc 47, sección 15 — "Descuento por producto"
-  'BONUS_WITHOUT_ORIGIN',
-  'BONUS_NOT_GRANTED',
-  'BONUS_LINE_MISSING',
-]);
-
-export function hasRecalcFix(codes: string[]): boolean {
-  return codes.some((c) => RECALC_CODES.has(c));
-}
+// Doc 32, sección 3.3 — motivos que se resuelven en otra pantalla (con un
+// enlace directo a ella). Doc 55, sección 0.3: qué pedido es "recalculable"
+// lo decide el servidor (`OrderBillingValidation.recalculable`); el panel
+// ya no lo adivina a partir de los códigos de motivo.
 
 export interface ElsewhereLink {
   label: string;
@@ -45,4 +32,34 @@ export function sendReasonName(reasonCode: string | null | undefined): string {
     ERROR: 'Error inesperado',
   };
   return (reasonCode && names[reasonCode]) || reasonCode || '—';
+}
+
+/** `reasonCode` de `OrderRecalculationOutcome` — doc 55, sección 4.2. */
+export type RecalcOutcomeTone = 'success' | 'neutral' | 'danger';
+
+export function recalcOutcomeText(outcome: {
+  recalculated: boolean;
+  reasonCode: string | null;
+  reason: string | null;
+}): string {
+  if (outcome.recalculated) return 'Recalculado';
+  switch (outcome.reasonCode) {
+    case 'ALREADY_VALID':
+      return 'Ya estaba correcto';
+    case 'NOT_OPEN':
+      return 'Ya no está abierto';
+    case 'ERROR':
+      return 'No se pudo recalcular; intente de nuevo';
+    default:
+      return outcome.reason || 'No se pudo recalcular; intente de nuevo';
+  }
+}
+
+export function recalcOutcomeTone(outcome: {
+  recalculated: boolean;
+  reasonCode: string | null;
+}): RecalcOutcomeTone {
+  if (outcome.recalculated) return 'success';
+  if (outcome.reasonCode === 'ALREADY_VALID' || outcome.reasonCode === 'NOT_OPEN') return 'neutral';
+  return 'danger';
 }

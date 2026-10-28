@@ -47,6 +47,34 @@ export interface OrderBillingValidation {
   valid: boolean; // true = se puede enviar
   checks: BillingGroupCheck[]; // siempre los seis grupos
   issues: BillingIssue[]; // vacía si valid = true
+  /**
+   * doc 55 — sus motivos se corrigen con "Recalcular promociones". Lo
+   * calcula el servidor; el panel nunca lo deduce de `issues`. Un pedido
+   * válido siempre trae `false`.
+   */
+  recalculable: boolean;
+}
+
+/** `POST /orders/billing/recalculate` — doc 55, sección 6. De 1 a 100 ids, sin repetir. */
+export interface RecalculateBillingCommand {
+  orderIds: number[];
+}
+
+/** `reasonCode` — doc 55, sección 4.2. Solo llega cuando `recalculated = false`. */
+export interface OrderRecalculationOutcome {
+  orderId: number;
+  customerName: string | null; // null si NOT_FOUND
+  recalculated: boolean;
+  reasonCode: string | null; // ALREADY_VALID | NOT_OPEN | NOT_RECALCULABLE | NOT_FOUND | BLOCKED | ERROR
+  reason: string | null; // listo para mostrar
+}
+
+export interface BillingRecalculationResult {
+  requested: number;
+  recalculatedCount: number;
+  notRecalculatedCount: number;
+  orders: OrderRecalculationOutcome[]; // mismo orden que orderIds
+  validation: BillingValidationResult; // la tanda REVALIDADA después de recalcular
 }
 
 export interface BillingValidationResult {

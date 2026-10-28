@@ -2,8 +2,10 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
+  BillingRecalculationResult,
   BillingSendResult,
   BillingValidationResult,
+  RecalculateBillingCommand,
   SendBillingCommand,
   ValidateBillingCommand,
 } from '../../shared/models/billing-validation.models';
@@ -27,5 +29,14 @@ export class BillingValidationAdminService {
   /** De 1 a 100 ids por llamada. Responde 200 aunque algunos no se hayan enviado. */
   send(cmd: SendBillingCommand) {
     return this.http.post<BillingSendResult>(`${this.base}/send`, cmd);
+  }
+
+  /**
+   * Recalcula bonificaciones, descuentos y totales — nunca precios ni
+   * cantidades (doc 55, sección 6). De 1 a 100 ids por llamada; responde
+   * 200 con el resultado de cada pedido y la tanda ya revalidada.
+   */
+  recalculate(cmd: RecalculateBillingCommand) {
+    return this.http.post<BillingRecalculationResult>(`${this.base}/recalculate`, cmd);
   }
 }
