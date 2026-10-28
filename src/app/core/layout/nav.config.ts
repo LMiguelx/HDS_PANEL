@@ -116,10 +116,10 @@ export const NAV: NavItem[] = [
     group: 'Ventas',
   },
   {
-    label: 'Bonificaciones pendientes',
+    label: 'Bonificaciones sin stock',
     icon: 'production_quantity_limits',
-    route: '/pedidos/bonificaciones-pendientes',
-    anyOf: ['order.view_all'],
+    route: '/pedidos/bonificaciones-sin-stock',
+    anyOf: ['order.manage'],
     group: 'Ventas',
   },
   {
@@ -136,6 +136,13 @@ export const NAV: NavItem[] = [
     icon: 'local_offer',
     route: '/promociones',
     anyOf: PROMO_ANY_PERMISSION,
+    group: 'Promociones',
+  },
+  {
+    label: 'Promociones vigentes',
+    icon: 'event_available',
+    route: '/promociones/vigentes',
+    anyOf: ['order.create', 'promo.create'],
     group: 'Promociones',
   },
   {

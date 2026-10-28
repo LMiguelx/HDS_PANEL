@@ -123,19 +123,106 @@ export interface UpdateOrderCommand {
   allocationItems?: AllocationEditCommand[]; // NUEVO (doc 36) — dotaciones del vendedor que cambian
 }
 
-export interface PendingBonusLineView {
-  lineNumber: number;
-  productId: number;
-  productName: string;
+// — Bonificaciones sin stock — doc 51, secciones 5 a 8. Reemplaza al viejo
+// GET /orders/pending-bonuses (obsoleto, pero sigue respondiendo): ya no se
+// usa PendingBonusLineView/PendingBonusOrderView en el panel.
+
+/** Fila de un pedido dentro de un grupo de la bandeja — doc 51, sección 5.2. */
+export interface PendingBonusOrderRow {
+  orderId: number; // mostrar como "N.º de pedido"
+  orderDate: string;
+  originCode: string; // FIELD | TELESALES | COUNTER
+  customerCode: string;
+  customerName: string;
+  salespersonCode: string;
+  salespersonName: string;
   quantity: number;
+  availableStock: number | null;
 }
 
-export interface PendingBonusOrderView {
+/** Una promoción+producto sin stock, con los pedidos que la deben — doc 51, sección 5.2. */
+export interface PendingBonusGroupView {
+  promoId: number; // NO mostrar — se envía al resolver en lote
+  promoCode: string;
+  promoName: string;
+  productId: number; // NO mostrar — se envía como originalProductId
+  productCode: string;
+  productName: string;
+  brandName: string;
+  orderCount: number;
+  totalQuantity: number;
+  availableStock: number | null; // null = pedidos de varias sedes
+  orders: PendingBonusOrderRow[];
+}
+
+/** Dotación pendiente: solo seguimiento, se resuelve editando el pedido — doc 51, sección 5.2. */
+export interface PendingAllocationBonusView {
   orderId: number;
-  customerId: number;
-  customerName: string;
   orderDate: string;
-  pendingLines: PendingBonusLineView[];
+  customerCode: string;
+  customerName: string;
+  salespersonCode: string;
+  salespersonName: string;
+  allocationId: number; // NO mostrar
+  productId: number; // NO mostrar
+  productCode: string;
+  productName: string;
+  quantity: number;
+  availableStock: number;
+}
+
+export interface PendingBonusInboxView {
+  orderCount: number;
+  lineCount: number;
+  promoBonuses: PendingBonusGroupView[];
+  allocationBonuses: PendingAllocationBonusView[];
+}
+
+/** Candidato a sustituto — doc 51, sección 6.2. */
+export interface SubstituteCandidateView {
+  productId: number; // NO mostrar — se envía como substituteProductId
+  code: string;
+  name: string;
+  brandName: string;
+  unitOfMeasure: string;
+  availableStock: number;
+}
+
+/**
+ * `substituteProductId` null = NO OTORGAR. `substituteQuantity` solo se
+ * envía junto con `substituteProductId`; null = la misma cantidad que se
+ * debía — doc 51, sección 7.1.
+ */
+export interface BonusResolutionCommand {
+  originalProductId: number;
+  substituteProductId?: number | null;
+  substituteQuantity?: number | null;
+}
+
+export interface ResolvePendingBonusesCommand {
+  resolutions: BonusResolutionCommand[]; // al menos una
+}
+
+/** POST /orders/pending-bonuses/resolve-batch — doc 51, sección 8.1. */
+export interface ResolvePendingBonusBatchCommand {
+  promoId: number;
+  originalProductId: number;
+  orderIds: number[]; // 1 a 100
+  substituteProductId?: number | null; // null = NO OTORGAR
+  substituteQuantity?: number | null; // null = cada pedido recibe lo que se le debía
+}
+
+export interface BatchResolutionRow {
+  orderId: number;
+  resolved: boolean;
+  message: string | null; // null si se resolvió
+}
+
+export interface BatchResolutionResult {
+  requested: number;
+  resolved: number;
+  failed: number;
+  results: BatchResolutionRow[];
 }
 
 // — Resumen global del día (admin), ver 24-panel-admin-... sección 7 —

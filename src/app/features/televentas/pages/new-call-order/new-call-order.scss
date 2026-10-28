@@ -234,9 +234,35 @@ h1 {
   padding-top: 6px;
   margin-top: 2px;
 }
+.nco-choice-option.disabled {
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+.nco-choice-option.disabled input {
+  cursor: not-allowed;
+}
+.nco-choice-unavailable {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
 .nco-near-promo {
   display: grid;
   gap: 6px;
+}
+.nco-near-soldout {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--faint);
+  border-left: 3px solid var(--ink-muted);
+}
+.nco-near-soldout strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+.nco-near-soldout p {
+  margin: 0;
+  font-size: 12px;
 }
 .nco-near-track {
   height: 8px;

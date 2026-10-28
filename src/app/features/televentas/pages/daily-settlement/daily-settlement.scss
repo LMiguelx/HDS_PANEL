@@ -108,6 +108,34 @@ h1 {
   font-weight: 700;
   font-size: var(--fs-meta);
 }
+.ds-brand-row.active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ds-orders-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.ds-orders-title {
+  margin-right: auto;
+}
+.ds-brand-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
 
 @media (max-width: 767px) {
   .ds-page {

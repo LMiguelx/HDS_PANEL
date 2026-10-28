@@ -8,7 +8,6 @@ import {
   OrderDetail,
   OrderListFilters,
   OrderSummary,
-  PendingBonusOrderView,
   UpdateOrderCommand,
 } from '../../shared/models/order.models';
 
@@ -72,13 +71,6 @@ export class OrderAdminService {
   /** Solo pedidos OPEN. Devuelve el stock y revierte las promociones. */
   cancel(orderId: number) {
     return this.http.post<void>(`${this.base}/${orderId}/cancel`, {});
-  }
-
-  /** Pedidos OPEN con bonificaciones sin stock respaldado. */
-  pendingBonuses(branchId?: number) {
-    let params = new HttpParams();
-    if (branchId) params = params.set('branchId', String(branchId));
-    return this.http.get<PendingBonusOrderView[]>(`${this.base}/pending-bonuses`, { params });
   }
 
   /**

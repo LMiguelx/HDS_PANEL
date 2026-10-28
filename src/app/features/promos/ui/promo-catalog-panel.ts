@@ -392,7 +392,7 @@ export class PromoCatalogPanel {
     if (this.activeFeaturedOnly()) {
       return 'No hay promociones destacadas para este cliente. Revisa la pestaña Todas.';
     }
-    return 'Este cliente no tiene promociones vigentes con el canal elegido.';
+    return 'Este cliente no tiene promociones vigentes con el canal elegido, o sus premios están agotados.';
   }
 
   protected selectTab(featuredOnly: boolean) {

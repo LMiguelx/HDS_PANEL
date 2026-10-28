@@ -644,12 +644,22 @@ function inputNumber(input: HTMLInputElement): number {
                   @if (s.nearPromos.length > 0) {
                     <h3 class="cof-sim-subtitle">Cerca de ganar</h3>
                     @for (np of s.nearPromos; track np.promoId) {
-                      <div class="cof-near-promo">
-                        <div class="cof-muted">{{ np.progressText }}</div>
-                        <div class="cof-near-track">
-                          <div class="cof-near-fill" [style.width.%]="np.percentComplete"></div>
+                      @if (np.soldOut) {
+                        <div class="cof-near-soldout">
+                          <strong>Promoción agotada</strong>
+                          <p class="cof-muted">
+                            El cliente cumple, pero el premio no tiene stock. Si se registra el
+                            pedido, quedará pendiente en Bonificaciones sin stock.
+                          </p>
                         </div>
-                      </div>
+                      } @else {
+                        <div class="cof-near-promo">
+                          <div class="cof-muted">{{ np.progressText }}</div>
+                          <div class="cof-near-track">
+                            <div class="cof-near-fill" [style.width.%]="np.percentComplete"></div>
+                          </div>
+                        </div>
+                      }
                     }
                   }
 
@@ -1093,6 +1103,21 @@ function inputNumber(input: HTMLInputElement): number {
       .cof-near-promo {
         display: grid;
         gap: 6px;
+      }
+      .cof-near-soldout {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        background: var(--faint);
+        border-left: 3px solid var(--ink-muted);
+      }
+      .cof-near-soldout strong {
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .cof-near-soldout p {
+        margin: 0;
+        font-size: 12px;
       }
       .cof-near-track {
         height: 8px;

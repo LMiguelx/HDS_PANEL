@@ -26,6 +26,7 @@ export interface MobileBenefitView {
   discountPercent: number | null;
   label: string | null;
   text: string; // "2 BONIF. SAL MARINA *1KG gratis" | "2% de descuento"
+  inStock: boolean | null; // doc 51, sección 12.2 — null en descuentos; false = Agotado
 }
 
 export interface MobileBenefitGroupView {
@@ -151,6 +152,7 @@ export interface MobilePromoProgressView {
   targetMeasure: number;
   percentComplete: number; // 50 a 99
   rewardText: string;
+  soldOut: boolean; // doc 51, sección 12.3 — el pedido ganaría, pero el premio está agotado
 }
 
 /** La promoción en prueba, gane o no — doc 44, sección 9.2. */

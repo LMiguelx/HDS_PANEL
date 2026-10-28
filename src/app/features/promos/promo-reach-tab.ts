@@ -107,6 +107,30 @@ const CHOICE_FILTER_OPTIONS: UiFieldOption[] = [
         </div>
       </div>
 
+      @if (r.totals.substitutedBonuses > 0 || r.totals.declinedBonuses > 0) {
+        <p class="prt-bonus-line">
+          @if (r.totals.substitutedBonuses > 0) {
+            <span
+              >⇄ {{ r.totals.substitutedBonuses }} premio{{
+                r.totals.substitutedBonuses === 1 ? '' : 's'
+              }}
+              sustituido{{ r.totals.substitutedBonuses === 1 ? '' : 's' }}</span
+            >
+          }
+          @if (r.totals.declinedBonuses > 0) {
+            <span
+              >⊘ {{ r.totals.declinedBonuses }} premio{{
+                r.totals.declinedBonuses === 1 ? '' : 's'
+              }}
+              no otorgado{{ r.totals.declinedBonuses === 1 ? '' : 's' }} ({{
+                quantityText(r.totals.declinedBonusUnits)
+              }}
+              unidad{{ r.totals.declinedBonusUnits === 1 ? '' : 'es' }} sin entregar)</span
+            >
+          }
+        </p>
+      }
+
       <div class="prt-side-grid">
         @if (r.byTier.length > 1) {
           <ui-card title="Por tramo">
@@ -157,10 +181,15 @@ const CHOICE_FILTER_OPTIONS: UiFieldOption[] = [
                 </tr>
               </thead>
               <tbody>
-                @for (p of r.bonusProducts; track p.productId) {
+                @for (p of r.bonusProducts; track p.productId + '-' + p.substitute) {
                   <tr>
                     <td class="prt-muted">{{ p.productCode }}</td>
-                    <td>{{ p.productName }}</td>
+                    <td>
+                      {{ p.label }}
+                      @if (p.substitute) {
+                        <span class="prt-substitute-badge">Sustituto</span>
+                      }
+                    </td>
                     <td class="prt-col-right">{{ quantityText(p.units) }}</td>
                   </tr>
                 }
@@ -244,7 +273,15 @@ const CHOICE_FILTER_OPTIONS: UiFieldOption[] = [
                     {{ o.bonusUnits ? quantityText(o.bonusUnits) : '—' }}
                   </td>
                 }
-                <td><ui-status [label]="orderStatusName(o.orderStatusCode)" /></td>
+                <td>
+                  <ui-status [label]="orderStatusName(o.orderStatusCode)" />
+                  @if (o.substitutedBonuses > 0) {
+                    <span class="prt-substitute-badge">Sustituido</span>
+                  }
+                  @if (o.declinedBonuses > 0) {
+                    <span class="prt-declined-badge">No otorgado</span>
+                  }
+                </td>
                 @if (hasChoiceColumn()) {
                   <td (click)="$event.stopPropagation()">
                     @if (o.choiceStatus === 'PENDING' && o.pendingApplicationId) {
@@ -378,6 +415,34 @@ const CHOICE_FILTER_OPTIONS: UiFieldOption[] = [
       .prt-usage-caption {
         font-size: var(--fs-meta);
         color: var(--ink-muted);
+      }
+      .prt-bonus-line {
+        display: flex;
+        gap: var(--sp-5);
+        flex-wrap: wrap;
+        margin: calc(-1 * var(--sp-3)) 0 var(--sp-5);
+        font-size: var(--fs-dense);
+        color: var(--ink);
+      }
+      .prt-substitute-badge {
+        display: inline-flex;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--success);
+        background: color-mix(in srgb, var(--success) 14%, transparent);
+      }
+      .prt-declined-badge {
+        display: inline-flex;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ink-muted);
+        background: var(--faint);
       }
       .prt-side-grid {
         display: grid;

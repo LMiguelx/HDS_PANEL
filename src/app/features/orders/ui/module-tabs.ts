@@ -8,14 +8,18 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
   imports: [RouterLink, RouterLinkActive, HasPermissionDirective],
   template: `
     <nav class="ord-tabs">
-      <a routerLink="/pedidos" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
+      <a
+        routerLink="/pedidos"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        *hasPermission="['order.view_all', 'order.create']"
         >Listado</a
       >
       <a
-        routerLink="/pedidos/bonificaciones-pendientes"
+        routerLink="/pedidos/bonificaciones-sin-stock"
         routerLinkActive="active"
-        *hasPermission="'order.view_all'"
-        >Bonificaciones pendientes</a
+        *hasPermission="'order.manage'"
+        >Bonificaciones sin stock</a
       >
     </nav>
   `,

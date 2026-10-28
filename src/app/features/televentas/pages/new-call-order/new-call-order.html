@@ -284,41 +284,63 @@
             @if (promoProgress().length > 0) {
               <h3 class="nco-sim-subtitle">Cerca de ganar</h3>
               @for (np of promoProgress(); track np.promoId) {
-                <div class="nco-near-promo">
-                  <div class="nco-muted">{{ np.progressText }}</div>
-                  <div class="nco-near-track">
-                    <div class="nco-near-fill" [style.width.%]="np.percentComplete"></div>
+                @if (np.soldOut) {
+                  <div class="nco-near-soldout">
+                    <strong>Promoción agotada</strong>
+                    <p class="nco-muted">
+                      Avísale al cliente: el premio de esta promoción está agotado.
+                    </p>
                   </div>
-                </div>
+                } @else {
+                  <div class="nco-near-promo">
+                    <div class="nco-muted">{{ np.progressText }}</div>
+                    <div class="nco-near-track">
+                      <div class="nco-near-fill" [style.width.%]="np.percentComplete"></div>
+                    </div>
+                  </div>
+                }
               }
             }
 
             @if (draftChoices().length > 0) {
               <h3 class="nco-sim-subtitle">Premios a elegir</h3>
               @for (c of draftChoices(); track choiceKey(c)) {
-                <div class="nco-choice-card">
-                  <div class="nco-choice-title">✦ {{ c.promoName }} · {{ c.modeText }}</div>
-                  @for (opt of c.options; track opt.benefitLine) {
-                    <label class="nco-choice-option">
+                @if (c.soldOut) {
+                  <div class="nco-near-soldout">
+                    <strong>Promoción agotada</strong>
+                    <p class="nco-muted">
+                      {{ c.promoName }} · no se pide elegir, queda pendiente para supervisión.
+                    </p>
+                  </div>
+                } @else {
+                  <div class="nco-choice-card">
+                    <div class="nco-choice-title">✦ {{ c.promoName }} · {{ c.modeText }}</div>
+                    @for (opt of c.options; track opt.benefitLine) {
+                      <label class="nco-choice-option" [class.disabled]="!opt.available">
+                        <input
+                          [type]="isChoiceMulti(c) ? 'checkbox' : 'radio'"
+                          [name]="choiceKey(c)"
+                          [disabled]="!opt.available"
+                          [checked]="isChoiceOptionSelected(c, opt)"
+                          (change)="toggleChoiceOption(c, opt)"
+                        />
+                        {{ opt.displayText }}
+                        @if (!opt.available && opt.unavailableReason) {
+                          <span class="nco-choice-unavailable">{{ opt.unavailableReason }}</span>
+                        }
+                      </label>
+                    }
+                    <label class="nco-choice-option nco-choice-option-none">
                       <input
-                        [type]="isChoiceMulti(c) ? 'checkbox' : 'radio'"
+                        type="radio"
                         [name]="choiceKey(c)"
-                        [checked]="isChoiceOptionSelected(c, opt)"
-                        (change)="toggleChoiceOption(c, opt)"
+                        [checked]="!isChoiceMulti(c) && draftChoiceSelectionsFor(c).length === 0"
+                        (change)="selectChoiceNone(c)"
                       />
-                      {{ opt.displayText }}
+                      Dejar para supervisión
                     </label>
-                  }
-                  <label class="nco-choice-option nco-choice-option-none">
-                    <input
-                      type="radio"
-                      [name]="choiceKey(c)"
-                      [checked]="!isChoiceMulti(c) && draftChoiceSelectionsFor(c).length === 0"
-                      (change)="selectChoiceNone(c)"
-                    />
-                    Dejar para supervisión
-                  </label>
-                </div>
+                  </div>
+                }
               }
             }
 

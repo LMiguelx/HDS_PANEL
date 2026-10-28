@@ -16,8 +16,16 @@ export type UpdatePromoCommand = components['schemas']['UpdatePromoCommand'];
  * 8.1. `api.ts` todavía no lo trae en estos tres, así que se extiende a
  * mano. `UpdatePromoCommand` (edición con el asistente) NO lleva
  * `featured`: destacar no es parte de la regla (doc 49, sección 8.2).
+ *
+ * `rewardStatus`/`rewardStatusLabel` — doc 51, sección 11.2: solo llegan en
+ * `GET /promos/current`; en el listado general (`GET /promos`) llegan en
+ * `null` y no se pinta insignia.
  */
-export type PromoSummary = components['schemas']['PromoSummary'] & { featured: boolean };
+export type PromoSummary = components['schemas']['PromoSummary'] & {
+  featured: boolean;
+  rewardStatus: 'AVAILABLE' | 'PARTIAL' | 'SOLD_OUT' | null;
+  rewardStatusLabel: string | null;
+};
 export type CreatePromoCommand = components['schemas']['CreatePromoCommand'] & {
   featured?: boolean;
 };

@@ -7,11 +7,19 @@ import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiCard } from '../../shared/ui/card/card';
 import { UiBadge } from '../../shared/ui/badge/badge';
+import { UiMenu } from '../../shared/ui/menu/menu';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { AuthService } from '../../core/auth/auth';
 import { ToastService } from '../../core/ui/toast';
+import { PERMISSIONS } from '../../core/auth/permissions';
 import { OrderAdminService } from './order-admin';
+import { PendingBonusAdminService } from './pending-bonus-admin';
+import {
+  SubstituteBonusDialog,
+  SubstituteBonusDialogData,
+  SubstituteBonusDialogResult,
+} from './ui/substitute-bonus-dialog';
 import { PromoService } from '../promos/promo';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
 import { BillingValidationAdminService } from '../billing/billing-validation-admin';
@@ -42,7 +50,16 @@ import { formatSoles } from '../../shared/pipes/money';
 /** Detalle de un pedido con sus líneas (GET /orders/{id}) y sus acciones (doc 30, sección 8). */
 @Component({
   selector: 'app-order-detail',
-  imports: [RouterLink, UiButton, UiStatus, UiEmpty, UiCard, UiBadge, HasPermissionDirective],
+  imports: [
+    RouterLink,
+    UiButton,
+    UiStatus,
+    UiEmpty,
+    UiCard,
+    UiBadge,
+    UiMenu,
+    HasPermissionDirective,
+  ],
   template: `
     <section class="od-page">
       @if (loading()) {
@@ -191,9 +208,9 @@ import { formatSoles } from '../../shared/pipes/money';
                 uiButton
                 variant="ghost"
                 size="sm"
-                routerLink="/pedidos/bonificaciones-pendientes"
+                routerLink="/pedidos/bonificaciones-sin-stock"
               >
-                Ver bonificaciones pendientes
+                Ver bonificaciones sin stock
               </button>
             </div>
           </div>
@@ -275,7 +292,29 @@ import { formatSoles } from '../../shared/pipes/money';
                     </tr>
                     @if (item.stockPending) {
                       <tr class="od-pending-note-row">
-                        <td colspan="8" class="od-pending-note">⚠ Pendiente de stock</td>
+                        <td colspan="8">
+                          <div class="od-pending-note-inner">
+                            <span class="od-pending-note">⚠ Pendiente de stock</span>
+                            @if (item.allocationId != null) {
+                              <span class="od-pending-alloc-hint"
+                                >Edita la dotación del pedido para resolverla.</span
+                              >
+                            } @else if (o.statusCode === 'OPEN') {
+                              <ui-menu
+                                *hasPermission="PERMISSIONS.ORDER_MANAGE"
+                                triggerLabel="Resolver"
+                                label="Resolver bonificación pendiente"
+                              >
+                                <button type="button" (click)="openSubstituteForLine(o, item)">
+                                  Sustituir…
+                                </button>
+                                <button type="button" (click)="declineLine(o, item)">
+                                  No otorgar
+                                </button>
+                              </ui-menu>
+                            }
+                          </div>
+                        </td>
                       </tr>
                     }
                   }
@@ -315,7 +354,25 @@ import { formatSoles } from '../../shared/pipes/money';
                       }
                     </div>
                     @if (item.stockPending) {
-                      <div class="od-pending-note">⚠ Pendiente de stock</div>
+                      <div class="od-pending-note-inner">
+                        <span class="od-pending-note">⚠ Pendiente de stock</span>
+                        @if (item.allocationId != null) {
+                          <span class="od-pending-alloc-hint"
+                            >Edita la dotación del pedido para resolverla.</span
+                          >
+                        } @else if (o.statusCode === 'OPEN') {
+                          <ui-menu
+                            *hasPermission="PERMISSIONS.ORDER_MANAGE"
+                            triggerLabel="Resolver"
+                            label="Resolver bonificación pendiente"
+                          >
+                            <button type="button" (click)="openSubstituteForLine(o, item)">
+                              Sustituir…
+                            </button>
+                            <button type="button" (click)="declineLine(o, item)">No otorgar</button>
+                          </ui-menu>
+                        }
+                      </div>
                     }
                   </div>
                 }
@@ -342,15 +399,23 @@ import { formatSoles } from '../../shared/pipes/money';
                       <p class="od-muted">Supervisión decidió no otorgar este premio.</p>
                     } @else {
                       @for (opt of c.options; track opt.benefitLine) {
-                        <label class="od-mchoice-option">
+                        <label
+                          class="od-mchoice-option"
+                          [class.disabled]="isEditingMobileChoice(c) && !opt.available"
+                        >
                           <input
                             [type]="(c.chooseCount ?? 1) > 1 ? 'checkbox' : 'radio'"
                             [name]="mobileChoiceKey(c)"
-                            [disabled]="!isEditingMobileChoice(c)"
+                            [disabled]="!isEditingMobileChoice(c) || !opt.available"
                             [checked]="isMobileChoiceOptionChecked(c, opt)"
                             (change)="toggleMobileChoiceOption(c, opt)"
                           />
                           {{ opt.displayText }}
+                          @if (
+                            isEditingMobileChoice(c) && !opt.available && opt.unavailableReason
+                          ) {
+                            <span class="od-mchoice-unavailable">{{ opt.unavailableReason }}</span>
+                          }
                         </label>
                       }
                       @if (c.editable) {
@@ -505,7 +570,7 @@ import { formatSoles } from '../../shared/pipes/money';
                     variant="ghost"
                     size="sm"
                     class="od-bonus-pending-link"
-                    routerLink="/pedidos/bonificaciones-pendientes"
+                    routerLink="/pedidos/bonificaciones-sin-stock"
                   >
                     {{ stockPendingLines().length }} pendiente{{
                       stockPendingLines().length === 1 ? '' : 's'
@@ -696,10 +761,20 @@ import { formatSoles } from '../../shared/pipes/money';
         padding: 0 0 10px;
         border: 0;
       }
+      .od-pending-note-inner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
       .od-pending-note {
         font-size: 12px;
         font-weight: 700;
         color: var(--st-no-purchase);
+      }
+      .od-pending-alloc-hint {
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .od-cards-mobile {
         display: none;
@@ -737,6 +812,13 @@ import { formatSoles } from '../../shared/pipes/money';
       }
       .od-mchoice-option input:not(:disabled) {
         cursor: pointer;
+      }
+      .od-mchoice-option.disabled {
+        color: var(--ink-muted);
+      }
+      .od-mchoice-unavailable {
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .od-mchoice-actions {
         display: flex;
@@ -869,6 +951,7 @@ import { formatSoles } from '../../shared/pipes/money';
 })
 export class OrderDetailPage {
   private orderSvc = inject(OrderAdminService);
+  private pendingBonusSvc = inject(PendingBonusAdminService);
   private promoSvc = inject(PromoService);
   private telesalesApi = inject(TelesalesApi);
   private catalogSvc = inject(CatalogLookupService);
@@ -880,6 +963,7 @@ export class OrderDetailPage {
 
   orderId = input<string>('');
 
+  protected PERMISSIONS = PERMISSIONS;
   protected statusName = orderStatusName;
   protected deliveryName = deliveryStatusName;
   protected dateTimeText = dateTimeText;
@@ -1243,6 +1327,69 @@ export class OrderDetailPage {
             this.toast.error(detalle || 'No pudimos recalcular el pedido.');
           },
         });
+      });
+  }
+
+  /** Modal "Sustituir premio" de la línea pendiente — doc 51, sección 9.1. */
+  protected openSubstituteForLine(o: OrderDetail, item: OrderItemView) {
+    const data: SubstituteBonusDialogData = {
+      promoName: '',
+      originalProductName: item.productName,
+      contextText: `Pedido N.º ${o.orderId}`,
+      sameQuantityLabel: `La misma que se debía (${item.quantity})`,
+      defaultQuantity: item.quantity,
+      branchId: null,
+      excludeOrderId: o.orderId,
+    };
+    this.dialog
+      .open<SubstituteBonusDialog, SubstituteBonusDialogData, SubstituteBonusDialogResult>(
+        SubstituteBonusDialog,
+        { data, width: '560px' },
+      )
+      .afterClosed()
+      .subscribe((result) => {
+        if (!result) return;
+        const message = `El pedido ${o.orderId} entregará ${result.quantity ?? item.quantity} de ${result.product.name} en lugar de ${item.productName}. ¿Sustituir?`;
+        this.dialog
+          .confirm({ title: 'Sustituir premio', message, confirmLabel: 'Sustituir' })
+          .subscribe((confirmed) => {
+            if (confirmed)
+              this.applyBonusResolution(o, item, result.product.productId, result.quantity);
+          });
+      });
+  }
+
+  /** Confirmación "No otorgar" — doc 51, sección 7.3. */
+  protected declineLine(o: OrderDetail, item: OrderItemView) {
+    const message = `El cliente ${o.customerName} no recibirá ${item.quantity} de ${item.productName} de la promoción. Esta decisión se mantiene aunque el pedido se edite. ¿No otorgar?`;
+    this.dialog
+      .confirm({ title: 'No otorgar', message, confirmLabel: 'No otorgar', destructive: true })
+      .subscribe((confirmed) => {
+        if (confirmed) this.applyBonusResolution(o, item, null, null);
+      });
+  }
+
+  private applyBonusResolution(
+    o: OrderDetail,
+    item: OrderItemView,
+    substituteProductId: number | null,
+    substituteQuantity: number | null,
+  ) {
+    this.pendingBonusSvc
+      .resolve(o.orderId, {
+        resolutions: [
+          { originalProductId: item.productId, substituteProductId, substituteQuantity },
+        ],
+      })
+      .subscribe({
+        next: (detail) => {
+          this.order.set(detail);
+          this.toast.success(substituteProductId ? 'Premio sustituido' : 'Premio no otorgado');
+        },
+        error: (err) => {
+          const detalle = err?.error?.detail;
+          this.toast.error(detalle || 'No se pudo completar la acción. Inténtalo de nuevo.');
+        },
       });
   }
 

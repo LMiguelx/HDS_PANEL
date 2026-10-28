@@ -72,7 +72,11 @@
         </thead>
         <tbody>
           @for (b of s.salesByBrand; track b.brandId) {
-            <tr>
+            <tr
+              class="ds-row ds-brand-row"
+              [class.active]="selectedBrandId() === b.brandId"
+              (click)="toggleBrandFilter(b.brandId)"
+            >
               <td>{{ b.brandName }}</td>
               <td class="ds-num">{{ formatSoles(b.grossAmount) }}</td>
               <td class="ds-num">{{ formatSoles(b.discountAmount) }}</td>
@@ -84,9 +88,23 @@
       </table>
     }
 
-    <h2 class="ds-section-title">Pedidos del día</h2>
-    @if (s.orders.length === 0) {
-      <ui-empty title="Sin pedidos" body="No registraste pedidos en esta fecha." />
+    <div class="ds-orders-head">
+      <h2 class="ds-section-title ds-orders-title">Pedidos del día</h2>
+      @if (selectedBrandId() != null) {
+        <button type="button" class="ds-brand-chip" (click)="clearBrandFilter()">
+          Marca: {{ selectedBrandName() }} ✕
+        </button>
+      }
+    </div>
+    @if (filteredOrders().length === 0) {
+      <ui-empty
+        title="Sin pedidos"
+        [body]="
+          selectedBrandId() != null
+            ? 'Ningún pedido de esta fecha lleva esta marca.'
+            : 'No registraste pedidos en esta fecha.'
+        "
+      />
     } @else {
       <table class="ui-table-grid ds-table">
         <thead>
@@ -95,17 +113,23 @@
             <th>Fecha</th>
             <th>Estado</th>
             <th>Origen</th>
+            @if (selectedBrandId() != null) {
+              <th class="ds-num">{{ selectedBrandName() }}</th>
+            }
             <th class="ds-num">Neto</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          @for (o of s.orders; track o.orderId) {
+          @for (o of filteredOrders(); track o.orderId) {
             <tr class="ds-row" (click)="goToOrder(o.orderId)">
               <td>{{ o.customerName }}</td>
               <td class="ds-muted">{{ dateTimeText(o.orderDate) }}</td>
               <td><ui-status [label]="orderStatusName(o.statusCode)" /></td>
               <td class="ds-muted">{{ originName(o.originCode) }}</td>
+              @if (selectedBrandId() != null) {
+                <td class="ds-num">{{ formatSoles(brandAmountFor(o)) }}</td>
+              }
               <td class="ds-num">{{ formatSoles(o.netAmount) }}</td>
               <td class="ds-row-action">Ver detalle</td>
             </tr>

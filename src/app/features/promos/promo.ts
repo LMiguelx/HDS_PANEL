@@ -9,6 +9,7 @@ import {
   PendingCountView,
   PromoDetail,
   PromoPageResponse,
+  PromoSummary,
   ResolveChoiceCommand,
   TargetReachView,
   TargetsCommand,
@@ -21,6 +22,10 @@ import {
   PromoReachView,
   ReachChoiceStatus,
 } from './promo-reach.models';
+
+export interface CurrentPromoFilters {
+  allChannels?: boolean;
+}
 
 export interface ReachFilters {
   from?: string;
@@ -54,6 +59,16 @@ export interface PromoListFilters {
 export class PromoService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/promos`;
+
+  /**
+   * Promociones vigentes — la lista liviana para quien toma pedidos o
+   * crea promociones (doc 51, sección 11.1). `order.create` o `promo.create`.
+   */
+  current(filters: CurrentPromoFilters = {}) {
+    let params = new HttpParams();
+    if (filters.allChannels) params = params.set('allChannels', 'true');
+    return this.http.get<PromoSummary[]>(`${this.base}/current`, { params });
+  }
 
   list(filters: PromoListFilters = {}) {
     let params = new HttpParams();

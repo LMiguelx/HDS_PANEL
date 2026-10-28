@@ -46,6 +46,20 @@ export class DailySettlementPage {
   private retryTick = signal(0);
   private request = computed(() => ({ date: this.date(), tick: this.retryTick() }));
 
+  /** Filtro por marca — doc 51, sección 13.5: al tocar una marca de "Por marca". */
+  protected selectedBrandId = signal<number | null>(null);
+  protected selectedBrandName = computed(
+    () =>
+      this.summary()?.salesByBrand.find((b) => b.brandId === this.selectedBrandId())?.brandName ??
+      '',
+  );
+  protected filteredOrders = computed(() => {
+    const brandId = this.selectedBrandId();
+    const orders = this.summary()?.orders ?? [];
+    if (brandId == null) return orders;
+    return orders.filter((o) => o.brands.some((b) => b.brandId === brandId));
+  });
+
   protected originBreakdown = computed<OriginBreakdown[]>(() => {
     const orders = this.summary()?.orders ?? [];
     const byOrigin = new Map<string, OriginBreakdown>();
@@ -76,6 +90,7 @@ export class DailySettlementPage {
       )
       .subscribe((summary) => {
         this.loading.set(false);
+        this.selectedBrandId.set(null);
         if (summary === undefined) {
           this.error.set(true);
           this.summary.set(null);
@@ -87,6 +102,21 @@ export class DailySettlementPage {
 
   protected retry() {
     this.retryTick.update((n) => n + 1);
+  }
+
+  protected toggleBrandFilter(brandId: number) {
+    this.selectedBrandId.set(this.selectedBrandId() === brandId ? null : brandId);
+  }
+
+  protected clearBrandFilter() {
+    this.selectedBrandId.set(null);
+  }
+
+  /** Monto de ESA marca en el pedido, para la columna extra con el filtro activo. */
+  protected brandAmountFor(order: { brands: { brandId: number; netAmount: number }[] }): number {
+    const brandId = this.selectedBrandId();
+    if (brandId == null) return 0;
+    return order.brands.find((b) => b.brandId === brandId)?.netAmount ?? 0;
   }
 
   protected goToOrder(orderId: number) {

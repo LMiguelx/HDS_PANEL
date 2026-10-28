@@ -19,7 +19,8 @@ export const ORDER_ROUTES: Routes = [
     loadComponent: () => import('./counter-order-form').then((m) => m.CounterOrderFormPage),
   },
   {
-    path: 'bonificaciones-pendientes',
+    path: 'bonificaciones-sin-stock',
+    canActivate: [permissionGuard('order.manage')],
     loadComponent: () => import('./pending-bonuses').then((m) => m.PendingBonusesPage),
   },
   {

@@ -25,8 +25,8 @@ const ELSEWHERE_LINKS: Record<string, ElsewhereLink> = {
   SALESPERSON_INACTIVE: { label: 'Ir a Usuarios', route: ['/usuarios'] },
   PRICE_NOT_DEFINED: { label: 'Ir a Precios', route: ['/precios'] },
   BONUS_STOCK_PENDING: {
-    label: 'Ir a Bonificaciones pendientes',
-    route: ['/pedidos/bonificaciones-pendientes'],
+    label: 'Ir a Bonificaciones sin stock',
+    route: ['/pedidos/bonificaciones-sin-stock'],
   },
   PROMO_CHOICE_PENDING: { label: 'Ir a Premios por elegir', route: ['/promociones/pendientes'] },
 };

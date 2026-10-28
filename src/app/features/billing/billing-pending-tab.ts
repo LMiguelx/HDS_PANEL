@@ -11,6 +11,12 @@ import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { ToastService } from '../../core/ui/toast';
 import { LookupService, toUiLookup } from '../promos/lookup';
 import { OrderAdminService } from '../orders/order-admin';
+import { PendingBonusAdminService } from '../orders/pending-bonus-admin';
+import {
+  SubstituteBonusDialog,
+  SubstituteBonusDialogData,
+  SubstituteBonusDialogResult,
+} from '../orders/ui/substitute-bonus-dialog';
 import { BillingValidationAdminService } from './billing-validation-admin';
 import { BillingValidationModuleTabs } from './ui/billing-module-tabs';
 import { AdminOrderSummary } from '../../shared/models/order.models';
@@ -436,7 +442,23 @@ const SEND_CHUNK = 100;
                           @for (issue of group.issues; track $index) {
                             <div class="bpt-issue-row">
                               • {{ issueText(issue) }}
-                              @if (elsewhereLink(issue.code); as link) {
+                              @if (
+                                issue.code === 'BONUS_STOCK_PENDING' && issue.productId != null
+                              ) {
+                                <button
+                                  type="button"
+                                  uiButton
+                                  variant="secondary"
+                                  size="sm"
+                                  class="bpt-issue-resolve"
+                                  [loading]="
+                                    resolvingBonusKey() === o.orderId + '-' + issue.productId
+                                  "
+                                  (click)="resolveBonusIssue(o, issue)"
+                                >
+                                  Resolver
+                                </button>
+                              } @else if (elsewhereLink(issue.code); as link) {
                                 <a [routerLink]="link.route" class="bpt-issue-link">{{
                                   link.label
                                 }}</a>
@@ -967,6 +989,9 @@ const SEND_CHUNK = 100;
       .bpt-issue-link:hover {
         text-decoration: underline;
       }
+      .bpt-issue-resolve {
+        margin-left: 10px;
+      }
       .bpt-row-actions {
         display: flex;
         gap: 8px;
@@ -1043,6 +1068,7 @@ const SEND_CHUNK = 100;
 })
 export class BillingPendingTab {
   private orderSvc = inject(OrderAdminService);
+  private pendingBonusSvc = inject(PendingBonusAdminService);
   private billingSvc = inject(BillingValidationAdminService);
   private lookupSvc = inject(LookupService);
   private dialog = inject(UiDialogService);
@@ -1189,6 +1215,7 @@ export class BillingPendingTab {
   protected showFilter = signal<ShowFilter>('issues');
   protected expandedIds = signal<Set<number>>(new Set());
   protected recalculatingId = signal<number | null>(null);
+  protected resolvingBonusKey = signal<string | null>(null);
   protected cancelingId = signal<number | null>(null);
   protected recalculatingAll = signal(false);
   protected recalculateAllProgress = signal({ done: 0, total: 0 });
@@ -1398,6 +1425,83 @@ export class BillingPendingTab {
           this.recalculatingId.set(null);
           this.toast.success(`Pedido ${o.orderId} recalculado.`);
         });
+      });
+  }
+
+  /** Abre el modal "Sustituir premio" directo desde el aviso — doc 51, sección 10.2. */
+  protected resolveBonusIssue(o: OrderBillingValidation, issue: BillingIssue) {
+    if (issue.productId == null) return;
+    const key = `${o.orderId}-${issue.productId}`;
+    this.resolvingBonusKey.set(key);
+    this.orderSvc.detail(o.orderId).subscribe({
+      next: (detail) => {
+        this.resolvingBonusKey.set(null);
+        const line = detail.items.find(
+          (i) => i.bonus && i.stockPending && i.productId === issue.productId,
+        );
+        const quantity = line?.quantity ?? 1;
+        const data: SubstituteBonusDialogData = {
+          promoName: '',
+          originalProductName: issue.productName ?? '',
+          contextText: `Pedido N.º ${o.orderId}`,
+          sameQuantityLabel: `La misma que se debía (${quantity})`,
+          defaultQuantity: quantity,
+          branchId: null,
+          excludeOrderId: o.orderId,
+        };
+        this.dialog
+          .open<SubstituteBonusDialog, SubstituteBonusDialogData, SubstituteBonusDialogResult>(
+            SubstituteBonusDialog,
+            { data, width: '560px' },
+          )
+          .afterClosed()
+          .subscribe((result) => {
+            if (!result) return;
+            const message = `El pedido ${o.orderId} entregará ${result.quantity ?? quantity} de ${result.product.name} en lugar de ${issue.productName}. ¿Sustituir?`;
+            this.dialog
+              .confirm({ title: 'Sustituir premio', message, confirmLabel: 'Sustituir' })
+              .subscribe((confirmed) => {
+                if (confirmed) {
+                  this.applyBonusResolution(
+                    o,
+                    issue.productId!,
+                    result.product.productId,
+                    result.quantity,
+                  );
+                }
+              });
+          });
+      },
+      error: () => {
+        this.resolvingBonusKey.set(null);
+        this.toast.error('No se pudo completar la acción. Inténtalo de nuevo.');
+      },
+    });
+  }
+
+  /** Tras resolver, re-validar ese pedido (doc 51, sección 10.2). */
+  private applyBonusResolution(
+    o: OrderBillingValidation,
+    originalProductId: number,
+    substituteProductId: number,
+    substituteQuantity: number | null,
+  ) {
+    this.pendingBonusSvc
+      .resolve(o.orderId, {
+        resolutions: [{ originalProductId, substituteProductId, substituteQuantity }],
+      })
+      .subscribe({
+        next: () => {
+          this.toast.success('Premio sustituido');
+          this.billingSvc.validate({ orderIds: [o.orderId] }).subscribe((result) => {
+            const updated = result.orders[0];
+            if (updated) this.replaceValidationOrder(updated);
+          });
+        },
+        error: (err) => {
+          const detalle = err?.error?.detail;
+          this.toast.error(detalle || 'No se pudo completar la acción. Inténtalo de nuevo.');
+        },
       });
   }
 

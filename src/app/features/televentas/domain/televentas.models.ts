@@ -4,6 +4,22 @@
 // en cada servicio de data-access): acá solo lo que es nuevo de este doc.
 
 import { BrandSalesView, OrderSummary } from '../../../shared/models/order.models';
+
+/**
+ * Lo que un pedido lleva de una marca — doc 51, sección 13.5. Solo líneas de
+ * venta: las bonificaciones no suman monto.
+ */
+export interface OrderBrandView {
+  brandId: number; // NO mostrar — para filtrar
+  brandName: string;
+  grossAmount: number;
+  discountAmount: number;
+  netAmount: number;
+  units: number;
+}
+
+/** Un pedido de la liquidación del día, con lo que lleva de cada marca — doc 51, sección 13.5. */
+export type DailyOrderView = OrderSummary & { brands: OrderBrandView[] };
 import { OrderItemCommand } from '../../../shared/models/counter-order.models';
 
 /** GET /api/assignments/me/today-plan — quién le toca hoy y su asignación. */
@@ -62,7 +78,7 @@ export interface DailyOrderSummaryView {
   totalBonusLines: number;
   totalBonusUnits: number;
   salesByBrand: BrandSalesView[];
-  orders: OrderSummary[];
+  orders: DailyOrderView[];
 }
 
 /** Una elección de premio dentro del `POST /api/orders` — doc 47, sección 13.1. */
@@ -129,6 +145,8 @@ export interface MobileChoiceOptionView {
   discountPercent: number | null;
   label: string | null;
   displayText: string;
+  available: boolean; // NUEVO — doc 51, sección 13.3
+  unavailableReason: string | null; // NUEVO — "Agotado: no hay stock suficiente" | null
 }
 
 /** Premio a elegir que gana el carrito antes de guardar — doc 47, sección 13.1. */
@@ -141,6 +159,7 @@ export interface MobileChoiceView {
   chooseCount: number; // cuántas elegir
   modeText: string; // "Elige 1 de 2"
   options: MobileChoiceOptionView[];
+  soldOut: boolean; // NUEVO — doc 51, sección 13.3: no pide elegir, queda pendiente
 }
 
 /** POST /api/mobile/orders/{orderId}/promo-choices — doc 49, sección 10.3. */
@@ -162,6 +181,8 @@ export interface MobileOrderChoiceOptionView {
   label: string | null;
   displayText: string;
   chosen: boolean; // la opción elegida
+  available: boolean; // NUEVO — doc 51, sección 13.4
+  unavailableReason: string | null; // NUEVO
 }
 
 /** GET /api/mobile/orders/{orderId}/promo-choices — doc 49, sección 10.2. */

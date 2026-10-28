@@ -223,17 +223,27 @@ interface CartLine {
               @if (s.nearPromos.length > 0) {
                 <h3 class="sim-result-subtitle">Cerca de ganar</h3>
                 @for (np of s.nearPromos; track np.promoId) {
-                  <div class="sim-near-promo">
-                    <div class="sim-muted">
-                      {{ np.progressText }}
-                      @if (np.promoId === testedPromoMeta()?.promoId) {
-                        <span class="sim-tested-tag">En prueba</span>
-                      }
+                  @if (np.soldOut) {
+                    <div class="sim-near-soldout">
+                      <strong>Promoción agotada</strong>
+                      <p class="sim-muted">
+                        El cliente cumple, pero el premio no tiene stock. Si se registra el pedido,
+                        quedará pendiente en Bonificaciones sin stock.
+                      </p>
                     </div>
-                    <div class="sim-near-track">
-                      <div class="sim-near-fill" [style.width.%]="np.percentComplete"></div>
+                  } @else {
+                    <div class="sim-near-promo">
+                      <div class="sim-muted">
+                        {{ np.progressText }}
+                        @if (np.promoId === testedPromoMeta()?.promoId) {
+                          <span class="sim-tested-tag">En prueba</span>
+                        }
+                      </div>
+                      <div class="sim-near-track">
+                        <div class="sim-near-fill" [style.width.%]="np.percentComplete"></div>
+                      </div>
                     </div>
-                  </div>
+                  }
                 }
               }
 
@@ -403,6 +413,21 @@ interface CartLine {
       .sim-near-promo {
         display: grid;
         gap: 6px;
+      }
+      .sim-near-soldout {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        background: var(--faint);
+        border-left: 3px solid var(--ink-muted);
+      }
+      .sim-near-soldout strong {
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .sim-near-soldout p {
+        margin: 0;
+        font-size: 12px;
       }
       .sim-near-track {
         height: 8px;

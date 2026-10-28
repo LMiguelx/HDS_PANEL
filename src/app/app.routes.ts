@@ -59,10 +59,12 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/assignments/assignments.routes').then((m) => m.ASSIGNMENT_ROUTES),
       },
-      // Pedidos (módulo 3) — rediseñado
+      // Pedidos (módulo 3) — rediseñado. `order.manage` entra solo por
+      // Bonificaciones sin stock (doc 51, sección 17.3) — alguien con ese
+      // permiso pero sin los otros dos también debe poder entrar al módulo.
       {
         path: 'pedidos',
-        canActivate: [permissionGuard('order.view_all', 'order.create')],
+        canActivate: [permissionGuard('order.view_all', 'order.create', 'order.manage')],
         loadChildren: () => import('./features/orders/order.routes').then((m) => m.ORDER_ROUTES),
       },
       // Reportes de ventas — nuevo, separa operación (Pedidos) de análisis.

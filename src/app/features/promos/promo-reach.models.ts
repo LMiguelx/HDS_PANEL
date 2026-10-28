@@ -11,9 +11,12 @@ export interface ReachTotalsView {
   discountAmount: number;
   discountOrderCount: number;
   averageDiscountPerOrder: number;
-  bonusUnits: number;
+  bonusUnits: number; // incluye las unidades de los sustitutos — doc 51, sección 14.2
   pendingChoices: number;
-  declinedChoices: number;
+  declinedChoices: number; // solo premios a elegir declinados — doc 51, sección 14.1
+  substitutedBonuses: number; // NUEVO — doc 51, sección 14.2
+  declinedBonuses: number; // NUEVO — bonificaciones no otorgadas por falta de stock
+  declinedBonusUnits: number; // NUEVO — unidades que no se entregaron
   lastAppliedAt: string | null;
 }
 
@@ -32,11 +35,17 @@ export interface ReachSalespersonRow {
   bonusUnits: number;
 }
 
+/** `label` — doc 51, sección 14.3: mostrar en vez de `productName` cuando `substitute = true`. */
 export interface ReachBonusProductRow {
   productId: number;
   productCode: string;
   productName: string;
   units: number;
+  substitute: boolean; // NUEVO
+  originalProductId: number | null; // NUEVO — NO mostrar
+  originalProductCode: string | null; // NUEVO
+  originalProductName: string | null; // NUEVO
+  label: string; // NUEVO — "SAL DE MESA EMSAL *1KG (sustituto de SAL MARINA *1KG)"
 }
 
 export interface PromoReachView {
@@ -71,6 +80,8 @@ export interface PromoReachOrderRow {
   bonusUnits: number;
   choiceStatus: ReachChoiceStatus | null;
   pendingApplicationId: number | null;
+  substitutedBonuses: number; // NUEVO — doc 51, sección 14.4
+  declinedBonuses: number; // NUEVO
 }
 
 export interface PromoReachSummaryRow {
