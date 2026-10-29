@@ -20,7 +20,7 @@ export const SALES_REPORTS_ROUTES: Routes = [
     loadComponent: () => import('./product-sales-detail').then((m) => m.ProductSalesDetailPage),
   },
   {
-    path: 'ventas-con-stock',
-    loadComponent: () => import('./sales-stock-tab').then((m) => m.SalesStockTab),
+    path: 'validacion-stock',
+    loadComponent: () => import('./stock-validation-tab').then((m) => m.StockValidationTab),
   },
 ];

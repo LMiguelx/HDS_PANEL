@@ -70,9 +70,11 @@ export const routes: Routes = [
       // Reportes de ventas — nuevo, separa operación (Pedidos) de análisis.
       // `report.view` también entra (doc 50, sección 2): el Jefe de reparto
       // los usa para verificar faltantes y devoluciones, sin ver Pedidos.
+      // `order.send_to_billing` entra solo por Validación de stock (doc 56,
+      // sección 12): supervisión de facturación sin los otros dos permisos.
       {
         path: 'reportes-ventas',
-        canActivate: [permissionGuard('order.view_all', 'report.view')],
+        canActivate: [permissionGuard('order.view_all', 'report.view', 'order.send_to_billing')],
         loadChildren: () =>
           import('./features/sales-reports/sales-reports.routes').then(
             (m) => m.SALES_REPORTS_ROUTES,

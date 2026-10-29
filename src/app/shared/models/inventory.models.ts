@@ -250,8 +250,79 @@ export interface StockReconciliationDetail {
   reconciliation: StockReconciliationView;
   previousProcessedAt: string | null; // null = este es el primer cuadre del producto
   movements: ReconciliationMovementView[]; // del más reciente al más antiguo, máx. 200
+  explanation: ReconciliationExplanation; // NUEVO — doc 56, sección 9.5
 }
 
 export interface ProcessUploadsResult {
   processed: number; // cuántas subidas tomó en esta llamada
+}
+
+// ───────────────────── Cuadre con el ERP (rediseño) — doc 56, sección 9 ─────────────────────
+
+/** Una actualización del ERP: todos los productos que subió de una vez — sección 9.3. */
+export interface ErpSyncView {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  firstUploadId: number; // NO mostrar — sirve para abrir sus productos
+  lastUploadId: number; // NO mostrar — sirve para abrir sus productos
+  startedAt: string;
+  endedAt: string;
+  productCount: number; // productos que subió el ERP
+  pendingCount: number; // aún en proceso
+  matchedCount: number;
+  increasedCount: number;
+  decreasedCount: number;
+  failedCount: number;
+}
+
+export interface ErpSyncListFilters {
+  warehouseId?: number;
+  from?: string; // yyyy-MM-dd; sin fechas: hoy
+  to?: string;
+}
+
+/** Motivo de un cuadre — doc 56, sección 4.2. */
+export type ReconciliationReason =
+  | 'MATCHED'
+  | 'ERP_INCREASE'
+  | 'MANUAL_ADJUSTMENT'
+  | 'ORDER_RETURNED'
+  | 'UNRECORDED_CHANGE'
+  | 'UNEXPLAINED'
+  | 'FIRST_SYNC'
+  | 'FAILED';
+
+/** Filtro por resultado de los productos de una actualización — doc 56, sección 4.3. */
+export type SyncProductResultFilter =
+  'DIFFERENCE' | 'INCREASED' | 'DECREASED' | 'FAILED' | 'MATCHED';
+
+export interface ReconciliationExplanation {
+  previousUploadId: number | null; // NO mostrar
+  previousUploadAt: string | null; // hora de la actualización anterior del producto; null si es la primera
+  previousErpQuantity: number | null; // lo que el ERP dijo la vez anterior
+  erpChange: number | null; // cuánto cambió el ERP entre las dos
+  appAfterPrevious: number | null; // lo que la app quedó después del cuadre anterior
+  ordersQuantity: number; // pedidos, neto (ventas restan; ediciones/anulaciones suman)
+  ordersReturnedQuantity: number; // de lo anterior, lo devuelto por ediciones/anulaciones
+  advancesQuantity: number; // adelantos (+) y retiros de adelanto (−)
+  manualQuantity: number; // ajustes manuales
+  lastManualAdjustmentBy: string | null; // quién hizo el último ajuste manual; null si no hubo
+  otherQuantity: number; // otros movimientos
+  unrecordedQuantity: number; // cambio sin registro (normalmente 0)
+  reason: ReconciliationReason;
+  reasonText: string; // LISTO PARA MOSTRAR
+}
+
+export interface ReconciliationRow {
+  reconciliation: StockReconciliationView;
+  explanation: ReconciliationExplanation;
+}
+
+export interface SyncProductsFilters {
+  firstUploadId: number;
+  lastUploadId: number;
+  warehouseId?: number;
+  result?: SyncProductResultFilter; // el panel envía DIFFERENCE por defecto
+  page?: number;
+  size?: number;
 }

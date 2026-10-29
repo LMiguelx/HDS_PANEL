@@ -18,8 +18,21 @@ export const INVENTORY_ROUTES: Routes = [
     loadComponent: () => import('./stock-reconciliation').then((m) => m.StockReconciliationPage),
   },
   {
+    path: 'cuadre/actualizacion',
+    loadComponent: () =>
+      import('./stock-reconciliation-sync').then((m) => m.StockReconciliationSyncPage),
+  },
+  {
+    path: 'cuadre/producto/:productId',
+    loadComponent: () =>
+      import('./stock-reconciliation-product-history').then(
+        (m) => m.StockReconciliationProductHistoryPage,
+      ),
+  },
+  {
     path: 'cuadre/:uploadId',
-    loadComponent: () => import('./stock-reconciliation').then((m) => m.StockReconciliationPage),
+    loadComponent: () =>
+      import('./stock-reconciliation-detail').then((m) => m.StockReconciliationDetailPage),
   },
   {
     path: 'kardex/:productId',

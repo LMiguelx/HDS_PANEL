@@ -1,10 +1,11 @@
 import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission';
 
 /** Pestañas de Reportes de ventas, mismo patrón que los demás módulos. */
 @Component({
   selector: 'app-sales-report-module-tabs',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, HasPermissionDirective],
   template: `
     <nav class="srt-tabs">
       <a routerLink="/reportes-ventas/resumen-dia" routerLinkActive="active">Resumen del día</a>
@@ -14,8 +15,11 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       <a routerLink="/reportes-ventas/marcas-productos" routerLinkActive="active"
         >Marcas y productos</a
       >
-      <a routerLink="/reportes-ventas/ventas-con-stock" routerLinkActive="active"
-        >Ventas con stock</a
+      <a
+        routerLink="/reportes-ventas/validacion-stock"
+        routerLinkActive="active"
+        *hasPermission="['order.view_all', 'order.send_to_billing']"
+        >Validación de stock</a
       >
     </nav>
   `,

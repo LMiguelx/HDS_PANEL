@@ -106,29 +106,65 @@ export interface ProductSalesReport {
   salespersonName: string | null;
 }
 
-/** Ventas con stock ("negativos") — GET /orders/reports/sales-stock, nuevo en doc 30. */
-export interface SalesStockRow {
-  productId: number;
+// ─────────────────────── Validación de stock — doc 56, sección 6 ───────────────────────
+// Reemplaza "Ventas con stock" (doc 30): /orders/reports/sales-stock ya no existe.
+
+/** `status` de una fila — doc 56, sección 4.1. */
+export type StockValidationStatus = 'SHORTFALL' | 'NO_ERP_STOCK' | 'OK';
+
+export interface StockValidationRow {
+  productId: number; // NO mostrar — sirve para abrir sus pedidos
   productCode: string;
   productName: string;
   unitOfMeasure: string;
-  soldQuantity: number; // venta + bonificación, sin anulados
-  pendingQuantity: number; // de lo vendido, lo que NO se pudo descontar del stock
-  systemStock: number; // ya descontado lo vendido
-  expectedErpStock: number | null; // lo que el sistema esperaba en la última subida del ERP; null si nunca subió
-  erpStock: number | null; // lo que el ERP informó en su última subida; null si nunca
-  difference: number | null; // erpStock - expectedErpStock; null si nunca
-  erpStockAt: string | null; // cuándo fue esa subida; null si nunca
+  toBillQuantity: number; // Por facturar
+  pendingQuantity: number; // Bonificación pendiente
+  erpStock: number | null; // Stock ERP; null si el ERP nunca lo subió
+  erpStockAt: string | null; // hora de esa subida; null si nunca
+  erpStale: boolean; // no vino en la última actualización del ERP
+  availableQuantity: number | null; // Disponible; null sin stock del ERP
+  shortfallQuantity: number; // Faltan (0 si alcanza)
+  openAdvanceQuantity: number; // adelantos abiertos del producto
+  advanceNotBacked: boolean; // hay faltante Y adelanto abierto
+  systemStock: number; // stock actual de la app (referencia)
+  nextAdjustment: number | null; // próximo ajuste; negativo = la app tiene de más; null sin stock del ERP
+  status: StockValidationStatus;
 }
 
-export interface SalesStockReport {
-  from: string;
-  to: string;
-  warehouseId: number;
+export interface StockValidationReport {
+  warehouseId: number; // NO mostrar
   warehouseName: string;
   onlyIssues: boolean;
-  erpStockAvailable: boolean;
-  productCount: number;
-  productsWithPending: number;
-  rows: SalesStockRow[];
+  lastErpUploadAt: string | null; // última actualización del ERP en el almacén; null si nunca
+  pendingUploads: number; // subidas del ERP aún en proceso (> 0 = el reporte aún no refleja la última)
+  productCount: number; // productos con algo por facturar (todos, aunque onlyIssues filtre)
+  shortfallCount: number;
+  noErpStockCount: number;
+  staleCount: number;
+  appExcessCount: number;
+  advanceNotBackedCount: number;
+  rows: StockValidationRow[];
+}
+
+/** Panel "Pedidos de un producto" — doc 56, sección 7. */
+export interface StockValidationOrderRow {
+  orderId: number; // mostrar como "N.° de pedido"
+  orderDate: string;
+  statusCode: string; // OPEN | SENT_TO_BILLING | COUNTER_DELIVERED
+  originCode: string; // FIELD | TELESALES | COUNTER
+  customerId: number; // NO mostrar
+  customerName: string;
+  salespersonId: number; // NO mostrar
+  salespersonName: string;
+  saleQuantity: number;
+  bonusQuantity: number;
+  pendingQuantity: number; // de bonusQuantity, pendiente de stock
+  editable: boolean; // true = sigue abierto: se puede editar
+}
+
+export interface StockValidationProductDetail {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  product: StockValidationRow; // cabecera del panel
+  orders: StockValidationOrderRow[]; // del más antiguo al más nuevo
 }

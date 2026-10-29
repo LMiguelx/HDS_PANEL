@@ -1,14 +1,5 @@
-import {
-  DestroyRef,
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  untracked,
-} from '@angular/core';
-import { Router, RouterLink, ActivatedRoute } from '@angular/router';
+import { Component, computed, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
@@ -19,482 +10,193 @@ import { UiInfoTip } from '../../shared/ui/info-tip/info-tip';
 import { InventoryModuleTabs } from './ui/module-tabs';
 import { InventoryAdminService } from './inventory-admin';
 import { ProductAdminService } from '../catalog/product-admin';
-import { ToastService } from '../../core/ui/toast';
 import { AuthService } from '../../core/auth/auth';
+import { ToastService } from '../../core/ui/toast';
 import {
-  ReconciliationResultFilter,
-  StockReconciliationDetail,
+  ErpSyncView,
   StockReconciliationSummary,
-  StockReconciliationView,
   WarehouseView,
 } from '../../shared/models/inventory.models';
 import { dateTimeText } from '../assignments/assignment-format';
-import {
-  BADGE_TONE_VAR,
-  RECONCILIATION_RESULT_OPTIONS,
-  failureReasonText,
-  movementReference,
-  reconciliationResultLabel,
-  reconciliationResultTone,
-  toProductLookup,
-} from './inventory-format';
+import { quantityText } from '../sales-reports/sales-report-format';
+import { toProductLookup } from './inventory-format';
 
 const AUTO_REFRESH_MS = 60_000;
-
-const LEGEND: { tone: string; label: string }[] = [
-  { tone: '--st-vigente', label: 'Cuadró' },
-  { tone: '--st-open', label: 'Entró stock' },
-  { tone: '--st-mismatch', label: 'Sobraba / Fallida / Sin respaldo' },
-  { tone: '--st-in-route', label: 'En cola' },
-];
-
-type NumericSummaryKey =
-  | 'pendingUploads'
-  | 'failedCount'
-  | 'matchedCount'
-  | 'increasedCount'
-  | 'decreasedCount'
-  | 'shortfallCount';
-
-interface SummaryCard {
-  key: NumericSummaryKey;
-  label: string;
-  tip: string;
-  tone: string;
-  result?: ReconciliationResultFilter | '';
-}
-
-const CARDS: SummaryCard[] = [
-  {
-    key: 'pendingUploads',
-    label: 'En cola',
-    tip: 'Subidas del ERP que todavía no se procesaron. Se procesan solas cada minuto; usa "Procesar ahora" si no quieres esperar.',
-    tone: '--st-in-route',
-  },
-  {
-    key: 'failedCount',
-    label: 'Fallidas',
-    tip: 'Subidas que no se pudieron procesar (de cualquier fecha). El stock no cambió. Reintenta cada una desde su fila.',
-    tone: '--st-mismatch',
-    result: 'FAILED',
-  },
-  {
-    key: 'matchedCount',
-    label: 'Cuadraron',
-    tip: 'El stock del sistema ya coincidía con el del ERP: no hizo falta ajustar nada.',
-    tone: '--st-vigente',
-    result: 'MATCHED',
-  },
-  {
-    key: 'increasedCount',
-    label: 'Entró stock',
-    tip: 'El sistema tenía menos que el ERP y se le sumó. Casi siempre es mercadería que llegó: no es un problema.',
-    tone: '--st-open',
-    result: 'INCREASED',
-  },
-  {
-    key: 'decreasedCount',
-    label: 'Sobraba',
-    tip: 'El sistema tenía más que el ERP y se le restó. Es la alarma principal: revisa el detalle para ver qué lo causó (un ajuste manual, un adelanto mal retirado).',
-    tone: '--st-mismatch',
-    result: 'DECREASED',
-  },
-  {
-    key: 'shortfallCount',
-    label: 'Ventas sin respaldo',
-    tip: 'Hay pedidos tomados por más unidades de las que el ERP tiene. El stock del sistema queda en 0: revisa esos pedidos.',
-    tone: '--st-mismatch',
-    result: 'SHORTFALL',
-  },
-];
 
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+interface SummaryCard {
+  key: 'pendingUploads' | 'failedCount' | 'matchedCount' | 'increasedCount' | 'decreasedCount';
+  label: string;
+  tip: string;
+  tone: string;
+}
+
+const CARDS: SummaryCard[] = [
+  {
+    key: 'pendingUploads',
+    label: 'En proceso',
+    tip: 'Subidas del ERP que todavía no se procesaron. Se procesan solas cada minuto; usa "Procesar ahora" si no quieres esperar.',
+    tone: '--st-in-route',
+  },
+  {
+    key: 'failedCount',
+    label: 'Fallidas',
+    tip: 'Subidas que no se pudieron procesar (de cualquier fecha). El stock no cambió. Reintenta cada una desde su detalle.',
+    tone: '--st-mismatch',
+  },
+  {
+    key: 'matchedCount',
+    label: 'Cuadraron',
+    tip: 'El stock de la app ya coincidía con el del ERP: no hizo falta ajustar nada.',
+    tone: '--st-vigente',
+  },
+  {
+    key: 'increasedCount',
+    label: 'Entró mercadería',
+    tip: 'La app tenía menos que el ERP y se le sumó. Casi siempre es mercadería que llegó: no es un problema.',
+    tone: '--st-open',
+  },
+  {
+    key: 'decreasedCount',
+    label: 'La app tenía de más',
+    tip: 'La app tenía más que el ERP y se le restó. Revisa el "Por qué" de cada producto para ver la causa.',
+    tone: '--st-in-route',
+  },
+];
+
 /**
- * Cuadre con el ERP — doc 35, sección 8. El ERP informa su stock real y el
- * sistema se alinea solo, cada minuto; esta pantalla es donde supervisión
- * ve ese resultado, entiende la causa de una diferencia y reintenta lo que
- * falló. Reintentar / Procesar ahora solo con `stock.advance`.
- *
- * Una misma ruta sirve para el listado (`/inventario/cuadre`) y el detalle
- * de una subida (`/inventario/cuadre/:uploadId`) — `uploadId` decide cuál
- * de las dos vistas se pinta.
+ * Cuadre con el ERP — doc 56, sección 9 (reemplaza el diseño del doc 35).
+ * El ERP sube todos los productos de una vez; esa tanda es una
+ * "actualización del ERP" y es la unidad que ve supervisión aquí. Al abrir
+ * una, solo se listan los productos con diferencia (sección 9.4). Reintentar
+ * / Procesar ahora siguen siendo `stock.advance`.
  */
 @Component({
   selector: 'app-stock-reconciliation',
-  imports: [RouterLink, UiButton, UiField, UiTypeahead, UiEmpty, UiInfoTip, InventoryModuleTabs],
+  imports: [UiButton, UiField, UiTypeahead, UiEmpty, UiInfoTip, InventoryModuleTabs],
   template: `
     <app-inventory-module-tabs />
-    <section class="sr-page">
-      @if (uploadId()) {
-        <!-- ───────────── Detalle de un cuadre ───────────── -->
-        <button uiButton variant="ghost" size="sm" routerLink="/inventario/cuadre" class="sr-back">
-          ← Volver al listado
-        </button>
-
-        @if (detailLoading()) {
-          <div class="sr-skeleton" role="status" aria-label="Cargando"></div>
-        } @else if (detailError()) {
-          <ui-empty
-            variant="error"
-            title="No pudimos cargar el cuadre"
-            actionLabel="Reintentar"
-            (action)="loadDetail()"
-          />
-        } @else if (detail(); as d) {
-          <div class="sr-detail-head">
-            <div>
-              <h1>{{ d.reconciliation.productName }}</h1>
-              <p class="sr-muted">
-                {{ d.reconciliation.productCode }} · {{ d.reconciliation.warehouseName }}
-              </p>
-              <p class="sr-muted">
-                Subida del ERP: {{ dateTimeText(d.reconciliation.uploadedAt) }} · Procesado:
-                {{ dateTimeText(d.reconciliation.processedAt) }}
-              </p>
-            </div>
-            <span class="sr-badge" [style.color]="'var(' + toneOf(d.reconciliation) + ')'">
-              {{ resultLabel(d.reconciliation) }}
-            </span>
-          </div>
-
-          @if (d.reconciliation.statusCode === 'FAILED') {
-            <div class="sr-fail-box">
-              {{ failureText(d.reconciliation.failureCode) }}
-              @if (canManage()) {
-                <button
-                  uiButton
-                  variant="secondary"
-                  size="sm"
-                  [loading]="retrying()"
-                  (click)="retry(d.reconciliation)"
-                >
-                  Reintentar
-                </button>
-              }
-            </div>
-          } @else {
-            <div class="sr-breakdown">
-              <div class="sr-breakdown-col">
-                <div class="sr-breakdown-row">
-                  <span>El ERP informó</span><strong>{{ d.reconciliation.erpQuantity }}</strong>
-                </div>
-                <div class="sr-breakdown-row">
-                  <span>Pedidos sin descontar</span
-                  ><strong>{{ d.reconciliation.committedQuantity }}</strong>
-                </div>
-                <div class="sr-breakdown-row">
-                  <span>Adelantos pendientes</span
-                  ><strong>{{ d.reconciliation.advanceBeforeQuantity }}</strong>
-                </div>
-                <div class="sr-breakdown-row">
-                  <span>Adelantos cubiertos</span
-                  ><strong>{{ d.reconciliation.advanceCoveredQuantity }}</strong>
-                </div>
-              </div>
-              <div class="sr-breakdown-col">
-                <div class="sr-breakdown-row">
-                  <span>Stock del sistema antes</span
-                  ><strong>{{ d.reconciliation.stockBefore }}</strong>
-                </div>
-                <div class="sr-breakdown-row">
-                  <span>Ajuste aplicado</span>
-                  <strong
-                    [class.sr-positive]="(d.reconciliation.appliedDelta ?? 0) > 0"
-                    [class.sr-negative]="(d.reconciliation.appliedDelta ?? 0) < 0"
-                  >
-                    {{ (d.reconciliation.appliedDelta ?? 0) > 0 ? '+' : ''
-                    }}{{ d.reconciliation.appliedDelta }}
-                  </strong>
-                </div>
-                <div class="sr-breakdown-row">
-                  <span>Stock del sistema después</span
-                  ><strong>{{ d.reconciliation.stockAfter }}</strong>
-                </div>
-                <div class="sr-breakdown-row">
-                  <span>Ventas sin respaldo</span>
-                  <strong [class.sr-negative]="(d.reconciliation.shortfall ?? 0) > 0">{{
-                    d.reconciliation.shortfall
-                  }}</strong>
-                </div>
-              </div>
-            </div>
+    <section class="esl-page">
+      <div class="esl-head">
+        <div>
+          <h1>Cuadre con el ERP</h1>
+          <p class="esl-sub">
+            El ERP informa su stock real y la app se alinea sola. Cada fila es una actualización del
+            ERP.
+          </p>
+          <p class="esl-status-line">{{ statusLine() }}</p>
+        </div>
+        <div class="esl-head-actions">
+          @if (canManage() && summary()?.pendingUploads) {
+            <button uiButton variant="secondary" [loading]="processing()" (click)="processNow()">
+              Procesar ahora
+            </button>
           }
-
-          <h2 class="sr-section-title">
-            {{
-              d.previousProcessedAt
-                ? 'Qué movió el stock desde el cuadre anterior (' +
-                  dateTimeText(d.previousProcessedAt) +
-                  ')'
-                : 'Qué movió el stock antes de este cuadre'
-            }}
-          </h2>
-
-          @if (d.movements.length === 0) {
-            <ui-empty
-              title="Sin movimientos registrados"
-              body="La diferencia viene de un cambio en el stock del ERP — suele ser mercadería que llegó."
-            />
-          } @else {
-            <table class="ui-table-grid sr-movements-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Cantidad</th>
-                  <th>Origen</th>
-                  <th>Nota</th>
-                  <th>Hecho por</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (m of d.movements; track m.stockMovementId) {
-                  <tr [class.sr-movement-cause]="highlightAsCause(d, m.movementTypeCode)">
-                    <td class="sr-muted">{{ dateTimeText(m.createdAt) }}</td>
-                    <td>{{ m.movementTypeName }}</td>
-                    <td
-                      [class.sr-positive]="m.quantity > 0"
-                      [class.sr-negative]="m.quantity < 0"
-                      class="sr-qty"
-                    >
-                      {{ m.quantity > 0 ? '+' : '' }}{{ m.quantity }}
-                    </td>
-                    <td>
-                      @if (ref(m).route) {
-                        <a [routerLink]="ref(m).route" class="sr-link">{{ ref(m).text }}</a>
-                      } @else {
-                        <span class="sr-muted">{{ ref(m).text }}</span>
-                      }
-                    </td>
-                    <td class="sr-muted">{{ m.note || '—' }}</td>
-                    <td class="sr-muted">{{ m.createdByName || 'Automático' }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          }
-
-          <button
-            uiButton
-            variant="ghost"
-            size="sm"
-            [routerLink]="['/inventario/kardex', d.reconciliation.productId]"
-            [queryParams]="{ warehouseId: d.reconciliation.warehouseId }"
-          >
-            Ver kardex completo
+          <button uiButton variant="ghost" (click)="refresh()" [loading]="loadingSummary()">
+            ↻ Actualizar
           </button>
-        }
-      } @else {
-        <!-- ───────────── Listado de cuadres ───────────── -->
-        <div class="sr-head">
-          <div>
-            <h1>Cuadre con el ERP</h1>
-            <p class="sr-sub">
-              El ERP informa su stock real y el sistema se alinea solo, cada minuto.
-              <span
-                uiInfoTip="Esta pantalla no calcula nada: muestra lo que ya procesó el servidor. Actualiza o procesa ahora para traer lo más reciente."
-              ></span>
-            </p>
-          </div>
-          <div class="sr-head-actions">
-            @if (canManage() && summary()?.pendingUploads) {
-              <button uiButton variant="secondary" [loading]="processing()" (click)="processNow()">
-                Procesar ahora
-              </button>
-            }
-            <button uiButton variant="ghost" (click)="refresh()" [loading]="loadingSummary()">
-              ↻ Actualizar
-            </button>
-          </div>
         </div>
+      </div>
 
-        <p class="sr-status-line">{{ statusLine() }}</p>
-
-        @if (summary(); as s) {
-          <div class="sr-cards">
-            @for (c of cards; track c.key) {
-              <button
-                type="button"
-                class="sr-card"
-                [class.sr-card-clickable]="!!c.result || c.key === 'failedCount'"
-                [disabled]="!c.result && c.key !== 'failedCount'"
-                (click)="applyCardFilter(c)"
-              >
-                <div class="sr-card-top">
-                  <span
-                    class="sr-card-value"
-                    [style.color]="s[c.key] > 0 ? 'var(' + c.tone + ')' : 'var(--ink)'"
-                  >
-                    {{ s[c.key] }}
-                  </span>
-                  <span [uiInfoTip]="c.tip"></span>
-                </div>
-                <span class="sr-card-label">{{ c.label }}</span>
-              </button>
-            }
-          </div>
-
-          @if (s.failedCount === 0 && s.decreasedCount === 0 && s.shortfallCount === 0) {
-            <p class="sr-all-good">✓ Todo cuadra con el ERP en este período.</p>
+      @if (summary(); as s) {
+        <div class="esl-cards">
+          @for (c of cards; track c.key) {
+            <div class="esl-card">
+              <div class="esl-card-top">
+                <span
+                  class="esl-card-value"
+                  [style.color]="s[c.key] > 0 ? 'var(' + c.tone + ')' : 'var(--ink)'"
+                >
+                  {{ s[c.key] }}
+                </span>
+                <span [uiInfoTip]="c.tip"></span>
+              </div>
+              <span class="esl-card-label">{{ c.label }}</span>
+            </div>
           }
-
-          <div class="sr-legend">
-            @for (l of legend; track l.label) {
-              <span class="sr-legend-item">
-                <span class="sr-legend-dot" [style.background]="'var(' + l.tone + ')'"></span>
-                {{ l.label }}
-              </span>
-            }
-          </div>
-        }
-
-        <div class="sr-filters">
-          <ui-field
-            label="Almacén"
-            type="select"
-            [(value)]="filterWarehouseId"
-            [options]="filterWarehouseOptions()"
-          />
-          <ui-typeahead
-            label="Producto"
-            placeholder="Buscar por nombre"
-            [clearOnPick]="false"
-            [search]="productSearch"
-            [(selected)]="filterProduct"
-          />
-          <ui-field
-            label="Resultado"
-            type="select"
-            [(value)]="filterResult"
-            [options]="resultOptions"
-          />
-          <ui-field label="Desde" type="date" [(value)]="filterFrom" />
-          <ui-field label="Hasta" type="date" [(value)]="filterTo" />
         </div>
-        @if (dateRangeError()) {
-          <div class="sr-error">{{ dateRangeError() }}</div>
-        }
+      }
 
-        @if (loading()) {
-          <div class="sr-skeleton" role="status" aria-label="Cargando"></div>
-        } @else if (error()) {
-          <ui-empty
-            variant="error"
-            title="No pudimos cargar el cuadre"
-            actionLabel="Reintentar"
-            (action)="load()"
-          />
-        } @else if (rows().length === 0) {
-          <ui-empty
-            variant="al-dia"
-            eyebrow="Al día"
-            title="Todo cuadra con el ERP en este período"
-          />
-        } @else {
-          <table class="ui-table-grid sr-table">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Almacén</th>
-                <th>ERP</th>
-                <th>Comprom.</th>
-                <th>Adelantos</th>
-                <th>Antes</th>
-                <th>Ajuste</th>
-                <th>Después</th>
-                <th>Resultado</th>
-                <th>Procesado</th>
-                <th></th>
+      <div class="esl-filters">
+        <ui-field
+          label="Almacén"
+          type="select"
+          [(value)]="filterWarehouseId"
+          [options]="filterWarehouseOptions()"
+        />
+        <ui-field label="Desde" type="date" [(value)]="filterFrom" />
+        <ui-field label="Hasta" type="date" [(value)]="filterTo" />
+        <ui-typeahead
+          label="Buscar producto"
+          placeholder="Buscar por nombre"
+          [clearOnPick]="true"
+          [search]="productSearch"
+          [(selected)]="productSearchSelected"
+        />
+      </div>
+      @if (dateRangeError()) {
+        <div class="esl-error">{{ dateRangeError() }}</div>
+      }
+
+      @if (loading()) {
+        <div class="esl-skeleton" role="status" aria-label="Cargando"></div>
+      } @else if (error()) {
+        <ui-empty
+          variant="error"
+          title="No pudimos cargar las actualizaciones"
+          actionLabel="Reintentar"
+          (action)="load()"
+        />
+      } @else if (syncs().length === 0) {
+        <ui-empty
+          variant="al-dia"
+          eyebrow="Al día"
+          title="El ERP no subió stock en estas fechas."
+        />
+      } @else {
+        <table class="ui-table-grid esl-table">
+          <thead>
+            <tr>
+              <th>Actualización</th>
+              <th>Almacén</th>
+              <th>Productos</th>
+              <th>Cuadraron</th>
+              <th>Entró mercadería</th>
+              <th>La app tenía de más</th>
+              <th>Fallaron</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (s of syncs(); track s.firstUploadId + '-' + s.lastUploadId) {
+              <tr class="esl-row" (click)="openSync(s)">
+                <td class="esl-cell-strong">
+                  {{ dateTimeText(s.startedAt) }}
+                  @if (s.pendingCount > 0) {
+                    <span class="esl-tag-amber">{{ s.pendingCount }} en proceso</span>
+                  }
+                </td>
+                <td class="esl-muted">{{ s.warehouseName }}</td>
+                <td class="esl-num">{{ s.productCount }}</td>
+                <td class="esl-num">{{ s.matchedCount || '—' }}</td>
+                <td class="esl-num esl-blue">{{ s.increasedCount || '—' }}</td>
+                <td class="esl-num esl-amber">{{ s.decreasedCount || '—' }}</td>
+                <td class="esl-num esl-red">{{ s.failedCount || '—' }}</td>
+                <td class="esl-chevron">›</td>
               </tr>
-            </thead>
-            <tbody>
-              @for (row of rows(); track row.uploadId) {
-                <tr class="sr-row" (click)="openDetail(row)">
-                  <td class="sr-cell-strong">
-                    {{ row.productName }}
-                    <div class="sr-muted">{{ row.productCode }}</div>
-                  </td>
-                  <td class="sr-muted">{{ row.warehouseName }}</td>
-                  <td class="sr-muted">{{ row.erpQuantity ?? '—' }}</td>
-                  <td class="sr-muted">{{ row.committedQuantity ?? '—' }}</td>
-                  <td class="sr-muted">
-                    {{ row.advanceBeforeQuantity ?? '—' }}
-                    @if ((row.advanceCoveredQuantity ?? 0) > 0) {
-                      <div>cubierto {{ row.advanceCoveredQuantity }}</div>
-                    }
-                  </td>
-                  <td class="sr-muted">{{ row.stockBefore ?? '—' }}</td>
-                  <td
-                    [class.sr-positive]="(row.appliedDelta ?? 0) > 0"
-                    [class.sr-negative]="(row.appliedDelta ?? 0) < 0"
-                    class="sr-qty"
-                  >
-                    @if (row.appliedDelta != null) {
-                      {{ row.appliedDelta > 0 ? '+' : '' }}{{ row.appliedDelta }}
-                    } @else {
-                      —
-                    }
-                  </td>
-                  <td class="sr-muted">{{ row.stockAfter ?? '—' }}</td>
-                  <td>
-                    <span class="sr-badge" [style.color]="'var(' + toneOf(row) + ')'">{{
-                      resultLabel(row)
-                    }}</span>
-                    @if ((row.shortfall ?? 0) > 0) {
-                      <div class="sr-badge sr-badge-sub">Sin respaldo: {{ row.shortfall }}</div>
-                    }
-                  </td>
-                  <td class="sr-muted">{{ dateTimeText(row.processedAt) }}</td>
-                  <td (click)="$event.stopPropagation()">
-                    @if (row.statusCode === 'FAILED' && canManage()) {
-                      <button
-                        uiButton
-                        variant="ghost"
-                        size="sm"
-                        [loading]="retryingId() === row.uploadId"
-                        (click)="retryFromList(row)"
-                      >
-                        Reintentar
-                      </button>
-                    }
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-
-          <div class="sr-pager">
-            <button
-              uiButton
-              variant="secondary"
-              size="sm"
-              [disabled]="page() === 0"
-              (click)="prevPage()"
-            >
-              Anterior
-            </button>
-            <span class="sr-pager-label">Página {{ page() + 1 }} de {{ totalPages() || 1 }}</span>
-            <button
-              uiButton
-              variant="secondary"
-              size="sm"
-              [disabled]="page() + 1 >= totalPages()"
-              (click)="nextPage()"
-            >
-              Siguiente
-            </button>
-          </div>
-        }
+            }
+          </tbody>
+        </table>
       }
     </section>
   `,
   styles: [
     `
-      .sr-page {
+      .esl-page {
         width: 100%;
         box-sizing: border-box;
         padding: var(--sp-8);
@@ -504,7 +206,7 @@ function todayIso(): string {
         margin: 0 0 4px;
         color: var(--ink);
       }
-      .sr-head {
+      .esl-head {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -512,233 +214,124 @@ function todayIso(): string {
         flex-wrap: wrap;
         margin-top: 20px;
       }
-      .sr-head-actions {
+      .esl-head-actions {
         display: flex;
         gap: 10px;
+        flex: none;
       }
-      .sr-sub {
-        display: flex;
-        align-items: center;
-        gap: 6px;
+      .esl-sub {
         margin: 0;
         color: var(--ink-muted);
         font-size: 13px;
         max-width: 560px;
       }
-      .sr-status-line {
-        margin: 12px 0 16px;
-        font-size: 13px;
+      .esl-status-line {
+        margin: 6px 0 0;
+        font-size: 12px;
         color: var(--ink-muted);
       }
-      .sr-cards {
+      .esl-cards {
         display: grid;
-        grid-template-columns: repeat(6, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 10px;
-        margin-bottom: 10px;
+        margin: 20px 0;
       }
-      .sr-card {
-        appearance: none;
-        text-align: left;
+      .esl-card {
         border: 1px solid var(--hairline);
         background: var(--bg);
         padding: 12px 14px;
         display: grid;
         gap: 6px;
-        cursor: default;
-        font-family: var(--font-sans);
       }
-      .sr-card-clickable {
-        cursor: pointer;
-      }
-      .sr-card-clickable:hover {
-        border-color: var(--accent);
-      }
-      .sr-card-top {
+      .esl-card-top {
         display: flex;
         align-items: center;
         justify-content: space-between;
       }
-      .sr-card-value {
+      .esl-card-value {
         font-size: var(--fs-metric);
         font-weight: var(--fw-metric);
         font-variant-numeric: var(--tnum);
       }
-      .sr-card-label {
+      .esl-card-label {
         font-size: 12px;
         color: var(--ink-muted);
       }
-      .sr-all-good {
-        font-size: 13px;
-        color: var(--st-vigente);
-        font-weight: 700;
-        margin: 0 0 12px;
-      }
-      .sr-legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 16px;
-        margin-bottom: 20px;
-        padding-bottom: 16px;
-        border-bottom: var(--border-hair);
-      }
-      .sr-legend-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 12px;
-        color: var(--ink-muted);
-      }
-      .sr-legend-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        flex: none;
-      }
-      .sr-filters {
+      .esl-filters {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
         gap: 12px;
         padding-bottom: 16px;
         margin-bottom: 16px;
         border-bottom: var(--border-hair);
       }
-      .sr-error {
+      .esl-error {
         color: var(--accent-ink);
         font-size: 13px;
         margin-bottom: 12px;
       }
-      .sr-skeleton {
+      .esl-skeleton {
         height: 240px;
         background: var(--faint);
       }
-      .sr-table {
+      .esl-table {
         width: 100%;
       }
-      .sr-row {
+      .esl-row {
         cursor: pointer;
       }
-      .sr-row:hover {
+      .esl-row:hover {
         background: var(--faint);
       }
-      .sr-cell-strong {
+      .esl-cell-strong {
         font-weight: 800;
       }
-      .sr-muted {
+      .esl-muted {
         color: var(--ink-muted);
         font-size: 13px;
       }
-      .sr-qty {
-        font-weight: 800;
+      .esl-num {
         font-variant-numeric: var(--tnum);
-      }
-      .sr-positive {
-        color: var(--st-open);
-      }
-      .sr-negative {
-        color: var(--st-mismatch);
-      }
-      .sr-badge {
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: var(--ls-label);
         white-space: nowrap;
       }
-      .sr-badge-sub {
+      .esl-blue {
+        color: var(--st-open);
+        font-weight: 700;
+      }
+      .esl-amber {
+        color: var(--st-in-route);
+        font-weight: 700;
+      }
+      .esl-red {
         color: var(--st-mismatch);
-        margin-top: 2px;
+        font-weight: 700;
       }
-      .sr-pager {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 16px;
-        margin-top: 20px;
+      .esl-tag-amber {
+        margin-left: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--st-in-route);
+        white-space: nowrap;
       }
-      .sr-pager-label {
-        font-size: 13px;
+      .esl-chevron {
         color: var(--ink-muted);
-        font-variant-numeric: var(--tnum);
-      }
-
-      /* Detalle */
-      .sr-back {
-        margin: 16px 0;
-      }
-      .sr-detail-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-      .sr-fail-box {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        border: 1px solid var(--st-mismatch);
-        background: color-mix(in srgb, var(--st-mismatch) 8%, transparent);
-        padding: 12px 14px;
-        margin: 16px 0;
-        font-size: 13px;
-      }
-      .sr-breakdown {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px 32px;
-        margin: 16px 0 24px;
-        border: 1px solid var(--hairline);
-        padding: 16px;
-      }
-      .sr-breakdown-col {
-        display: grid;
-        gap: 8px;
-      }
-      .sr-breakdown-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        font-size: 13px;
-        color: var(--ink-muted);
-      }
-      .sr-breakdown-row strong {
-        color: var(--ink);
-        font-variant-numeric: var(--tnum);
-      }
-      .sr-section-title {
-        font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
-        margin: 0 0 12px;
-        color: var(--ink);
-      }
-      .sr-movements-table {
-        width: 100%;
-        margin-bottom: 16px;
-      }
-      .sr-movement-cause {
-        background: color-mix(in srgb, var(--st-mismatch) 8%, transparent);
-      }
-      .sr-link {
-        font-size: 13px;
-        color: var(--accent-ink);
+        text-align: right;
+        font-size: 18px;
       }
 
       @media (max-width: 1100px) {
-        .sr-cards {
+        .esl-cards {
           grid-template-columns: repeat(3, 1fr);
         }
       }
       @media (max-width: 767px) {
-        .sr-page {
+        .esl-page {
           padding: var(--sp-4);
         }
-        .sr-cards {
+        .esl-cards {
           grid-template-columns: repeat(2, 1fr);
         }
-        .sr-breakdown {
-          grid-template-columns: 1fr;
-        }
-        .sr-table {
+        .esl-table {
           display: block;
           overflow-x: auto;
         }
@@ -750,52 +343,28 @@ export class StockReconciliationPage {
   private inventorySvc = inject(InventoryAdminService);
   private productSvc = inject(ProductAdminService);
   private auth = inject(AuthService);
-  private toast = inject(ToastService);
   private router = inject(Router);
-  private route = inject(ActivatedRoute);
   private destroyRef = inject(DestroyRef);
-
-  uploadId = input('', { alias: 'uploadId' });
+  private toast = inject(ToastService);
 
   protected dateTimeText = dateTimeText;
+  protected quantityText = quantityText;
   protected cards = CARDS;
-  protected legend = LEGEND;
-  protected resultOptions = RECONCILIATION_RESULT_OPTIONS;
   protected canManage = computed(() => this.auth.hasAny('stock.advance'));
-  protected resultLabel = reconciliationResultLabel;
-  protected toneOf = (row: StockReconciliationView) =>
-    BADGE_TONE_VAR[reconciliationResultTone(row)];
-  protected failureText = failureReasonText;
-  protected ref = (m: { referenceTable: string | null; referenceId: string | null }) =>
-    movementReference(m.referenceTable, m.referenceId);
 
   protected warehouses = signal<WarehouseView[]>([]);
-
-  // Resumen
   protected summary = signal<StockReconciliationSummary | null>(null);
   protected loadingSummary = signal(true);
   protected processing = signal(false);
 
-  // Filtros del listado
   protected filterWarehouseId = signal('');
-  protected filterProduct = signal<UiLookupItem | null>(null);
-  protected filterResult = signal<ReconciliationResultFilter | ''>('');
   protected filterFrom = signal(todayIso());
   protected filterTo = signal(todayIso());
+  protected productSearchSelected = signal<UiLookupItem | null>(null);
 
-  protected rows = signal<StockReconciliationView[]>([]);
-  protected totalElements = signal(0);
-  protected totalPages = signal(0);
-  protected page = signal(0);
+  protected syncs = signal<ErpSyncView[]>([]);
   protected loading = signal(true);
   protected error = signal(false);
-  protected retryingId = signal<number | null>(null);
-
-  // Detalle
-  protected detail = signal<StockReconciliationDetail | null>(null);
-  protected detailLoading = signal(false);
-  protected detailError = signal(false);
-  protected retrying = signal(false);
 
   protected filterWarehouseOptions = computed<UiFieldOption[]>(() => [
     { value: '', label: 'Todos' },
@@ -804,7 +373,7 @@ export class StockReconciliationPage {
 
   protected productSearch = (q: string): Observable<UiLookupItem[]> => {
     const warehouseId = Number(this.filterWarehouseId());
-    if (!warehouseId) return of<UiLookupItem[]>([]);
+    if (!warehouseId || !q.trim()) return of<UiLookupItem[]>([]);
     return this.productSvc
       .list({ warehouseId, q, page: 0, size: 20 })
       .pipe(map((page) => (page.content ?? []).map(toProductLookup)));
@@ -816,7 +385,7 @@ export class StockReconciliationPage {
       return 'La fecha inicial no puede ser posterior a la final.';
     const days =
       (new Date(this.filterTo()).getTime() - new Date(this.filterFrom()).getTime()) / 86400000;
-    if (days > 31) return 'El resumen admite como máximo 31 días.';
+    if (days > 31) return 'El rango admite como máximo 31 días.';
     return '';
   });
 
@@ -824,56 +393,32 @@ export class StockReconciliationPage {
     const s = this.summary();
     if (!s) return '';
     if (!s.lastUploadAt) return 'El ERP todavía no ha subido stock.';
-    return `Última subida del ERP: ${dateTimeText(s.lastUploadAt)} · Último cuadre: ${s.lastProcessedAt ? dateTimeText(s.lastProcessedAt) : '—'}`;
-  });
-
-  private refreshEffect = effect(() => {
-    this.uploadId();
-    untracked(() => {
-      if (this.uploadId()) this.loadDetail();
-      else {
-        this.loadSummary();
-        this.load();
-      }
-    });
-  });
-
-  private summaryEffect = effect(() => {
-    this.filterWarehouseId();
-    this.filterFrom();
-    this.filterTo();
-    untracked(() => {
-      if (this.uploadId() || this.dateRangeError()) return;
-      this.loadSummary();
-    });
+    return `Última actualización del ERP: ${dateTimeText(s.lastUploadAt)} · Último cuadre: ${s.lastProcessedAt ? dateTimeText(s.lastProcessedAt) : '—'}`;
   });
 
   private filtersEffect = effect(() => {
     this.filterWarehouseId();
-    this.filterProduct();
-    this.filterResult();
     this.filterFrom();
     this.filterTo();
     untracked(() => {
-      if (this.uploadId() || this.dateRangeError()) return;
-      this.page.set(0);
+      if (this.dateRangeError()) return;
+      this.loadSummary();
       this.load();
+    });
+  });
+
+  private productPickEffect = effect(() => {
+    const picked = this.productSearchSelected();
+    untracked(() => {
+      if (picked) this.router.navigate(['/inventario/cuadre/producto', picked.id]);
     });
   });
 
   constructor() {
     this.inventorySvc.warehouses().subscribe((list) => this.warehouses.set(list));
 
-    const qpProductId = this.route.snapshot.queryParamMap.get('productId');
-    const qpWarehouseId = this.route.snapshot.queryParamMap.get('warehouseId');
-    if (qpWarehouseId) this.filterWarehouseId.set(qpWarehouseId);
-    if (qpProductId) {
-      this.filterProduct.set({ id: Number(qpProductId), name: `Producto #${qpProductId}` });
-      this.filterResult.set('');
-    }
-
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && !this.uploadId()) {
+      if (document.visibilityState === 'visible') {
         this.loadSummary();
         this.load();
       }
@@ -884,16 +429,6 @@ export class StockReconciliationPage {
   protected refresh() {
     this.loadSummary();
     this.load();
-  }
-
-  protected applyCardFilter(card: SummaryCard) {
-    if (card.key === 'failedCount') {
-      this.filterResult.set('FAILED');
-      this.filterFrom.set('');
-      this.filterTo.set('');
-    } else if (card.result) {
-      this.filterResult.set(card.result);
-    }
   }
 
   loadSummary() {
@@ -918,20 +453,14 @@ export class StockReconciliationPage {
     this.loading.set(true);
     this.error.set(false);
     this.inventorySvc
-      .reconciliations({
+      .erpSyncs({
         warehouseId: this.filterWarehouseId() ? Number(this.filterWarehouseId()) : undefined,
-        productId: this.filterProduct()?.id,
-        result: this.filterResult() || undefined,
         from: this.filterFrom() || undefined,
         to: this.filterTo() || undefined,
-        page: this.page(),
-        size: 20,
       })
       .subscribe({
-        next: (result) => {
-          this.rows.set(result.content ?? []);
-          this.totalElements.set(result.totalElements ?? 0);
-          this.totalPages.set(result.totalPages ?? 0);
+        next: (list) => {
+          this.syncs.set(list);
           this.loading.set(false);
         },
         error: () => {
@@ -941,76 +470,21 @@ export class StockReconciliationPage {
       });
   }
 
-  protected prevPage() {
-    if (this.page() === 0) return;
-    this.page.update((p) => p - 1);
-    this.load();
-  }
-  protected nextPage() {
-    if (this.page() + 1 >= this.totalPages()) return;
-    this.page.update((p) => p + 1);
-    this.load();
-  }
-
-  protected openDetail(row: StockReconciliationView) {
-    this.router.navigate(['/inventario/cuadre', row.uploadId]);
-  }
-
-  protected retryFromList(row: StockReconciliationView) {
-    this.retryingId.set(row.uploadId);
-    this.inventorySvc.retryReconciliation(row.uploadId).subscribe({
-      next: (updated) => {
-        this.retryingId.set(null);
-        this.rows.update((rows) =>
-          rows.map((r) => (r.uploadId === updated.uploadId ? updated : r)),
-        );
-        this.toast.success(updated.statusCode === 'APPLIED' ? 'Subida procesada' : 'Sigue fallida');
-        this.loadSummary();
-      },
-      error: () => {
-        this.retryingId.set(null);
-        this.toast.error('No pudimos reintentar la subida.');
+  protected openSync(s: ErpSyncView) {
+    this.router.navigate(['/inventario/cuadre/actualizacion'], {
+      queryParams: {
+        firstUploadId: s.firstUploadId,
+        lastUploadId: s.lastUploadId,
+        warehouseId: s.warehouseId,
+        warehouseName: s.warehouseName,
+        startedAt: s.startedAt,
+        productCount: s.productCount,
+        matchedCount: s.matchedCount,
+        increasedCount: s.increasedCount,
+        decreasedCount: s.decreasedCount,
+        failedCount: s.failedCount,
       },
     });
-  }
-
-  loadDetail() {
-    const id = Number(this.uploadId());
-    if (!id) return;
-    this.detailLoading.set(true);
-    this.detailError.set(false);
-    this.inventorySvc.reconciliationDetail(id).subscribe({
-      next: (d) => {
-        this.detail.set(d);
-        this.detailLoading.set(false);
-      },
-      error: () => {
-        this.detailLoading.set(false);
-        this.detailError.set(true);
-      },
-    });
-  }
-
-  protected retry(row: StockReconciliationView) {
-    this.retrying.set(true);
-    this.inventorySvc.retryReconciliation(row.uploadId).subscribe({
-      next: () => {
-        this.retrying.set(false);
-        this.toast.success('Reintento enviado');
-        this.loadDetail();
-      },
-      error: () => {
-        this.retrying.set(false);
-        this.toast.error('No pudimos reintentar la subida.');
-      },
-    });
-  }
-
-  protected highlightAsCause(d: StockReconciliationDetail, movementTypeCode: string): boolean {
-    return (
-      reconciliationResultTone(d.reconciliation) === 'red' &&
-      (movementTypeCode === 'MANUAL_ADJUSTMENT' || movementTypeCode === 'ADVANCE_IN')
-    );
   }
 
   protected processNow() {
@@ -1023,8 +497,7 @@ export class StockReconciliationPage {
             ? 'No había subidas en cola'
             : `${result.processed} subidas procesadas`,
         );
-        this.loadSummary();
-        this.load();
+        this.refresh();
       },
       error: () => {
         this.processing.set(false);

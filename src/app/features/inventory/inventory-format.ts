@@ -2,9 +2,11 @@ import { UiFieldOption } from '../../shared/ui/field/field';
 import { UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { ProductView } from '../../shared/models/catalog.models';
 import {
+  ReconciliationReason,
   ReconciliationResultFilter,
   StockAdvanceStatusCode,
   StockReconciliationView,
+  SyncProductResultFilter,
 } from '../../shared/models/inventory.models';
 
 /** Buscador de producto de la sección 4.2: código · nombre · stock, incluso en 0. */
@@ -95,6 +97,40 @@ export const RECONCILIATION_RESULT_OPTIONS: UiFieldOption[] = [
 
 export function resultFilterLabel(value: ReconciliationResultFilter | ''): string {
   return RECONCILIATION_RESULT_OPTIONS.find((o) => o.value === value)?.label ?? 'Todos';
+}
+
+// ───────────────── Cuadre con el ERP (rediseño) — doc 56, secciones 4.2 y 4.3 ─────────────────
+
+const REASON_LABEL: Record<ReconciliationReason, { label: string; tone: BadgeTone }> = {
+  MATCHED: { label: 'Cuadró', tone: 'green' },
+  ERP_INCREASE: { label: 'Entró mercadería', tone: 'blue' },
+  MANUAL_ADJUSTMENT: { label: 'Ajuste manual', tone: 'amber' },
+  ORDER_RETURNED: { label: 'Devuelto por pedidos', tone: 'amber' },
+  UNRECORDED_CHANGE: { label: 'Cambio sin registro', tone: 'red' },
+  UNEXPLAINED: { label: 'Sin causa en la app', tone: 'red' },
+  FIRST_SYNC: { label: 'Primera subida', tone: 'gray' },
+  FAILED: { label: 'Falló', tone: 'red' },
+};
+
+export function reasonLabel(reason: ReconciliationReason): string {
+  return REASON_LABEL[reason]?.label ?? reason;
+}
+
+export function reasonTone(reason: ReconciliationReason): BadgeTone {
+  return REASON_LABEL[reason]?.tone ?? 'gray';
+}
+
+export const SYNC_PRODUCT_RESULT_OPTIONS: UiFieldOption[] = [
+  { value: 'DIFFERENCE', label: 'Con diferencia' },
+  { value: '', label: 'Todos' },
+  { value: 'INCREASED', label: 'Entró mercadería' },
+  { value: 'DECREASED', label: 'La app tenía de más' },
+  { value: 'FAILED', label: 'Fallidas' },
+  { value: 'MATCHED', label: 'Cuadraron' },
+];
+
+export function syncProductResultLabel(value: SyncProductResultFilter | ''): string {
+  return SYNC_PRODUCT_RESULT_OPTIONS.find((o) => o.value === value)?.label ?? 'Con diferencia';
 }
 
 // ─────────────────────────── Origen de un movimiento — doc 35, sección 3.8 ───────────────────────────

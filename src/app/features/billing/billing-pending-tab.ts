@@ -559,6 +559,15 @@ const RECALCULATE_CHUNK = 100;
                                 >
                                   Resolver
                                 </button>
+                              } @else if (
+                                issue.code === 'STOCK_SHORTFALL' && issue.productId != null
+                              ) {
+                                <a
+                                  [routerLink]="['/reportes-ventas/validacion-stock']"
+                                  [queryParams]="{ productId: issue.productId }"
+                                  class="bpt-issue-link"
+                                  >Ver en Validación de stock</a
+                                >
                               } @else if (elsewhereLink(issue.code); as link) {
                                 <a [routerLink]="link.route" class="bpt-issue-link">{{
                                   link.label

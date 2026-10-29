@@ -4,9 +4,10 @@ import { environment } from '../../../environments/environment';
 import {
   BrandSalesReport,
   ProductSalesReport,
-  SalesStockReport,
   SalespersonSettlementReport,
   SettlementGroupBy,
+  StockValidationProductDetail,
+  StockValidationReport,
 } from '../../shared/models/sales-report.models';
 
 /** OrderReportController, /api/orders/reports. `order.view_all`. */
@@ -61,10 +62,22 @@ export class SalesReportAdminService {
     return this.http.get<ProductSalesReport>(`${this.base}/product-sales/${productId}`, { params });
   }
 
-  /** from/to obligatorias — máximo 31 días. onlyIssues default true en el backend. */
-  salesStock(warehouseId: number, from: string, to: string, onlyIssues?: boolean) {
-    let params = new HttpParams().set('warehouseId', warehouseId).set('from', from).set('to', to);
+  /**
+   * Validación de stock — doc 56, sección 6. Reemplaza `salesStock`: sin
+   * fechas, siempre lo que falta facturar ahora. `onlyIssues` default true
+   * en el backend.
+   */
+  stockValidation(warehouseId: number, onlyIssues?: boolean) {
+    let params = new HttpParams().set('warehouseId', warehouseId);
     if (onlyIssues !== undefined) params = params.set('onlyIssues', String(onlyIssues));
-    return this.http.get<SalesStockReport>(`${this.base}/sales-stock`, { params });
+    return this.http.get<StockValidationReport>(`${this.base}/stock-validation`, { params });
+  }
+
+  /** Panel "Pedidos de un producto" — doc 56, sección 7. */
+  stockValidationOrders(productId: number, warehouseId: number) {
+    return this.http.get<StockValidationProductDetail>(
+      `${this.base}/stock-validation/${productId}/orders`,
+      { params: { warehouseId } },
+    );
   }
 }

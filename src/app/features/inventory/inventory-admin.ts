@@ -7,8 +7,11 @@ import {
   BulkStockAdjustmentResult,
   CreateStockAdvancesCommand,
   CreateStockAdvancesResult,
+  ErpSyncListFilters,
+  ErpSyncView,
   KardexResponse,
   ProcessUploadsResult,
+  ReconciliationRow,
   ReleaseStockAdvanceCommand,
   StockAdvanceListFilters,
   StockAdvanceView,
@@ -16,6 +19,7 @@ import {
   StockReconciliationListFilters,
   StockReconciliationSummary,
   StockReconciliationView,
+  SyncProductsFilters,
   WarehouseStockResponse,
   WarehouseView,
 } from '../../shared/models/inventory.models';
@@ -114,5 +118,20 @@ export class InventoryAdminService {
   /** stock.advance */
   processReconciliations() {
     return this.http.post<ProcessUploadsResult>(`${this.base}/stock-reconciliations/process`, {});
+  }
+
+  /** stock.advance o report.view — actualizaciones del ERP, doc 56, sección 9.3. Sin paginar. */
+  erpSyncs(filters: ErpSyncListFilters = {}) {
+    return this.http.get<ErpSyncView[]>(`${this.base}/stock-reconciliations/syncs`, {
+      params: paramsFrom(filters),
+    });
+  }
+
+  /** stock.advance o report.view — productos de una actualización, doc 56, sección 9.4. */
+  syncProducts(filters: SyncProductsFilters) {
+    return this.http.get<PageResponse<ReconciliationRow>>(
+      `${this.base}/stock-reconciliations/syncs/products`,
+      { params: paramsFrom(filters) },
+    );
   }
 }
