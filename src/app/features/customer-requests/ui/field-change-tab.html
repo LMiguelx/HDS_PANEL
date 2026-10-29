@@ -1,0 +1,175 @@
+@if (groups().length === 0) {
+  <ui-empty
+    variant="al-dia"
+    eyebrow="Al día"
+    title="Sin cambios de campo pendientes"
+    body="Cuando un vendedor pida corregir datos de un cliente, aparece acá."
+  />
+} @else {
+  <ui-approval-tray [detailOpen]="selectedKey() !== null" (back)="select.emit(null)">
+    <div trayFilter>
+      <app-erp-segmented-filter
+        [counts]="filterCounts()"
+        [value]="filterValue()"
+        (valueChange)="filterValue.set($event)"
+      />
+    </div>
+
+    <div trayList>
+      @if (filteredGroups().length === 0) {
+        <div class="fc-list-empty">
+          <p class="fc-muted">Ninguna solicitud con este filtro.</p>
+          <button type="button" class="fc-link" (click)="filterValue.set('all')">Ver todas</button>
+        </div>
+      } @else {
+        @for (g of filteredGroups(); track g.groupId) {
+          <button
+            type="button"
+            class="fc-row"
+            [class.selected]="selectedKey() === g.groupId"
+            (click)="pick(g.groupId)"
+          >
+            <div class="fc-row-top">
+              <span class="fc-row-name">{{ g.businessName }}</span>
+              <app-erp-badge [label]="rowErpLabel(g).label" [tone]="rowErpLabel(g).tone" />
+            </div>
+            <div class="fc-row-line">
+              {{ g.customerCode || '—' }} · {{ changedFieldsSummary(g) }}
+            </div>
+            <div class="fc-row-line fc-muted">
+              {{ g.requestedByName }} · {{ dateTimeText(g.createdAt) }}
+            </div>
+          </button>
+        }
+      }
+    </div>
+
+    <div trayDetail>
+      @if (!selected()) {
+        <ui-empty title="Elige una solicitud" body="Selecciona una fila para revisarla." />
+      } @else if (selected(); as g) {
+        <div class="fc-detail-head">
+          <div>
+            <h2>{{ g.businessName }} · {{ g.customerCode || '—' }}</h2>
+            <p class="fc-detail-meta">
+              Solicitó {{ g.requestedByName }} · {{ dateTimeText(g.createdAt) }}
+              <a [routerLink]="['/clientes', g.customerId]">Ver ficha ↗</a>
+            </p>
+          </div>
+          <app-erp-badge [label]="rowErpLabel(g).label" [tone]="rowErpLabel(g).tone" />
+        </div>
+
+        <ui-status-steps [steps]="steps()" class="fc-steps" />
+
+        @if (g.reason) {
+          <h3 class="fc-block-title">Motivo</h3>
+          <p class="fc-reason">"{{ g.reason }}"</p>
+        }
+
+        <h3 class="fc-block-title">Cambios solicitados</h3>
+        <table class="ui-table-grid fc-table-desktop">
+          <thead>
+            <tr>
+              <th>Campo</th>
+              <th>Valor actual</th>
+              <th></th>
+              <th>Valor nuevo</th>
+              <th>ERP</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of g.changes; track c.requestId) {
+              <tr>
+                <td>{{ fieldNameLabel(c.fieldName) }}</td>
+                <td class="fc-before">{{ c.previousValue ?? 'Sin registro' }}</td>
+                <td class="fc-arrow">→</td>
+                <td class="fc-after">{{ c.newValue }}</td>
+                <td>
+                  @if (c.erpRegistered) {
+                    <span class="fc-erp-ok">✓ {{ dateTimeText(c.erpRegisteredAt) }}</span>
+                  } @else {
+                    <span class="fc-erp-pending">○ Pendiente</span>
+                  }
+                </td>
+              </tr>
+            }
+            @if (gpsChange(g); as gps) {
+              <tr>
+                <td>Ubicación GPS</td>
+                <td class="fc-before">
+                  @if (gps.beforeUrl) {
+                    <a [href]="gps.beforeUrl" target="_blank" rel="noopener">Ver antes ↗</a>
+                  } @else {
+                    Sin registro
+                  }
+                </td>
+                <td class="fc-arrow">→</td>
+                <td class="fc-after">
+                  <a [href]="gps.afterUrl" target="_blank" rel="noopener">Ver después ↗</a>
+                </td>
+                <td></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <div class="fc-cards-mobile">
+          @for (c of g.changes; track c.requestId) {
+            <div class="fc-card">
+              <div class="fc-card-field">{{ fieldNameLabel(c.fieldName) }}</div>
+              <div class="fc-card-values">
+                <span class="fc-before">{{ c.previousValue ?? 'Sin registro' }}</span>
+                <span class="fc-arrow">→</span>
+                <span class="fc-after">{{ c.newValue }}</span>
+              </div>
+              @if (c.erpRegistered) {
+                <span class="fc-erp-ok">✓ {{ dateTimeText(c.erpRegisteredAt) }}</span>
+              } @else {
+                <span class="fc-erp-pending">○ Pendiente</span>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <div trayFooter>
+      @if (selected(); as g) {
+        @if (approveReason(g)) {
+          <p class="fc-footer-reason">
+            <span class="material-icons" aria-hidden="true">info</span>
+            {{ approveReason(g) }}
+          </p>
+        } @else if (rejectDisabled(g)) {
+          <p class="fc-footer-reason">
+            <span class="material-icons" aria-hidden="true">info</span>
+            El ERP ya aplicó parte de los cambios: solo se puede aprobar.
+          </p>
+        }
+        @if (actionError()) {
+          <p class="fc-footer-error">{{ actionError() }}</p>
+        }
+        <div class="fc-footer-actions">
+          <button
+            uiButton
+            variant="secondary"
+            [disabled]="rejectDisabled(g)"
+            [loading]="acting()"
+            (click)="reject(g)"
+          >
+            Rechazar
+          </button>
+          <button
+            uiButton
+            variant="primary"
+            [disabled]="!g.erpRegistered"
+            [loading]="acting()"
+            (click)="approve(g)"
+          >
+            Aprobar cambios
+          </button>
+        </div>
+      }
+    </div>
+  </ui-approval-tray>
+}

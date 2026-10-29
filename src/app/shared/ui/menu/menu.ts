@@ -30,13 +30,14 @@ const POSITIONS: ConnectedPosition[] = [
     <button
       type="button"
       uiButton
-      variant="icon"
+      [variant]="triggerLabel() ? 'secondary' : 'icon'"
+      [size]="triggerLabel() ? 'sm' : 'md'"
       [attr.title]="label()"
       [attr.aria-label]="label()"
       #trigger
       (click)="toggle()"
     >
-      ···
+      {{ triggerLabel() ? triggerLabel() + ' ▾' : '···' }}
     </button>
 
     <ng-template #panel>
@@ -85,6 +86,8 @@ const POSITIONS: ConnectedPosition[] = [
 })
 export class UiMenu {
   label = input('Más acciones');
+  /** Si se da, el botón muestra este texto + "▾" en vez del ícono "···". */
+  triggerLabel = input<string | null>(null);
 
   private trigger = viewChild('trigger', { read: ElementRef<HTMLElement> });
   private panelTpl = viewChild<TemplateRef<unknown>>('panel');

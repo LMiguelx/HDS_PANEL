@@ -1,0 +1,372 @@
+<section class="nco-page">
+  <div class="nco-head">
+    <div>
+      <p class="nco-eyebrow">Televentas · Pedido por llamada</p>
+      <h1>Nuevo pedido</h1>
+    </div>
+    <button uiButton variant="secondary" (click)="cancel()">Cancelar</button>
+  </div>
+
+  @if (!jornadaOpen()) {
+    <ui-empty
+      title="Abre tu jornada"
+      body="Necesitas abrir tu jornada antes de registrar un pedido por llamada."
+      actionLabel="Abrir jornada"
+      (action)="routeStore.start()"
+    />
+  } @else if (session.loading()) {
+    <div class="nco-skeleton" role="status" aria-label="Cargando"></div>
+  } @else if (session.noBranch()) {
+    <ui-empty
+      variant="error"
+      title="Sin sede asignada"
+      body="Tu usuario no tiene una sede configurada; comuníquese con supervisión."
+    />
+  } @else if (session.noWarehouse()) {
+    <ui-empty
+      variant="error"
+      title="Sin almacén configurado"
+      body="Tu sede no tiene almacén configurado; comuníquese con supervisión."
+    />
+  } @else {
+    <div class="nco-grid">
+      <div class="nco-left">
+        <ui-card
+          title="Cliente"
+          subtitle="Solo puedes tomar pedidos de tu cartera o de tu plan de hoy."
+        >
+          @if (!customer()) {
+            <ui-field
+              label="Buscar cliente"
+              placeholder="Nombre, código o documento"
+              [(value)]="customerSearch"
+            />
+            @if (customerLoading()) {
+              <p class="nco-muted">Cargando cliente…</p>
+            } @else if (customerSearch() && customerResults().length === 0) {
+              <p class="nco-muted">Sin resultados en tu cartera.</p>
+            } @else if (customerResults().length > 0) {
+              <div class="nco-search-results">
+                @for (c of customerResults(); track c.customerId) {
+                  <button type="button" class="nco-search-row" (click)="pickCustomer(c)">
+                    <span>{{ c.businessName }}</span>
+                    <span class="nco-muted">{{ c.code }}</span>
+                  </button>
+                }
+              </div>
+            }
+          } @else {
+            @if (customerError()) {
+              <ui-empty variant="error" title="No pudimos cargar el cliente" />
+            } @else {
+              <div class="nco-customer-card">
+                <div class="nco-customer-info">
+                  <span class="nco-customer-name"
+                    >{{ customer()!.businessName }}
+                    <span class="nco-tag-telesales">Televentas</span></span
+                  >
+                  <span class="nco-muted"
+                    >{{ customer()!.code }} · {{ customer()!.customerTypeName || '—' }} ·
+                    {{ ratingText(customer()!.rating) }}</span
+                  >
+                  @if (customer()!.phone) {
+                    <span class="nco-muted">{{ customer()!.phone }}</span>
+                  }
+                </div>
+                <button uiButton variant="ghost" size="sm" (click)="changeCustomer()">
+                  Cambiar
+                </button>
+              </div>
+              @if (!customer()!.isActive) {
+                <div class="nco-alert">Este cliente está inactivo.</div>
+              }
+              @if (customer()!.customerTypeId == null) {
+                <div class="nco-alert">
+                  El cliente no tiene tipo asignado; comuníquese con supervisión.
+                </div>
+              }
+              @if (!assignmentId()) {
+                <div class="nco-alert">Este cliente no tiene una asignación vigente hoy.</div>
+              }
+            }
+          }
+        </ui-card>
+
+        @if (customer()) {
+          <ui-card title="Condición de venta">
+            <ui-field
+              label="Condición de pago"
+              type="select"
+              [(value)]="paymentConditionId"
+              [options]="paymentConditionOptions()"
+            />
+            <ui-field label="Nota (opcional)" type="textarea" [(value)]="note" />
+          </ui-card>
+
+          <ui-card
+            title="Agregar productos"
+            subtitle="Busca en el catálogo, revisa lo sugerido, sus promociones o su dotación."
+          >
+            <ui-tabs [items]="tabs" [(value)]="activeTab" />
+
+            <div class="nco-tab-content">
+              @switch (activeTab()) {
+                @case ('catalogo') {
+                  <ui-field
+                    label="Buscar producto"
+                    placeholder="Nombre o código ( / )"
+                    [(value)]="productQuery"
+                  />
+                  @if (productsLoading()) {
+                    <p class="nco-muted">Buscando…</p>
+                  } @else if (products().length === 0) {
+                    <p class="nco-muted">
+                      @if (productQuery()) {
+                        Sin resultados.
+                      } @else {
+                        Escribe para buscar en el catálogo.
+                      }
+                    </p>
+                  } @else {
+                    <div class="nco-product-list nco-scroll-list">
+                      @for (p of products(); track p.productId) {
+                        <div class="nco-product-row" [class.nco-row-disabled]="p.stock <= 0">
+                          <div>
+                            <div class="nco-product-name">{{ p.name }}</div>
+                            <div class="nco-muted">
+                              {{ p.code }} · {{ p.brandName }} · Stock {{ p.stock }}
+                            </div>
+                          </div>
+                          <button
+                            uiButton
+                            variant="secondary"
+                            size="sm"
+                            [disabled]="p.stock <= 0 || hasLine(p.productId)"
+                            (click)="addProduct(p)"
+                          >
+                            {{ hasLine(p.productId) ? 'Agregado' : 'Agregar' }}
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+                @case ('sugerido') {
+                  @if (suggestedLoading()) {
+                    <p class="nco-muted">Cargando sugeridos…</p>
+                  } @else if (suggested().length === 0) {
+                    <ui-empty
+                      title="Sin sugeridos"
+                      body="Este cliente todavía no tiene historial suficiente."
+                    />
+                  } @else {
+                    <div class="nco-product-list nco-scroll-list">
+                      @for (item of suggested(); track item.productId) {
+                        <div class="nco-product-row">
+                          <div>
+                            <div class="nco-product-name">{{ item.productName }}</div>
+                            <div class="nco-muted">
+                              Comprado {{ item.purchaseCount }}
+                              {{ item.purchaseCount === 1 ? 'vez' : 'veces' }}
+                            </div>
+                          </div>
+                          <button
+                            uiButton
+                            variant="secondary"
+                            size="sm"
+                            [disabled]="hasLine(item.productId)"
+                            (click)="addSuggested(item)"
+                          >
+                            {{ hasLine(item.productId) ? 'Agregado' : 'Agregar' }}
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+                @case ('promociones') {
+                  <app-promo-catalog-panel
+                    [catalog]="promoCatalog()"
+                    [loading]="promoCatalogLoading()"
+                    [error]="promoCatalogError()"
+                    (featuredOnlyChange)="onCatalogFeaturedOnlyChange($event)"
+                    (retry)="retryPromoCatalog()"
+                  />
+                }
+                @case ('dotacion') {
+                  @if (allocationRows().length === 0) {
+                    <ui-empty
+                      title="Sin dotación"
+                      body="No tienes dotaciones vigentes para repartir."
+                    />
+                  } @else {
+                    <div class="nco-allocation-list nco-scroll-list">
+                      @for (row of allocationRows(); track row.allocationId) {
+                        <div class="nco-product-row">
+                          <div>
+                            <div class="nco-product-name">
+                              🎁 {{ row.productName }}
+                              @if (row.promoName) {
+                                · {{ row.promoName }}
+                              }
+                            </div>
+                            <div class="nco-muted">
+                              Disponible {{ row.available }}
+                              @if (row.periodEnd) {
+                                · hasta {{ row.periodEnd }}
+                              }
+                            </div>
+                          </div>
+                          <input
+                            class="nco-qty-input"
+                            type="number"
+                            min="0"
+                            [max]="row.available"
+                            step="1"
+                            [value]="allocationQuantity(row)"
+                            (change)="setAllocationQuantity(row, $event)"
+                          />
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+              }
+            </div>
+          </ui-card>
+
+          <ui-card>
+            <h3 class="nco-cart-title">
+              Pedido
+              @if (lines().length > 0) {
+                <ui-badge tone="accent">{{ lines().length }}</ui-badge>
+              }
+              @if (allocationCount() > 0) {
+                <ui-badge tone="neutral">{{ allocationCount() }} dotación</ui-badge>
+              }
+            </h3>
+            @if (lines().length === 0) {
+              <p class="nco-muted">Todavía no agregaste productos.</p>
+            } @else {
+              <div class="nco-lines">
+                @for (line of lines(); track line.productId) {
+                  <div class="nco-line-row">
+                    <span class="nco-line-name">{{ line.productName }}</span>
+                    <input
+                      class="nco-qty-input"
+                      type="number"
+                      min="1"
+                      step="1"
+                      [value]="line.quantity"
+                      (change)="updateQuantity(line, $event)"
+                    />
+                    <span class="nco-muted nco-line-price">{{
+                      formatSoles(prices().get(line.productId)?.subtotal ?? null)
+                    }}</span>
+                    <button uiButton variant="icon" title="Quitar" (click)="removeLine(line)">
+                      ✕
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+          </ui-card>
+        }
+      </div>
+
+      @if (customer()) {
+        <div class="nco-right">
+          <ui-card title="Resumen" class="nco-sim-card">
+            @if (pricesLoading()) {
+              <p class="nco-muted">Calculando…</p>
+            }
+
+            @if (promoProgress().length > 0) {
+              <h3 class="nco-sim-subtitle">Cerca de ganar</h3>
+              @for (np of promoProgress(); track np.promoId) {
+                @if (np.soldOut) {
+                  <div class="nco-near-soldout">
+                    <strong>Promoción agotada</strong>
+                    <p class="nco-muted">
+                      Avísale al cliente: el premio de esta promoción está agotado.
+                    </p>
+                  </div>
+                } @else {
+                  <div class="nco-near-promo">
+                    <div class="nco-muted">{{ np.progressText }}</div>
+                    <div class="nco-near-track">
+                      <div class="nco-near-fill" [style.width.%]="np.percentComplete"></div>
+                    </div>
+                  </div>
+                }
+              }
+            }
+
+            @if (draftChoices().length > 0) {
+              <h3 class="nco-sim-subtitle">Premios a elegir</h3>
+              @for (c of draftChoices(); track choiceKey(c)) {
+                @if (c.soldOut) {
+                  <div class="nco-near-soldout">
+                    <strong>Promoción agotada</strong>
+                    <p class="nco-muted">
+                      {{ c.promoName }} · no se pide elegir, queda pendiente para supervisión.
+                    </p>
+                  </div>
+                } @else {
+                  <div class="nco-choice-card">
+                    <div class="nco-choice-title">✦ {{ c.promoName }} · {{ c.modeText }}</div>
+                    @for (opt of c.options; track opt.benefitLine) {
+                      <label class="nco-choice-option" [class.disabled]="!opt.available">
+                        <input
+                          [type]="isChoiceMulti(c) ? 'checkbox' : 'radio'"
+                          [name]="choiceKey(c)"
+                          [disabled]="!opt.available"
+                          [checked]="isChoiceOptionSelected(c, opt)"
+                          (change)="toggleChoiceOption(c, opt)"
+                        />
+                        {{ opt.displayText }}
+                        @if (!opt.available && opt.unavailableReason) {
+                          <span class="nco-choice-unavailable">{{ opt.unavailableReason }}</span>
+                        }
+                      </label>
+                    }
+                    <label class="nco-choice-option nco-choice-option-none">
+                      <input
+                        type="radio"
+                        [name]="choiceKey(c)"
+                        [checked]="!isChoiceMulti(c) && draftChoiceSelectionsFor(c).length === 0"
+                        (change)="selectChoiceNone(c)"
+                      />
+                      Dejar para supervisión
+                    </label>
+                  </div>
+                }
+              }
+            }
+
+            <div class="nco-sim-totals">
+              <div class="nco-sim-total-row nco-sim-total-strong">
+                <span>Subtotal</span><span>{{ formatSoles(subtotal()) }}</span>
+              </div>
+              <p class="nco-muted">El descuento y las bonificaciones se calculan al registrar.</p>
+            </div>
+
+            <button
+              uiButton
+              variant="primary"
+              class="ui-btn-block"
+              [disabled]="!canSubmit()"
+              [loading]="submitting()"
+              (click)="submit()"
+            >
+              Registrar pedido
+            </button>
+            @if (!canSubmit() && submitDisabledReason()) {
+              <p class="nco-submit-hint">{{ submitDisabledReason() }}</p>
+            }
+          </ui-card>
+        </div>
+      }
+    </div>
+  }
+</section>

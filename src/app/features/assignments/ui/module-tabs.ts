@@ -17,6 +17,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       <a routerLink="/asignaciones/huerfanos" routerLinkActive="active">Huérfanos</a>
       <a routerLink="/asignaciones/ausencias" routerLinkActive="active">Ausencias</a>
       <a routerLink="/asignaciones/mapa" routerLinkActive="active">Mapa</a>
+      <a routerLink="/asignaciones/coberturas" routerLinkActive="active">Coberturas</a>
       <a routerLink="/asignaciones/pendientes" routerLinkActive="active">Horario incompleto</a>
     </nav>
   `,

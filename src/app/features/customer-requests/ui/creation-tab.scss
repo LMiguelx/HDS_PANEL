@@ -1,0 +1,203 @@
+.ct-muted {
+  color: var(--ink-muted);
+  font-size: var(--fs-dense);
+}
+.ct-list-empty {
+  padding: var(--sp-6) var(--sp-5);
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: start;
+}
+.ct-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--fs-dense);
+  font-weight: 700;
+  color: var(--accent-ink);
+  cursor: pointer;
+  padding: 0;
+}
+
+// ---- Fila del listado ----
+.ct-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  border-left: 3px solid transparent;
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+}
+.ct-row:hover {
+  background: var(--faint);
+}
+.ct-row.selected {
+  background: var(--accent-wash);
+  border-left-color: var(--accent);
+}
+.ct-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ct-row-name {
+  font-weight: 800;
+  font-size: var(--fs-dense);
+  color: var(--ink);
+}
+.ct-row-line {
+  margin-top: 2px;
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ct-row-code {
+  font-variant-numeric: var(--tnum);
+  white-space: nowrap;
+}
+
+// ---- Detalle ----
+.ct-detail-skeleton {
+  height: 320px;
+  background: var(--faint);
+}
+.ct-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+.ct-detail-head h2 {
+  margin: 0;
+  font: var(--fw-h1) var(--fs-h1) / var(--lh-h1) var(--font-sans);
+  color: var(--ink);
+}
+.ct-detail-meta {
+  margin: 2px 0 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+}
+.ct-steps {
+  display: block;
+  margin-bottom: var(--sp-6);
+}
+.ct-block-title {
+  font-size: var(--fs-label);
+  font-weight: 800;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: var(--sp-6) 0 var(--sp-3);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--hairline);
+}
+.ct-block-title:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.ct-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-4) var(--sp-5);
+}
+.ct-field {
+  display: grid;
+  gap: 4px;
+}
+.ct-label {
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.ct-value {
+  font-size: var(--fs-body);
+  color: var(--ink);
+}
+.ct-value a {
+  color: var(--accent-ink);
+}
+.ct-mono {
+  font-family: monospace;
+  font-weight: 700;
+}
+.ct-warn {
+  color: var(--status-warn);
+  font-weight: 700;
+}
+
+.ct-assign {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.ct-disabled {
+  opacity: 0.6;
+}
+.ct-chip-group {
+  display: grid;
+  gap: var(--sp-2);
+}
+.ct-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ct-chip {
+  appearance: none;
+  font-family: var(--font-sans);
+  font-size: var(--fs-dense);
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid var(--divider);
+  background: transparent;
+  color: var(--ink);
+  min-height: 36px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-control);
+}
+.ct-chip:hover:not(:disabled) {
+  background: var(--faint);
+}
+.ct-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.ct-chip.on {
+  background: var(--accent-wash);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+// ---- Pie fijo ----
+.ct-footer-reason {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+}
+.ct-footer-reason .material-icons {
+  font-size: 16px;
+}
+.ct-footer-error {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-dense);
+  color: var(--status-danger);
+}
+.ct-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+}
