@@ -195,11 +195,43 @@ type BenefitLike = {
   discountPercent?: number | null;
 };
 
+/** "{n} unidad" · "{n} unidades", sin cero sobrante — base de los textos de obligatoriedad. */
+function unitsPhrase(n: number): string {
+  return `${quantityText(n)} unidad${n === 1 ? '' : 'es'}`;
+}
+
+/** Columna "Obligatorio" del resumen (paso 5) — doc 57, sección 7: "Al menos {n} unidad(es)". */
+export function minQuantityText(minQuantity: number): string {
+  return `Al menos ${unitsPhrase(minQuantity)}`;
+}
+
+/**
+ * Insignia de una condición obligatoria — doc 57, sección 4.2: el servidor
+ * manda `requiredText` ya armado en `ConditionView`; esta función arma el
+ * mismo texto para la vista previa local del asistente (sección 0.4: el
+ * panel arma sus propios textos de ayuda).
+ */
+export function requiredConditionText(minQuantity: number): string {
+  return `Obligatorio: al menos ${unitsPhrase(minQuantity)}`;
+}
+
+type RequiredConditionLike = { minQuantity: number; condition: ConditionLike };
+
+/** "incluyendo al menos 1 unidad de X y 2 de Y" — doc 57, sección 6.4. */
+function requiredInlineText(required: RequiredConditionLike[]): string {
+  if (required.length === 0) return '';
+  const parts = required.map(
+    (r) => `al menos ${unitsPhrase(r.minQuantity)} de ${singleWhatCountsText(r.condition)}`,
+  );
+  return `incluyendo ${joinWithY(parts)}`;
+}
+
 /**
  * Frase del tramo / frase de lista de clientes — doc 47, sección 5.4:
  * "Si compra {umbral} o más de {qué cuenta}, recibe {premios}{alcance si hay
  * descuento}" · "Por estar en la lista, el cliente recibe {premios} en todo
- * el pedido".
+ * el pedido". `requiredConditions` — doc 57, sección 6.4: líneas obligatorias
+ * del surtido, agregadas al final de la frase.
  */
 export function tierPhraseText(opts: {
   promoType?: string | null;
@@ -208,6 +240,7 @@ export function tierPhraseText(opts: {
   fromAmount?: number | null;
   conditions: ConditionLike[];
   benefits: BenefitLike[];
+  requiredConditions?: RequiredConditionLike[];
 }): string {
   const premios = joinWithY(opts.benefits.map((b) => benefitText(b))) || 'premios por definir';
   if (opts.promoType === 'CUSTOMER_LIST') {
@@ -217,7 +250,8 @@ export function tierPhraseText(opts: {
   const qc = whatCountsText(opts.conditions, opts.promoType);
   const hasDiscount = opts.benefits.some(isDiscountBenefit);
   const alcance = hasDiscount ? ` ${discountScopeText(opts.promoType)}` : '';
-  return `Si compra ${umbral} de ${qc}, recibe ${premios}${alcance}.`;
+  const requiredSuffix = requiredInlineText(opts.requiredConditions ?? []);
+  return `Si compra ${umbral} de ${qc}, recibe ${premios}${alcance}${requiredSuffix ? `, ${requiredSuffix}` : ''}.`;
 }
 
 /** Una fila: su propio texto. Varias: "Surtido de N productos" (frases cortas, p. ej. el resumen del asistente). */

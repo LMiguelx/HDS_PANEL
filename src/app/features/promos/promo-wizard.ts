@@ -36,7 +36,13 @@ import {
   priorityText,
   repeatsText,
 } from './promo-format';
-import { benefitText, measureModeText, tierPhraseText, whatCountsText } from './domain/promo-texts';
+import {
+  benefitText,
+  measureModeText,
+  requiredConditionText,
+  tierPhraseText,
+  whatCountsText,
+} from './domain/promo-texts';
 import { ToastService } from '../../core/ui/toast';
 import { formatSoles } from '../../shared/pipes/money';
 import { quantityText } from '../sales-reports/sales-report-format';
@@ -54,6 +60,8 @@ interface ConditionDraft {
   brandId?: number;
   name: string;
   code?: string; // doc 44, sección 8.3 — solo tiene sentido para PRODUCT
+  required?: boolean; // doc 57, sección 5.1 — "Obligatorio"
+  minQuantity?: number; // doc 57, sección 5.1 — en unidades, > 0 si required
 }
 
 interface BenefitDraft {
@@ -352,6 +360,25 @@ function emptyTier(tierNumber: number): TierDraft {
                                 <div class="wizard-condition-name">{{ c.name }}</div>
                                 <div class="wizard-condition-meta">{{ scopeLabel(c.scope) }}</div>
                               </div>
+                              <div class="wizard-condition-required">
+                                <ui-checkbox
+                                  label="Obligatorio"
+                                  [checked]="!!c.required"
+                                  (checkedChange)="setRequired(c, $event)"
+                                />
+                                @if (c.required) {
+                                  <ui-field
+                                    label="Cantidad mínima"
+                                    type="number"
+                                    [hasSuffix]="true"
+                                    [value]="String(c.minQuantity ?? 1)"
+                                    (valueChange)="setMinQuantity(c, $event)"
+                                    [error]="requiredFieldError(c)"
+                                  >
+                                    <span fieldSuffix class="wizard-field-suffix">unidades</span>
+                                  </ui-field>
+                                }
+                              </div>
                               <div class="wizard-condition-actions">
                                 <button
                                   uiButton
@@ -365,6 +392,18 @@ function emptyTier(tierNumber: number): TierDraft {
                             </div>
                           }
                         </div>
+                        @if (conditions().length > 0) {
+                          <p class="wizard-condition-help">
+                            Con una línea obligatoria, el pedido debe llevar al menos su cantidad
+                            mínima para ganar la promoción, aunque los demás productos ya sumen el
+                            tramo.
+                          </p>
+                        }
+                        @if (allConditionsRequired()) {
+                          <p class="wizard-condition-help">
+                            Todas las líneas son obligatorias: el pedido debe llevar todas.
+                          </p>
+                        }
                       </div>
                     </div>
                     <div class="wizard-side-card">
@@ -490,8 +529,13 @@ function emptyTier(tierNumber: number): TierDraft {
               <div class="wizard-tramos-main">
                 <h2>Tramos y premios</h2>
                 <p class="wizard-lede">
-                  Se otorga solo el tramo más alto que alcance el pedido:
-                  <strong>los tramos no se suman</strong>.
+                  @if (combineTiers()) {
+                    Con "Sumar tramos": se toma el tramo más alto todas las veces que entre y
+                    <strong>lo que sobra se cuenta con los tramos menores</strong>.
+                  } @else {
+                    Se otorga solo el tramo más alto que alcance el pedido:
+                    <strong>los tramos no se suman</strong>.
+                  }
                 </p>
 
                 <div class="wizard-measure-strip">
@@ -499,6 +543,11 @@ function emptyTier(tierNumber: number): TierDraft {
                     @if (requiresPurchase()) {
                       Se cuenta por {{ measureType() === 'AMOUNT' ? 'importe (S/)' : 'unidades' }} ·
                       {{ whatCountsPhrase() }}
+                      @if (requiredConditionsCount() > 0) {
+                        · {{ requiredConditionsCount() }} obligatorio{{
+                          requiredConditionsCount() === 1 ? '' : 's'
+                        }}
+                      }
                     } @else {
                       Se otorga por estar en la lista
                     }
@@ -515,6 +564,15 @@ function emptyTier(tierNumber: number): TierDraft {
                     <ui-toggle label="Se repite por múltiplos" [(checked)]="repeats" />
                     <p class="wizard-toggle-text wizard-toggle-text-muted">
                       Cada vez que el pedido junta otro mínimo, el premio se entrega otra vez.
+                    </p>
+                    <hr class="wizard-hr" />
+                    <ui-toggle
+                      label="Sumar tramos"
+                      [(checked)]="combineTiers"
+                      [disabled]="!!combineTiersDisabledReason()"
+                    />
+                    <p class="wizard-toggle-text wizard-toggle-text-muted">
+                      {{ combineTiersDisabledReason() || combineTiersHelpText() }}
                     </p>
                     @if (repeats()) {
                       <hr class="wizard-hr" />
@@ -658,14 +716,19 @@ function emptyTier(tierNumber: number): TierDraft {
                       <button uiButton variant="ghost" (click)="addPremio(t)">
                         + Agregar premio
                       </button>
-                      <button uiButton variant="ghost" (click)="addPremioAElegir(t)">
-                        + Agregar premio a elegir
-                      </button>
+                      @if (!combineTiers()) {
+                        <button uiButton variant="ghost" (click)="addPremioAElegir(t)">
+                          + Agregar premio a elegir
+                        </button>
+                      }
                     </div>
 
                     <div class="wizard-tier-phrase">
                       <strong>Así lo verá el vendedor</strong><br />
                       {{ tierPhrase(t) }}
+                      @if (combineTiers() && isHighestTier(t)) {
+                        <br />Además, lo que sobre se cuenta con los tramos menores.
+                      }
                     </div>
                   </div>
                 }
@@ -680,6 +743,9 @@ function emptyTier(tierNumber: number): TierDraft {
                       <span>{{ tierThresholdShort(t) }} · {{ tierBenefitSummary(t) }}</span>
                     </div>
                   }
+                  @if (combineTiers() && combineTiersExampleText()) {
+                    <p class="wizard-side-text">{{ combineTiersExampleText() }}</p>
+                  }
                 </div>
                 <div class="wizard-side-card">
                   <div class="wizard-side-eyebrow">Antes de continuar</div>
@@ -691,6 +757,9 @@ function emptyTier(tierNumber: number): TierDraft {
                       Los mínimos están en
                       {{ measureType() === 'AMOUNT' ? 'soles' : 'unidades' }}, como pide el paso 2.
                     </li>
+                    @if (combineTiers()) {
+                      <li>Sumar tramos: sin descuento en % ni premios a elegir.</li>
+                    }
                   </ul>
                 </div>
               </div>
@@ -893,6 +962,21 @@ function emptyTier(tierNumber: number): TierDraft {
                       Simula un pedido para confirmar que la promoción se aplica como esperas antes
                       de encenderla.
                     </p>
+                    @if (combineTiers()) {
+                      <p class="wizard-activate-text">
+                        Pruebe con una cantidad que pase el tramo más alto{{
+                          combineTiersSimSuggestion()
+                            ? ' (por ejemplo, ' + combineTiersSimSuggestion() + ')'
+                            : ''
+                        }}
+                        para ver la suma.
+                      </p>
+                    }
+                    @if (requiredConditionsCount() > 0) {
+                      <p class="wizard-activate-text">
+                        Pruebe un pedido sin el producto obligatorio: no debe ganar.
+                      </p>
+                    }
                     <button
                       uiButton
                       variant="secondary"
@@ -940,7 +1024,7 @@ function emptyTier(tierNumber: number): TierDraft {
         <ui-field
           label="Tipo de premio"
           type="select"
-          [options]="benefitTypeOptions"
+          [options]="benefitTypeOptionsAvailable()"
           [(value)]="b.benefitType"
         />
         @if (b.benefitType === 'FREE_PRODUCT') {
@@ -1171,6 +1255,20 @@ function emptyTier(tierNumber: number): TierDraft {
         display: flex;
         align-items: center;
         gap: 12px;
+      }
+      .wizard-condition-required {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .wizard-condition-required ui-field {
+        width: 150px;
+      }
+      .wizard-condition-help {
+        margin: 10px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .wizard-total-text {
         font-size: 15px;
@@ -1709,6 +1807,7 @@ export class PromoWizardPage {
   // Paso 3
   protected repeats = signal(false);
   protected maxRepeatsPerOrder = signal('');
+  protected combineTiers = signal(false); // doc 57, sección 6.1 — "Sumar tramos"
   protected simRepeatQuantity = signal('30');
   protected tiers = signal<TierDraft[]>([emptyTier(1)]);
   protected selectedTier = signal(0);
@@ -1749,9 +1848,14 @@ export class PromoWizardPage {
     this.lookupSvc.salesChannels().subscribe((items) => {
       // Primera opción explícita: sin ella el navegador pinta el primer canal
       // aunque el modelo esté vacío, y la promo se guardaría sin canal.
+      // "Ninguno" (id 0) no se ofrece aquí — doc 57, sección 9: el backend
+      // rechaza salesChannelId=0 en promociones; "Todos los vendedores"
+      // (sin canal) ya cubre ese caso con value=''.
       this.channelOptions.set([
-        { value: '', label: 'Todos los canales' },
-        ...items.map((i) => ({ value: String(i.id), label: i.name ?? '' })),
+        { value: '', label: 'Todos los vendedores' },
+        ...items
+          .filter((i) => i.id !== 0)
+          .map((i) => ({ value: String(i.id), label: i.name ?? '' })),
       ]);
     });
 
@@ -1892,6 +1996,30 @@ export class PromoWizardPage {
 
   protected removeCondition(c: ConditionDraft) {
     this.conditions.update((list) => list.filter((x) => x !== c));
+  }
+
+  /** "Obligatorio" por línea — doc 57, sección 5.2: nace con cantidad mínima 1. */
+  protected setRequired(c: ConditionDraft, required: boolean) {
+    c.required = required;
+    c.minQuantity = required ? (c.minQuantity ?? 1) : undefined;
+    this.conditions.update((list) => [...list]);
+  }
+
+  protected setMinQuantity(c: ConditionDraft, raw: string) {
+    c.minQuantity = this.numberOr(1, raw);
+    this.conditions.update((list) => [...list]);
+  }
+
+  protected requiredFieldError(c: ConditionDraft): string {
+    if (!this.errorSteps().includes(1)) return '';
+    if (c.required && (!c.minQuantity || c.minQuantity <= 0)) {
+      return 'Indique la cantidad mínima, mayor a cero';
+    }
+    return '';
+  }
+
+  protected allConditionsRequired(): boolean {
+    return this.conditions().length > 0 && this.conditions().every((c) => !!c.required);
   }
 
   protected setAmbito(item: UiLookupItem) {
@@ -2242,7 +2370,7 @@ export class PromoWizardPage {
     });
   }
 
-  /** Frase del tramo en vivo, al pie de su editor — doc 47, sección 5.4 y 6.3. */
+  /** Frase del tramo en vivo, al pie de su editor — doc 47, sección 5.4 y 6.3; doc 57, sección 6.4. */
   protected tierPhrase(t: TierDraft): string {
     return tierPhraseText({
       promoType: this.requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST',
@@ -2251,13 +2379,50 @@ export class PromoWizardPage {
       fromAmount: this.measureType() === 'AMOUNT' ? t.threshold : null,
       conditions: this.effectiveConditionsForText(),
       benefits: t.benefitGroups.flatMap((g) => g.benefits),
+      requiredConditions: this.requiredConditionsForText(),
     });
   }
 
-  /** Banner "Así funciona" del paso 5 — doc 47, sección 6.4: la frase del tramo 1. */
+  /** Condiciones obligatorias con su mínimo, para las frases de 6.4 — solo aplica al surtido. */
+  protected requiredConditionsForText(): {
+    minQuantity: number;
+    condition: {
+      scope: 'PRODUCT' | 'FAMILY' | 'BRAND';
+      productCode?: string;
+      productName?: string;
+      familyName?: string;
+      brandName?: string;
+    };
+  }[] {
+    if (this.mode() !== 'surtido') return [];
+    return this.conditions()
+      .filter((c) => c.required && c.minQuantity)
+      .map((c) => ({
+        minQuantity: c.minQuantity!,
+        condition: {
+          scope: c.scope,
+          productCode: c.code,
+          productName: c.name,
+          familyName: c.scope === 'FAMILY' ? c.name : undefined,
+          brandName: c.scope === 'BRAND' ? c.name : undefined,
+        },
+      }));
+  }
+
+  protected requiredConditionsCount(): number {
+    return this.conditions().filter((c) => c.required).length;
+  }
+
+  protected isHighestTier(t: TierDraft): boolean {
+    return t.tier === this.tiers().length;
+  }
+
+  /** Banner "Así funciona" del paso 5 — doc 47, sección 6.4; doc 57, sección 7: + "Los tramos se suman." */
   protected firstTierPhrase(): string {
     const t1 = this.tiers()[0];
-    return t1 ? this.tierPhrase(t1) : '';
+    if (!t1) return '';
+    const base = this.tierPhrase(t1);
+    return this.combineTiers() ? `${base} Los tramos se suman.` : base;
   }
 
   protected extraTiersCount(): number {
@@ -2309,6 +2474,9 @@ export class PromoWizardPage {
           familyName: isFamily ? sel.name : undefined,
           brandId: !isFamily ? sel.id : undefined,
           brandName: !isFamily ? sel.name : undefined,
+          required: false,
+          minQuantity: null,
+          requiredText: null,
         },
       ];
     }
@@ -2323,6 +2491,9 @@ export class PromoWizardPage {
       familyName: c.scope === 'FAMILY' ? c.name : undefined,
       brandId: c.brandId,
       brandName: c.scope === 'BRAND' ? c.name : undefined,
+      required: !!c.required,
+      minQuantity: c.required ? (c.minQuantity ?? null) : null,
+      requiredText: c.required && c.minQuantity ? requiredConditionText(c.minQuantity) : null,
     }));
   });
 
@@ -2391,12 +2562,15 @@ export class PromoWizardPage {
             },
           ]
         : []),
-      { label: 'Canal', value: this.selectedChannelName() || 'Todos los canales' },
+      { label: 'Canal', value: this.selectedChannelName() || 'Todos los vendedores' },
       { label: 'Vigencia', value: this.vigenciaSummary() },
       { label: 'Prioridad', value: this.priorityLabel() },
       { label: 'Destacada en la app', value: this.featured() ? 'Sí' : 'No' },
       { label: 'Se combina con otras', value: this.stackable() ? 'Sí' : 'No' },
       { label: 'Se repite por múltiplos', value: this.repeatsSummary() },
+      ...(this.requiresPurchase()
+        ? [{ label: 'Sumar tramos', value: this.combineTiers() ? 'Sí' : 'No' }]
+        : []),
       { label: 'Veces por cliente', value: this.maxApplicationsSummary() },
     ];
   }
@@ -2452,15 +2626,89 @@ export class PromoWizardPage {
   }
 
   protected repeatsHelpText(): string {
+    const tope = this.numberOr(3, this.maxRepeatsPerOrder());
+    if (this.combineTiers()) {
+      return `Se cuentan todas las veces de todos los tramos juntos. Nunca más de ${tope} veces por pedido.`;
+    }
     const t1 = this.tiers()[0];
     const umbral = t1?.threshold ?? 10;
     const unidad = this.measureType() === 'AMOUNT' ? 'soles' : 'unidades';
-    const tope = this.numberOr(3, this.maxRepeatsPerOrder());
     const base = `Cada vez que el pedido junta otras ${umbral} ${unidad}, se entrega el premio otra vez: ${umbral * 2} → 2, ${umbral * 3} → 3. Nunca más de ${tope} veces por pedido.`;
     if (this.tiers().length > 1) {
       return `${base} Se repite solo el tramo más alto alcanzado; los tramos no se combinan.`;
     }
     return base;
+  }
+
+  // — Sumar tramos — doc 57, secciones 6.2 y 10.2 —
+
+  protected combineTiersDisabledReason(): string {
+    if (this.tiers().length < 2) return 'Agregue al menos dos tramos para sumarlos.';
+    const hasPercent = this.tiers().some((t) =>
+      t.benefitGroups.some((g) => g.benefits.some((b) => b.benefitType === 'DISCOUNT_PERCENT')),
+    );
+    if (hasPercent) return 'No se pueden sumar tramos con descuento en porcentaje.';
+    const hasChoice = this.tiers().some((t) =>
+      t.benefitGroups.some((g) => g.selectionMode === 'CHOOSE'),
+    );
+    if (hasChoice) return 'No se pueden sumar tramos con premios a elegir.';
+    return '';
+  }
+
+  protected benefitTypeOptionsAvailable(): UiFieldOption[] {
+    if (!this.combineTiers()) return this.benefitTypeOptions;
+    return this.benefitTypeOptions.filter((o) => o.value !== 'DISCOUNT_PERCENT');
+  }
+
+  protected combineTiersHelpText(): string {
+    return (
+      this.combineTiersExampleText() ||
+      'El tramo más alto se entrega todas las veces que entre y lo que sobra se cuenta con los tramos menores.'
+    );
+  }
+
+  /** Ejemplo dinámico con los dos tramos más altos — doc 57, sección 10.2. */
+  protected combineTiersExampleText(): string {
+    const sorted = [...this.tiers()]
+      .filter((t) => t.threshold != null)
+      .sort((a, b) => (b.threshold ?? 0) - (a.threshold ?? 0));
+    if (sorted.length < 2) return '';
+    const [a, b] = sorted;
+    const benefitOf = (t: TierDraft) =>
+      t.benefitGroups.flatMap((g) => g.benefits).find((x) => x.benefitType === 'FREE_PRODUCT');
+    const ba = benefitOf(a);
+    const bb = benefitOf(b);
+    if (!ba || !bb || a.threshold == null || b.threshold == null || !ba.quantity || !bb.quantity) {
+      return '';
+    }
+    const amount = this.measureType() === 'AMOUNT';
+    const totalText = amount
+      ? formatSoles(a.threshold + b.threshold)
+      : `${quantityText(a.threshold + b.threshold)} unidades`;
+    const aText = amount ? formatSoles(a.threshold) : quantityText(a.threshold);
+    const bText = amount ? formatSoles(b.threshold) : quantityText(b.threshold);
+    const sameProduct =
+      ba.catalog && bb.catalog
+        ? ba.productId != null && ba.productId === bb.productId
+        : !ba.catalog && !bb.catalog
+          ? !!ba.label && ba.label === bb.label
+          : false;
+    if (sameProduct) {
+      return `Ej.: ${totalText} → ${aText} da ${ba.quantity} y ${bText} da ${bb.quantity} = ${ba.quantity + bb.quantity}.`;
+    }
+    const nameOf = (x: BenefitDraft) =>
+      x.catalog ? (x.productName ?? x.productCode ?? 'producto') : (x.label ?? 'producto');
+    return `Ej.: ${totalText} → ${ba.quantity} × ${nameOf(ba)} + ${bb.quantity} × ${nameOf(bb)}.`;
+  }
+
+  /** Cantidad sugerida para "Simular pedido" (paso 5) — doc 57, sección 7: suma de los dos tramos más altos. */
+  protected combineTiersSimSuggestion(): string {
+    const sorted = [...this.tiers()]
+      .filter((t) => t.threshold != null)
+      .sort((a, b) => (b.threshold ?? 0) - (a.threshold ?? 0));
+    if (sorted.length < 2) return '';
+    const total = (sorted[0].threshold ?? 0) + (sorted[1].threshold ?? 0);
+    return this.measureType() === 'AMOUNT' ? formatSoles(total) : quantityText(total);
   }
 
   private validateStep(n: number): boolean {
@@ -2469,7 +2717,11 @@ export class PromoWizardPage {
       if (!this.requiresPurchase()) return true;
       const hasCondition =
         this.mode() === 'ambito' ? !!this.ambitoSelected() : this.conditions().length > 0;
-      return hasCondition && !!this.measureType();
+      const requiredLinesValid =
+        this.mode() === 'surtido'
+          ? this.conditions().every((c) => !c.required || (!!c.minQuantity && c.minQuantity > 0))
+          : true;
+      return hasCondition && !!this.measureType() && requiredLinesValid;
     }
     if (n === 2) {
       return this.tiers().every((t, i) => !this.tierValidationError(t, i));
@@ -2577,6 +2829,8 @@ export class PromoWizardPage {
       productId: c.productId,
       familyId: c.familyId,
       brandId: c.brandId,
+      required: !!c.required,
+      minQuantity: c.required ? (c.minQuantity ?? 1) : undefined,
     }));
   }
 
@@ -2604,6 +2858,7 @@ export class PromoWizardPage {
       conditions: this.buildConditionsCommand(),
       tiers: this.buildTiersCommand(),
       featured: this.featured(),
+      combineTiers: this.requiresPurchase() && this.combineTiers(),
     };
   }
 
@@ -2627,6 +2882,7 @@ export class PromoWizardPage {
       endDate: this.endDate() || undefined,
       conditions: this.buildConditionsCommand(),
       tiers: this.buildTiersCommand(),
+      combineTiers: this.requiresPurchase() && this.combineTiers(),
     };
   }
 
@@ -2667,6 +2923,7 @@ export class PromoWizardPage {
       this.measureType.set((p.measureType as 'QUANTITY' | 'AMOUNT') || 'QUANTITY');
       this.repeats.set(!!p.repeats);
       this.maxRepeatsPerOrder.set(p.maxRepeatsPerOrder != null ? String(p.maxRepeatsPerOrder) : '');
+      this.combineTiers.set(!!p.combineTiers);
       const brandCond = (p.conditions ?? []).find(
         (c) => c.scope === 'BRAND' || c.scope === 'FAMILY',
       );
@@ -2687,6 +2944,8 @@ export class PromoWizardPage {
             brandId: c.brandId ?? undefined,
             name: c.productName ?? c.familyName ?? c.brandName ?? '',
             code: c.productCode ?? undefined,
+            required: !!c.required,
+            minQuantity: c.required ? (c.minQuantity ?? 1) : undefined,
           })),
         );
       }

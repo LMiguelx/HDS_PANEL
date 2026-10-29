@@ -9,7 +9,14 @@ export type PromoPageResponse = Omit<
   components['schemas']['PageResponsePromoSummary'],
   'content'
 > & { content: PromoSummary[] };
-export type UpdatePromoCommand = components['schemas']['UpdatePromoCommand'];
+/**
+ * `combineTiers` ("Sumar tramos") — doc 57, sección 4.1. `api.ts` todavía
+ * no lo trae, así que se extiende a mano, igual que `CreatePromoCommand`.
+ */
+export type UpdatePromoCommand = Omit<components['schemas']['UpdatePromoCommand'], 'conditions'> & {
+  combineTiers: boolean; // NUEVO — doc 57
+  conditions?: ConditionCommand[];
+};
 
 /**
  * `featured` (destacada en la app del vendedor) — doc 49, secciones 5.1 y
@@ -26,8 +33,16 @@ export type PromoSummary = components['schemas']['PromoSummary'] & {
   rewardStatus: 'AVAILABLE' | 'PARTIAL' | 'SOLD_OUT' | null;
   rewardStatusLabel: string | null;
 };
-export type CreatePromoCommand = components['schemas']['CreatePromoCommand'] & {
+/**
+ * `combineTiers` ("Sumar tramos") — doc 57, sección 4.1. `api.ts` todavía
+ * no lo trae, así que se extiende a mano. `conditions` se reescribe para
+ * que use el `ConditionCommand` local (con `required`/`minQuantity`) en
+ * vez del generado, que aún no los tiene.
+ */
+export type CreatePromoCommand = Omit<components['schemas']['CreatePromoCommand'], 'conditions'> & {
   featured?: boolean;
+  combineTiers?: boolean; // NUEVO — doc 57. Si no se envía: false
+  conditions?: ConditionCommand[];
 };
 
 /**
@@ -42,11 +57,13 @@ export interface PromoUsageView {
   lastAppliedAt: string | null; // última aplicación; null = nunca
 }
 
-export type PromoDetail = components['schemas']['PromoDetail'] & {
+export type PromoDetail = Omit<components['schemas']['PromoDetail'], 'conditions'> & {
   usage: PromoUsageView;
   definitionEditable: boolean; // true cuando usage.orderCount = 0
   editBlockReason: string | null; // por qué no se puede editar todo (null si definitionEditable)
   featured: boolean; // doc 49, sección 6.1 — destacada en la app del vendedor
+  combineTiers: boolean; // doc 57, sección 4.2 — la promoción suma tramos
+  conditions?: ConditionView[];
 };
 
 /** Edición básica — doc 44, sección 7.3: PATCH /promos/{id}/basics, siempre permitido. */
@@ -57,8 +74,21 @@ export interface UpdatePromoBasicsCommand {
   featured: boolean | null; // doc 49, sección 7.1 — enviar siempre true/false; null = no se cambia
 }
 
-export type ConditionCommand = components['schemas']['ConditionCommand'];
-export type ConditionView = components['schemas']['ConditionView'];
+/**
+ * `required`/`minQuantity` ("producto obligatorio") — doc 57, sección 4.1.
+ * `api.ts` todavía no los trae, así que se extienden a mano.
+ */
+export type ConditionCommand = components['schemas']['ConditionCommand'] & {
+  required?: boolean; // NUEVO. Si no se envía: false
+  minQuantity?: number | null; // NUEVO — obligatorio si required = true, > 0; si no, enviar null
+};
+
+/** `required`/`minQuantity`/`requiredText` — doc 57, sección 4.2. `requiredText` llega listo. */
+export type ConditionView = components['schemas']['ConditionView'] & {
+  required: boolean; // NUEVO
+  minQuantity: number | null; // NUEVO — null si no es obligatoria
+  requiredText: string | null; // NUEVO — "Obligatorio: al menos N unidad(es)"; null si no es obligatoria
+};
 export type TierCommand = components['schemas']['TierCommand'];
 export type TierView = components['schemas']['TierView'];
 export type BenefitGroupCommand = components['schemas']['BenefitGroupCommand'];

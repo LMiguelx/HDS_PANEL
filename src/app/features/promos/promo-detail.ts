@@ -74,6 +74,9 @@ import { quantityText } from '../sales-reports/sales-report-format';
                   ><span class="material-icons" aria-hidden="true">star</span> Destacada</ui-badge
                 >
               }
+              @if (p.combineTiers) {
+                <ui-badge tone="neutral" class="pd-featured-badge">Suma tramos</ui-badge>
+              }
             </div>
             <p class="pd-meta">{{ metaLine(p) }}</p>
             @if (p.description) {
@@ -219,7 +222,7 @@ import { quantityText } from '../sales-reports/sales-report-format';
                       >
                     }
                   </h3>
-                  <span class="pd-card-note">Se mide en {{ measureLabel(p) }}</span>
+                  <span class="pd-card-note">{{ tiersCardNote(p) }}</span>
                 </div>
                 <app-promo-tiers-table
                   [tiers]="p.tiers"
@@ -604,12 +607,21 @@ export class PromoDetailPage {
       p.salesChannelName ? `Canal ${p.salesChannelName}` : 'Todos los canales',
       vigenciaFullText(p.startDate, p.endDate),
       `Prioridad ${priorityText(p.priority)}`,
+      p.combineTiers ? 'Se combina' : null,
     ].filter(Boolean);
     return parts.join(' · ');
   }
 
   protected measureLabel(p: PromoDetail): string {
     return p.measureType === 'AMOUNT' ? 'monto (S/)' : 'unidades';
+  }
+
+  /** doc 57, sección 8: nota de "Sumar tramos" junto a "Se mide en X". */
+  protected tiersCardNote(p: PromoDetail): string {
+    const base = `Se mide en ${this.measureLabel(p)}`;
+    return p.combineTiers
+      ? `${base} · Los tramos se suman: lo que sobra del tramo más alto se cuenta con los menores.`
+      : base;
   }
 
   protected showSumNote(p: PromoDetail): boolean {
