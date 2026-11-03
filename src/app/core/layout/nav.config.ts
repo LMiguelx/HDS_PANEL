@@ -212,6 +212,13 @@ export const NAV: NavItem[] = [
     anyOf: ['report.view', 'config.edit', 'stock.advance'],
     group: 'Administración',
   },
+  {
+    label: 'Recepción de mercadería',
+    icon: 'move_to_inbox',
+    route: '/recepcion-mercaderia',
+    anyOf: ['goods_receipt.view', 'goods_receipt.manage', 'goods_receipt.config'],
+    group: 'Administración',
+  },
   // Acceso a Reportes de ventas para quien solo tiene `report.view` (p. ej.
   // Jefe de reparto) — doc 50, sección 4: no tiene `order.view_all`, así que
   // no ve la entrada de "Ventas", pero sí puede consultar estos reportes.

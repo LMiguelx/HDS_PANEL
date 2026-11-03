@@ -31,6 +31,10 @@ export const PERMISSIONS = {
   CONFIG_EDIT: 'config.edit',
   STOCK_ADVANCE: 'stock.advance',
   USER_MANAGE: 'user.manage',
+  GOODS_RECEIPT_VIEW: 'goods_receipt.view',
+  GOODS_RECEIPT_MANAGE: 'goods_receipt.manage',
+  GOODS_RECEIPT_STORE: 'goods_receipt.store',
+  GOODS_RECEIPT_CONFIG: 'goods_receipt.config',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

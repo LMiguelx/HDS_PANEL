@@ -176,6 +176,16 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/inventory/inventory.routes').then((m) => m.INVENTORY_ROUTES),
       },
+      {
+        path: 'recepcion-mercaderia',
+        canActivate: [
+          permissionGuard('goods_receipt.view', 'goods_receipt.manage', 'goods_receipt.config'),
+        ],
+        loadChildren: () =>
+          import('./features/goods-receipts/goods-receipts.routes').then(
+            (m) => m.GOODS_RECEIPTS_ROUTES,
+          ),
+      },
       // Mantenimiento se mudó a Empresa → Sistema (doc 38, sección 10).
       { path: 'mantenimiento', redirectTo: 'empresa/sistema' },
     ],
