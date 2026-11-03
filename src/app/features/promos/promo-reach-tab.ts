@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { format, parseISO } from 'date-fns';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
@@ -521,7 +521,7 @@ const CHOICE_FILTER_OPTIONS: UiFieldOption[] = [
     `,
   ],
 })
-export class PromoReachTab {
+export class PromoReachTab implements OnInit {
   private promoSvc = inject(PromoService);
   private router = inject(Router);
   private dialog = inject(UiDialogService);
@@ -580,7 +580,10 @@ export class PromoReachTab {
     );
   });
 
-  constructor() {
+  // No leer input.required() en el constructor (NG0950): el router/padre
+  // todavía no lo asignó. La primera carga se cuelga de ngOnInit — doc 59,
+  // sección 4.1.
+  ngOnInit(): void {
     if (this.initialFrom()) this.from.set(this.initialFrom()!);
     if (this.initialTo()) this.to.set(this.initialTo()!);
     this.reload();

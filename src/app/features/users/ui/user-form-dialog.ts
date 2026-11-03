@@ -3,6 +3,7 @@ import { UiButton } from '../../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../../shared/ui/field/field';
 import { UiModal } from '../../../shared/ui/modal/modal';
 import { UiDialogRef } from '../../../shared/ui/dialog/dialog';
+import { AuthService } from '../../../core/auth/auth';
 import { UserAdminService } from '../user-admin';
 import { RoleLookupService } from '../role-lookup';
 import { CompanyAdminService } from '../../company/company-admin';
@@ -90,7 +91,7 @@ import { UserCreatedResult } from '../../../shared/models/user.models';
             <span class="ufd-muted">Cargando…</span>
           } @else {
             <div class="ufd-roles-list">
-              @for (r of roles(); track r.roleId) {
+              @for (r of visibleRoles(); track r.roleId) {
                 <label class="ufd-role-row">
                   <input
                     type="checkbox"
@@ -213,6 +214,7 @@ export class UserFormDialog {
   private userSvc = inject(UserAdminService);
   private roleSvc = inject(RoleLookupService);
   private companySvc = inject(CompanyAdminService);
+  private auth = inject(AuthService);
 
   protected salesChannelOptions = SALES_CHANNEL_OPTIONS;
 
@@ -242,6 +244,11 @@ export class UserFormDialog {
     { value: '', label: 'Sin sede' },
     ...this.branches().map((b) => ({ value: String(b.branchId), label: b.name })),
   ]);
+
+  // Solo un ADMIN puede asignar el rol Administrador — doc 59, sección 2.3.
+  protected visibleRoles = computed(() =>
+    this.auth.hasRole('ADMIN') ? this.roles() : this.roles().filter((r) => r.code !== 'ADMIN'),
+  );
 
   protected passwordError = computed(() => {
     if (!this.submitted()) return '';

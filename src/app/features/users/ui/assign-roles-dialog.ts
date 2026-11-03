@@ -1,6 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
+import { AuthService } from '../../../core/auth/auth';
 import { UserAdminService } from '../user-admin';
 import { RoleLookupService } from '../role-lookup';
 import { Role } from '../../../shared/models/auth.models';
@@ -28,7 +29,7 @@ export interface AssignRolesDialogData {
         <span class="ard-muted">Cargando…</span>
       } @else {
         <div class="ard-roles-list">
-          @for (r of roles(); track r.roleId) {
+          @for (r of visibleRoles(); track r.roleId) {
             <label class="ard-role-row">
               <input
                 type="checkbox"
@@ -110,12 +111,18 @@ export class AssignRolesDialog {
   protected ref = inject(UiDialogRef<boolean>);
   private userSvc = inject(UserAdminService);
   private roleSvc = inject(RoleLookupService);
+  private auth = inject(AuthService);
 
   protected roles = signal<Role[]>([]);
   protected loading = signal(true);
   protected selectedRoleIds = signal<Set<number>>(new Set(this.data.currentRoleIds));
   protected saving = signal(false);
   protected error = signal('');
+
+  // Solo un ADMIN puede asignar el rol Administrador — doc 59, sección 2.3.
+  protected visibleRoles = computed(() =>
+    this.auth.hasRole('ADMIN') ? this.roles() : this.roles().filter((r) => r.code !== 'ADMIN'),
+  );
 
   constructor() {
     this.roleSvc.list().subscribe({

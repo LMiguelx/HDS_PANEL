@@ -1,9 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiTable } from '../../shared/ui/table/table';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { AuthService } from '../../core/auth/auth';
 import { UserFormDialog } from './ui/user-form-dialog';
 import { UserAdminService } from './user-admin';
 import { UserSummaryView } from '../../shared/models/user.models';
@@ -26,7 +27,7 @@ import { UserSummaryView } from '../../shared/models/user.models';
         [loading]="loading()"
         [error]="error()"
         errorMessage="No pudimos cargar los usuarios."
-        [empty]="!loading() && !error() && rows().length === 0"
+        [empty]="!loading() && !error() && visibleRows().length === 0"
         (retry)="load()"
       >
         <div empty>
@@ -45,7 +46,7 @@ import { UserSummaryView } from '../../shared/models/user.models';
             </tr>
           </thead>
           <tbody>
-            @for (u of rows(); track u.userId) {
+            @for (u of visibleRows(); track u.userId) {
               <tr>
                 <td class="ul-muted">{{ u.code }}</td>
                 <td class="ul-cell-strong">{{ u.username }}</td>
@@ -63,7 +64,7 @@ import { UserSummaryView } from '../../shared/models/user.models';
         </table>
 
         <div class="ul-cards-mobile">
-          @for (u of rows(); track u.userId) {
+          @for (u of visibleRows(); track u.userId) {
             <a [routerLink]="['/usuarios', u.userId]" class="ul-card-mobile">
               <div class="ul-card-mobile-head">
                 <span class="ul-card-mobile-name">{{ u.fullName }}</span>
@@ -80,7 +81,13 @@ import { UserSummaryView } from '../../shared/models/user.models';
 
       @if (!loading() && !error() && rows().length > 0) {
         <div class="ul-pager">
-          <button uiButton variant="secondary" size="sm" [disabled]="page() === 0" (click)="prevPage()">
+          <button
+            uiButton
+            variant="secondary"
+            size="sm"
+            [disabled]="page() === 0"
+            (click)="prevPage()"
+          >
             Anterior
           </button>
           <span class="ul-pager-label">Página {{ page() + 1 }} de {{ totalPages() || 1 }}</span>
@@ -182,8 +189,16 @@ import { UserSummaryView } from '../../shared/models/user.models';
 export class UserListPage {
   private userSvc = inject(UserAdminService);
   private dialog = inject(UiDialogService);
+  private auth = inject(AuthService);
 
   protected rows = signal<UserSummaryView[]>([]);
+  // La cuenta propia se gestiona solo desde Mi perfil — doc 59, sección 2.2.
+  // Filtro en el navegador: el total de la paginación puede contar una fila
+  // de más y no se avisa por eso.
+  protected visibleRows = computed(() => {
+    const myId = this.auth.currentUser()?.userId;
+    return this.rows().filter((u) => u.userId !== myId);
+  });
   protected totalElements = signal(0);
   protected totalPages = signal(0);
   protected page = signal(0);

@@ -21,6 +21,7 @@ export interface UserView {
   salesChannelName: string | null;
   passwordChangedAt: string | null; // null si nunca la cambió
   nextPasswordChangeAt: string | null; // null si ya puede volver a cambiarla
+  lastLoginAt: string | null; // null si nunca ingresó — doc 59, sección 1.2
 }
 
 export interface UserSummaryView {

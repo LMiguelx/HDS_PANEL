@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, input, signal } from '@angular/cor
 import { UiButton } from '../../shared/ui/button/button';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { ToastService } from '../../core/ui/toast';
 import { UserAdminService } from './user-admin';
 import { UserEditDialog } from './ui/user-edit-dialog';
 import { ResetPasswordDialog } from './ui/reset-password-dialog';
@@ -10,6 +11,9 @@ import { CompanyAdminService } from '../company/company-admin';
 import { UserView } from '../../shared/models/user.models';
 import { BranchView } from '../../shared/models/tenant.models';
 import { salesChannelName, userInitials } from './user-format';
+import { dateTimeText } from '../assignments/assignment-format';
+import { Router } from '@angular/router';
+import { AuthService } from '../../core/auth/auth';
 
 /**
  * Ficha de usuario (GET /api/users/{id}) con las acciones de administración
@@ -98,15 +102,26 @@ import { salesChannelName, userInitials } from './user-format';
                     <span class="ud-data-value">{{ salesChannelName(u.salesChannelId) }}</span>
                   </div>
                 </div>
+                <div class="ud-data-item">
+                  <span class="material-icons ud-data-icon" aria-hidden="true">login</span>
+                  <div>
+                    <span class="ud-data-label">Último ingreso</span>
+                    <span class="ud-data-value" [class.ud-data-empty]="!u.lastLoginAt">{{
+                      u.lastLoginAt ? dateTimeText(u.lastLoginAt) : 'Nunca ingresó'
+                    }}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div class="ud-card">
               <div class="ud-card-head">
                 <h2 class="ud-card-title">Roles asignados</h2>
-                <button type="button" class="ud-link" (click)="changeRoles(u)">
-                  Cambiar roles
-                </button>
+                @if (!isProtectedAdmin()) {
+                  <button type="button" class="ud-link" (click)="changeRoles(u)">
+                    Cambiar roles
+                  </button>
+                }
               </div>
               @if (u.roles.length === 0) {
                 <ui-empty title="Sin roles" body="Este usuario no tiene roles asignados." />
@@ -123,16 +138,27 @@ import { salesChannelName, userInitials } from './user-format';
           <div class="ud-side">
             <div class="ud-card ud-actions-card">
               <h2 class="ud-card-title">Acciones</h2>
-              <button uiButton variant="primary" (click)="edit(u)">Editar</button>
-              <button uiButton variant="secondary" (click)="resetPassword(u)">
-                Restablecer contraseña
-              </button>
-              @if (u.active) {
-                <button uiButton variant="secondary" class="ud-btn-danger" (click)="deactivate(u)">
-                  Desactivar
-                </button>
+              @if (isProtectedAdmin()) {
+                <p class="ud-protected-text">
+                  Solo un administrador puede modificar a otro administrador.
+                </p>
               } @else {
-                <button uiButton variant="secondary" (click)="activate(u)">Activar</button>
+                <button uiButton variant="primary" (click)="edit(u)">Editar</button>
+                <button uiButton variant="secondary" (click)="resetPassword(u)">
+                  Restablecer contraseña
+                </button>
+                @if (u.active) {
+                  <button
+                    uiButton
+                    variant="secondary"
+                    class="ud-btn-danger"
+                    (click)="deactivate(u)"
+                  >
+                    Desactivar
+                  </button>
+                } @else {
+                  <button uiButton variant="secondary" (click)="activate(u)">Activar</button>
+                }
               }
             </div>
           </div>
@@ -300,6 +326,11 @@ import { salesChannelName, userInitials } from './user-format';
         color: var(--accent-ink);
         border-color: var(--accent-ink);
       }
+      .ud-protected-text {
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
 
       @media (max-width: 900px) {
         .ud-layout {
@@ -326,11 +357,15 @@ export class UserDetailPage {
   private userSvc = inject(UserAdminService);
   private companySvc = inject(CompanyAdminService);
   private dialog = inject(UiDialogService);
+  private toast = inject(ToastService);
+  private auth = inject(AuthService);
+  private router = inject(Router);
 
   userId = input('', { alias: 'userId' });
 
   protected salesChannelName = salesChannelName;
   protected initials = userInitials;
+  protected dateTimeText = dateTimeText;
 
   protected user = signal<UserView | null>(null);
   protected loading = signal(true);
@@ -339,6 +374,13 @@ export class UserDetailPage {
 
   private loadEffect = effect(() => {
     if (this.userId()) this.load();
+  });
+
+  // Solo un ADMIN puede editar/resetear/cambiar roles/activar-desactivar a
+  // otro usuario que tiene rol ADMIN — doc 59, sección 2.3.
+  protected isProtectedAdmin = computed(() => {
+    const u = this.user();
+    return !!u && u.roles.some((r) => r.code === 'ADMIN') && !this.auth.hasRole('ADMIN');
   });
 
   protected branchName = computed(() => {
@@ -357,6 +399,11 @@ export class UserDetailPage {
   load() {
     const id = Number(this.userId());
     if (!id) return;
+    // La cuenta propia se gestiona solo en Mi perfil — doc 59, sección 2.2.
+    if (id === this.auth.currentUser()?.userId) {
+      this.router.navigateByUrl('/mi-perfil');
+      return;
+    }
     this.loading.set(true);
     this.error.set(false);
     this.userSvc.detail(id).subscribe({
@@ -414,19 +461,53 @@ export class UserDetailPage {
   }
 
   protected activate(u: UserView) {
-    this.userSvc.activate(u.userId).subscribe(() => this.load());
+    this.userSvc.activate(u.userId).subscribe({
+      next: () => {
+        this.toast.success('Usuario activado');
+        this.load();
+      },
+      error: (err) => {
+        if (err?.status === 409) {
+          this.toast.error(err?.error?.detail || 'No pudimos activar al usuario.');
+          this.load();
+        } else if (err?.status === 403) {
+          this.toast.error('No tiene permisos para esta operación.');
+        } else {
+          this.toast.error('No pudimos activar al usuario.');
+        }
+      },
+    });
   }
 
   protected deactivate(u: UserView) {
     this.dialog
       .confirm({
         title: 'Desactivar usuario',
-        message: `¿Desactivar a "${u.fullName}"? Perderá el acceso al sistema.`,
+        message: `¿Desactivar a "${u.fullName}"? No podrá ingresar a la app ni al panel hasta que se active de nuevo.`,
         confirmLabel: 'Desactivar',
         destructive: true,
       })
       .subscribe((confirmed) => {
-        if (confirmed) this.userSvc.deactivate(u.userId).subscribe(() => this.load());
+        if (!confirmed) return;
+        this.userSvc.deactivate(u.userId).subscribe({
+          next: () => {
+            this.toast.success('Usuario desactivado');
+            this.load();
+          },
+          error: (err) => {
+            if (err?.status === 404) {
+              this.toast.error('El usuario ya está inactivo');
+              this.load();
+            } else if (err?.status === 409) {
+              this.toast.error(err?.error?.detail || 'No pudimos desactivar al usuario.');
+              this.load();
+            } else if (err?.status === 403) {
+              this.toast.error('No tiene permisos para esta operación.');
+            } else {
+              this.toast.error('No pudimos desactivar al usuario.');
+            }
+          },
+        });
       });
   }
 }

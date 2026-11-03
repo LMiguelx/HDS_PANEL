@@ -74,6 +74,16 @@ export class OrderAdminService {
   }
 
   /**
+   * Recalcula las promociones de un pedido abierto con las vigentes hoy —
+   * doc 59, sección 3. Sin body; no cambia precios, cantidades, productos,
+   * cliente, vendedor ni condición de pago. Distinto del recálculo en lote
+   * de Validación de pedidos (doc 55): este siempre recalcula.
+   */
+  recalculatePromos(orderId: number) {
+    return this.http.post<OrderDetail>(`${this.base}/${orderId}/recalculate-promos`, {});
+  }
+
+  /**
    * Equivalente global (todo el tenant) de "mi liquidación del día", para
    * el admin — `order.view_all`. Sin pantalla propia todavía (base para una
    * futura vista); se deja disponible para reuso, p.ej. desde el dashboard.

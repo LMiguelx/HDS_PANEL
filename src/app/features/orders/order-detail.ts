@@ -106,9 +106,21 @@ import { formatSoles } from '../../shared/pipes/money';
                 uiButton
                 variant="secondary"
                 *hasPermission="['order.edit', 'order.manage']"
-                [routerLink]="['/pedidos/editar', o.orderId]"
+                [class.od-btn-disabled]="recalculatingOrderPromos()"
+                [routerLink]="recalculatingOrderPromos() ? null : ['/pedidos/editar', o.orderId]"
               >
                 Editar
+              </button>
+              <button
+                uiButton
+                variant="secondary"
+                *hasPermission="['order.edit', 'order.manage']"
+                [loading]="recalculatingOrderPromos()"
+                [disabled]="recalculatingOrderPromos()"
+                (click)="recalculateOrderPromotions(o)"
+              >
+                <span class="material-icons" aria-hidden="true">autorenew</span>
+                Recalcular promociones
               </button>
             }
             @if (canDeliver(o)) {
@@ -116,7 +128,7 @@ import { formatSoles } from '../../shared/pipes/money';
                 uiButton
                 variant="secondary"
                 *hasPermission="'order.manage'"
-                [disabled]="blockedForClosing()"
+                [disabled]="blockedForClosing() || recalculatingOrderPromos()"
                 [title]="blockedForClosing() ? 'Resuelve lo pendiente antes de entregar' : ''"
                 [loading]="delivering()"
                 (click)="deliverAtCounter(o)"
@@ -129,7 +141,7 @@ import { formatSoles } from '../../shared/pipes/money';
                 uiButton
                 variant="secondary"
                 *hasPermission="'order.send_to_billing'"
-                [disabled]="blockedForClosing()"
+                [disabled]="blockedForClosing() || recalculatingOrderPromos()"
                 [title]="blockedForClosing() ? 'Resuelve lo pendiente antes de enviarlo' : ''"
                 [loading]="sendingToBilling()"
                 (click)="validateAndSend(o)"
@@ -142,6 +154,7 @@ import { formatSoles } from '../../shared/pipes/money';
                 uiButton
                 variant="secondary"
                 *hasPermission="'order.cancel'"
+                [disabled]="recalculatingOrderPromos()"
                 [loading]="cancelling()"
                 (click)="cancelOrder(o)"
               >
@@ -657,6 +670,10 @@ import { formatSoles } from '../../shared/pipes/money';
         gap: 8px;
         flex-wrap: wrap;
       }
+      .od-btn-disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
       .od-note {
         margin-top: 14px;
         border-left: 3px solid var(--accent);
@@ -1034,6 +1051,7 @@ export class OrderDetailPage {
   protected cancelling = signal(false);
   protected recalculating = signal(false);
   protected recalculatingPromos = signal(false);
+  protected recalculatingOrderPromos = signal(false);
   protected billingValidation = signal<OrderBillingValidation | null>(null);
 
   private paymentConditionNames = signal<Map<number, string>>(new Map());
@@ -1323,6 +1341,57 @@ export class OrderDetailPage {
         );
       },
     });
+  }
+
+  /**
+   * "Recalcular promociones" de la cabecera — doc 59, sección 3. A
+   * diferencia de `recalculatePromotions` (doc 55, solo pedidos marcados
+   * recalculables por la validación), este siempre recalcula; no cambia
+   * precios, cantidades, productos, cliente, vendedor ni condición de pago.
+   */
+  protected recalculateOrderPromotions(o: OrderDetail) {
+    this.dialog
+      .confirm({
+        title: '¿Recalcular las promociones de este pedido?',
+        message:
+          'Se volverán a calcular bonificaciones, descuentos y totales con las promociones vigentes hoy. Los precios y las cantidades no cambian. Una bonificación sin stock quedará pendiente.',
+        confirmLabel: 'Recalcular',
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.recalculatingOrderPromos.set(true);
+        const before = o;
+        this.orderSvc.recalculatePromos(o.orderId).subscribe({
+          next: (updated) => {
+            this.recalculatingOrderPromos.set(false);
+            this.order.set(updated);
+            this.billingValidation.set(null);
+            this.loadPendingChoices(updated);
+            const changed =
+              updated.netAmount !== before.netAmount ||
+              updated.discountAmount !== before.discountAmount ||
+              JSON.stringify(updated.items) !== JSON.stringify(before.items);
+            this.toast.success(
+              changed ? 'Promociones recalculadas' : 'El pedido ya tenía todas sus promociones',
+            );
+          },
+          error: (err) => {
+            this.recalculatingOrderPromos.set(false);
+            if (err?.status === 409) {
+              const detalle = err?.error?.detail;
+              this.toast.error(detalle || 'El pedido ya no está abierto.');
+              this.load();
+            } else if (err?.status === 404) {
+              this.toast.error('No se encontró el pedido');
+              this.router.navigateByUrl('/pedidos');
+            } else if (err?.status === 403) {
+              this.toast.error('No tiene permisos para esta operación.');
+            } else {
+              this.toast.error('No se pudo recalcular; intente de nuevo');
+            }
+          },
+        });
+      });
   }
 
   /** Valida antes de enviar (doc 32, sección 10.3): si falla, muestra los motivos en vez de enviar. */
