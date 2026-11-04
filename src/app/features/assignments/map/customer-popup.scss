@@ -1,6 +1,8 @@
 .cp-wrap {
   position: absolute;
-  z-index: 30;
+  // Por encima de los controles de Leaflet (.leaflet-top/.leaflet-bottom,
+  // z-index 1000): si no, el popup queda tapado por el mapa.
+  z-index: 1010;
   transform: translate(-50%, calc(-100% - 14px));
   pointer-events: none;
 }

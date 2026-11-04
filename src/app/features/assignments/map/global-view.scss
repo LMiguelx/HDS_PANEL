@@ -146,7 +146,9 @@
   top: var(--sp-4);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 20;
+  // Por encima de los controles de Leaflet (z-index 1000) — si no, el mapa
+  // la tapa.
+  z-index: 1001;
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   border: 1px solid var(--divider);
   border-radius: var(--radius-control);

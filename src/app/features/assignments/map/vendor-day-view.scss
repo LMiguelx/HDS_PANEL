@@ -73,7 +73,9 @@
   position: absolute;
   left: var(--sp-4);
   bottom: var(--sp-4);
-  z-index: 15;
+  // Por encima de los controles de Leaflet (z-index 1000) — si no, el mapa
+  // la tapa.
+  z-index: 1001;
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   border: 1px solid var(--divider);
   border-radius: var(--radius-control);
