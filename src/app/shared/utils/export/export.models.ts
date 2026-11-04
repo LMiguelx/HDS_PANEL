@@ -1,6 +1,7 @@
-// Tipos del exportador compartido — doc 43, sección 8.2.
+// Tipos del exportador compartido — doc 43, sección 8.2. `pdf` — doc 63,
+// sección 7.3.
 
-export type ExportFormat = 'xlsx' | 'csv';
+export type ExportFormat = 'xlsx' | 'csv' | 'pdf';
 
 export type ColumnType =
   | 'text' // texto libre
@@ -21,6 +22,8 @@ export interface ExportColumn<T> {
   width?: number; // ancho sugerido en caracteres (opcional)
   bold?: boolean; // resaltar (ej. Neto, Venta total)
   emptyWhenZero?: boolean; // mostrar vacío en vez de 0 (ej. columnas de mostrador)
+  /** Texto siempre en rojo (ej. "Diferencia" de un reporte de negativos — doc 63, sección 7.1). */
+  redText?: boolean;
 }
 
 export interface ExportTable<T> {
@@ -34,4 +37,12 @@ export interface ExportTable<T> {
   footnote?: string; // "Último pedido registrado a las 15:17 del 21/10/2026"
   fileName: string; // sin extensión (sección 8.7)
   sheetName?: string; // por defecto, el title recortado
+  /**
+   * Hora en que el servidor armó los datos (ISO) — doc 63, sección 7.1.
+   * Cuando viene, el encabezado usa "HDS Gestor de pedidos · Fecha de
+   * consulta: {dd/MM/yyyy}" en vez de "Generado el {hora del navegador}",
+   * y se agrega el pie "---- Fin del reporte ----  {fecha y hora}". Queda
+   * disponible para cualquier otro reporte que lo necesite.
+   */
+  generatedAt?: string;
 }

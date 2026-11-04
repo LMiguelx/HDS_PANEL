@@ -21,10 +21,18 @@ const POSITIONS: ConnectedPosition[] = [
   { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -4 },
 ];
 
+const FORMAT_LABEL: Record<ExportFormat, string> = {
+  xlsx: 'Excel (.xlsx)',
+  csv: 'CSV',
+  pdf: 'PDF',
+};
+
 /**
- * Botón "Exportar ▾" con Excel (.xlsx) y CSV — doc 43, secciones 2.1 y
- * 8.10. Presentacional: no inyecta servicios ni sabe de `TableExporter`,
- * solo emite el formato elegido.
+ * Botón "Exportar ▾" — doc 43, secciones 2.1 y 8.10; doc 63, sección 7.3
+ * agrega PDF. `formats` elige qué ofrecer (por defecto Excel y CSV, como
+ * siempre); una pantalla con PDF pasa `[formats]="['xlsx', 'pdf']"`.
+ * Presentacional: no inyecta servicios ni sabe de `TableExporter`, solo
+ * emite el formato elegido.
  */
 @Component({
   selector: 'ui-export-menu',
@@ -52,8 +60,9 @@ const POSITIONS: ConnectedPosition[] = [
 
     <ng-template #panel>
       <div class="uem-panel" cdkTrapFocus cdkTrapFocusAutoCapture>
-        <button type="button" (click)="pick('xlsx')">Excel (.xlsx)</button>
-        <button type="button" (click)="pick('csv')">CSV</button>
+        @for (f of formats(); track f) {
+          <button type="button" (click)="pick(f)">{{ formatLabel(f) }}</button>
+        }
       </div>
     </ng-template>
   `,
@@ -98,7 +107,12 @@ export class UiExportMenu {
   disabled = input(false);
   busy = input(false);
   progressText = input('');
+  formats = input<ExportFormat[]>(['xlsx', 'csv']);
   exportFormat = output<ExportFormat>({ alias: 'export' });
+
+  protected formatLabel(f: ExportFormat): string {
+    return FORMAT_LABEL[f];
+  }
 
   private trigger = viewChild('trigger', { read: ElementRef<HTMLElement> });
   private panelTpl = viewChild<TemplateRef<unknown>>('panel');

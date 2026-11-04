@@ -1,7 +1,12 @@
 // Validación de stock — doc 56, secciones 4.1 y 10. Etiquetas, tonos y
 // textos de ayuda; todo lo demás (contadores, estado) llega listo del
 // servidor.
-import { StockValidationRow, StockValidationStatus } from '../../shared/models/sales-report.models';
+import { format, parseISO } from 'date-fns';
+import {
+  NegativeStockRow,
+  StockValidationRow,
+  StockValidationStatus,
+} from '../../shared/models/sales-report.models';
 import { BadgeTone, BADGE_TONE_VAR } from '../inventory/inventory-format';
 
 export { BADGE_TONE_VAR };
@@ -58,4 +63,27 @@ export function panelHeadlineText(row: StockValidationRow): string {
 
 export function advanceNotBackedText(row: StockValidationRow): string {
   return `Hay un adelanto de ${row.openAdvanceQuantity} que el ERP no registró. Si la mercadería llegó, regístrela en el ERP y vuelva a actualizar.`;
+}
+
+// ─────────────────────── Reporte de negativos — doc 63 ───────────────────────
+
+/**
+ * "Subida ERP" en pantalla — doc 63, sección 3: sin año si es del año en
+ * curso. `null` → cadena vacía; el llamador pinta la insignia "Sin subida".
+ */
+export function erpUploadScreenText(iso: string | null): string {
+  if (!iso) return '';
+  const d = parseISO(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return format(d, sameYear ? 'dd/MM HH:mm' : 'dd/MM/yyyy HH:mm');
+}
+
+/**
+ * "Subida ERP" en el archivo (Excel/PDF) — doc 63, sección 7.1: siempre con
+ * año; termina en " *" si `erpStale`; "Sin subida" si nunca subió.
+ */
+export function erpUploadFileText(row: NegativeStockRow): string {
+  if (!row.erpStockAt) return 'Sin subida';
+  const text = format(parseISO(row.erpStockAt), 'dd/MM/yyyy HH:mm');
+  return row.erpStale ? `${text} *` : text;
 }

@@ -146,6 +146,37 @@ export interface StockValidationReport {
   rows: StockValidationRow[];
 }
 
+// ─────────────────────── Reporte de negativos — doc 63, sección 4 ───────────────────────
+// Diferencia con Validación de stock: aquella cuenta TODO lo que falta
+// facturar sin importar el día; este reporte mira SOLO el día elegido —
+// lo que se va a facturar hoy y lo que almacén corrige hoy.
+
+export interface NegativeStockRow {
+  productId: number; // NO mostrar — abre sus pedidos (doc 56, sección 7)
+  productCode: string;
+  productName: string;
+  unitOfMeasure: string;
+  soldQuantity: number; // Vendido
+  systemStock: number; // Stock app (referencia)
+  erpStock: number | null; // Stock ERP; null = el ERP nunca lo subió
+  erpStockAt: string | null; // fecha y hora de esa subida; null = nunca
+  erpStale: boolean; // no vino en la última actualización del ERP
+  difference: number; // siempre negativa
+}
+
+export interface NegativeStockReport {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  date: string; // yyyy-MM-dd — día de los pedidos
+  lastErpUploadAt: string | null; // última actualización del ERP en el almacén; null si nunca
+  pendingUploads: number; // > 0 = el reporte aún no refleja la última subida
+  generatedAt: string; // hora de la consulta (va en el archivo)
+  productCount: number; // productos vendidos en el día (todos)
+  negativeCount: number; // filas del reporte
+  noErpStockCount: number; // de ellas, sin subida del ERP
+  rows: NegativeStockRow[];
+}
+
 /** Panel "Pedidos de un producto" — doc 56, sección 7. */
 export interface StockValidationOrderRow {
   orderId: number; // mostrar como "N.° de pedido"

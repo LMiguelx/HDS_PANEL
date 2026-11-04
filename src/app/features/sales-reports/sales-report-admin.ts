@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
   BrandSalesReport,
+  NegativeStockReport,
   ProductSalesReport,
   SalespersonSettlementReport,
   SettlementGroupBy,
@@ -79,5 +80,17 @@ export class SalesReportAdminService {
       `${this.base}/stock-validation/${productId}/orders`,
       { params: { warehouseId } },
     );
+  }
+
+  /**
+   * Reporte de negativos de un día — doc 63, sección 4. `date` sin enviar =
+   * hoy. Solo salen las filas con diferencia negativa (Stock ERP − Vendido).
+   */
+  negatives(warehouseId: number, date?: string) {
+    let params = new HttpParams().set('warehouseId', warehouseId);
+    if (date) params = params.set('date', date);
+    return this.http.get<NegativeStockReport>(`${this.base}/stock-validation/negatives`, {
+      params,
+    });
   }
 }

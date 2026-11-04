@@ -1,14 +1,17 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs/operators';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField } from '../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
+import { UiExportMenu } from '../../shared/ui/export-menu/export-menu';
 import { ToastService } from '../../core/ui/toast';
+import { TableExporter } from '../../shared/utils/export/table-exporter.service';
+import { ExportFormat } from '../../shared/utils/export/export.models';
 import { LookupService, toUiLookup } from '../promos/lookup';
 import { OrderAdminService } from '../orders/order-admin';
 import { PendingBonusAdminService } from '../orders/pending-bonus-admin';
@@ -26,10 +29,15 @@ import {
   OrderBillingValidation,
   OrderRecalculationOutcome,
 } from '../../shared/models/billing-validation.models';
+import { NegativeStockReport } from '../../shared/models/sales-report.models';
 import { originName } from '../orders/order-format';
 import { elsewhereLinkFor, recalcOutcomeText } from './billing-validation-format';
+import { erpUploadScreenText } from '../sales-reports/stock-validation-format';
 import { dateTimeText, timeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
+import { CounterSessionStore } from '../orders/counter-session-store';
+import { SalesReportAdminService } from '../sales-reports/sales-report-admin';
+import { negativeStockExportTable } from '../sales-reports/domain/negative-stock.columns';
 
 function todayIso(): string {
   const d = new Date();
@@ -37,7 +45,7 @@ function todayIso(): string {
 }
 
 type Phase = 'browse' | 'validating' | 'results' | 'sending' | 'sent';
-type ShowFilter = 'issues' | 'valid' | 'all' | 'recalculable';
+type ShowFilter = 'issues' | 'valid' | 'all';
 
 const VALIDATE_CHUNK = 200;
 const SEND_CHUNK = 100;
@@ -50,7 +58,15 @@ const RECALCULATE_CHUNK = 100;
  */
 @Component({
   selector: 'app-billing-pending-tab',
-  imports: [RouterLink, UiButton, UiField, UiTypeahead, UiEmpty, BillingValidationModuleTabs],
+  imports: [
+    RouterLink,
+    UiButton,
+    UiField,
+    UiTypeahead,
+    UiEmpty,
+    UiExportMenu,
+    BillingValidationModuleTabs,
+  ],
   template: `
     <app-billing-validation-module-tabs />
     <section class="bpt-page">
@@ -404,18 +420,33 @@ const RECALCULATE_CHUNK = 100;
         }
 
         <div class="bpt-summary-row">
-          <div class="bpt-summary-card">
+          <button
+            type="button"
+            class="bpt-summary-card bpt-summary-card-filter"
+            [class.bpt-summary-card-on]="showFilter() === 'all'"
+            (click)="showFilter.set('all')"
+          >
             <span class="bpt-summary-value">{{ validatedTotal() }}</span>
             <span class="bpt-summary-label">Validados</span>
-          </div>
-          <div class="bpt-summary-card">
+          </button>
+          <button
+            type="button"
+            class="bpt-summary-card bpt-summary-card-filter"
+            [class.bpt-summary-card-on]="showFilter() === 'valid'"
+            (click)="showFilter.set('valid')"
+          >
             <span class="bpt-summary-value">{{ validCount() }}</span>
             <span class="bpt-summary-label">Válidos</span>
-          </div>
-          <div class="bpt-summary-card bpt-summary-card-warn">
+          </button>
+          <button
+            type="button"
+            class="bpt-summary-card bpt-summary-card-filter bpt-summary-card-warn"
+            [class.bpt-summary-card-on]="showFilter() === 'issues'"
+            (click)="showFilter.set('issues')"
+          >
             <span class="bpt-summary-value">{{ invalidCount() }}</span>
             <span class="bpt-summary-label">Con motivos</span>
-          </div>
+          </button>
           @if (recalculableCount() > 0) {
             <div class="bpt-summary-card bpt-summary-card-recalc">
               <span class="bpt-summary-value">{{ recalculableCount() }}</span>
@@ -430,44 +461,70 @@ const RECALCULATE_CHUNK = 100;
               </button>
             </div>
           }
+          @if (negError()) {
+            <div class="bpt-summary-card bpt-summary-card-neg">
+              <span class="bpt-summary-label">Negativos</span>
+              <span class="bpt-summary-value bpt-summary-value-muted">—</span>
+            </div>
+          } @else if (negReport(); as nr) {
+            <div
+              class="bpt-summary-card bpt-summary-card-neg"
+              [class.bpt-summary-card-warn]="nr.negativeCount > 0"
+              [class.bpt-summary-card-ok]="nr.negativeCount === 0"
+            >
+              <span class="bpt-summary-label">Negativos</span>
+              <span class="bpt-summary-value">
+                {{
+                  nr.negativeCount > 0
+                    ? nr.negativeCount + ' producto' + (nr.negativeCount === 1 ? '' : 's')
+                    : 'Sin negativos'
+                }}
+              </span>
+              <div class="bpt-summary-actions-row">
+                <button
+                  type="button"
+                  class="bpt-summary-action"
+                  [disabled]="negLoading()"
+                  (click)="viewNegatives()"
+                >
+                  Ver
+                </button>
+                <ui-export-menu
+                  [formats]="['xlsx', 'pdf']"
+                  [disabled]="nr.negativeCount === 0"
+                  [busy]="exportingNeg()"
+                  (export)="exportNegatives($event)"
+                />
+              </div>
+            </div>
+          }
         </div>
 
-        <div class="bpt-show-filter">
-          <button
-            type="button"
-            class="bpt-chip"
-            [class.on]="showFilter() === 'issues'"
-            (click)="showFilter.set('issues')"
-          >
-            Con motivos <span class="bpt-chip-count">{{ invalidCount() }}</span>
-          </button>
-          @if (recalculableCount() > 0) {
-            <button
-              type="button"
-              class="bpt-chip bpt-chip-recalc"
-              [class.on]="showFilter() === 'recalculable'"
-              (click)="showFilter.set('recalculable')"
-            >
-              Recalculables <span class="bpt-chip-count">{{ recalculableCount() }}</span>
-            </button>
+        @if (negReport(); as nr) {
+          @if (nr.pendingUploads > 0) {
+            <div class="bpt-neg-banner bpt-neg-banner-amber">
+              El ERP está terminando de subir el stock. Espere y vuelva a validar.
+            </div>
+          } @else if (!nr.lastErpUploadAt) {
+            <div class="bpt-neg-banner bpt-neg-banner-gray">
+              El ERP no ha subido stock a este almacén: no se pueden validar negativos.
+            </div>
+          } @else if (nr.negativeCount > 0) {
+            <div class="bpt-neg-banner bpt-neg-banner-red">
+              <div>
+                {{ nr.negativeCount }} producto{{ nr.negativeCount === 1 ? '' : 's' }} vendido{{
+                  nr.negativeCount === 1 ? '' : 's'
+                }}
+                el {{ shortDate(nr.date) }} no alcanza{{ nr.negativeCount === 1 ? '' : 'n' }} con el
+                stock del ERP (subida {{ erpUploadScreenText(nr.lastErpUploadAt) }}). Envíe el
+                reporte a almacén para que corrija antes de facturar.
+              </div>
+              <button type="button" class="bpt-summary-action" (click)="viewNegatives()">
+                Ver negativos
+              </button>
+            </div>
           }
-          <button
-            type="button"
-            class="bpt-chip"
-            [class.on]="showFilter() === 'valid'"
-            (click)="showFilter.set('valid')"
-          >
-            Válidos <span class="bpt-chip-count">{{ validCount() }}</span>
-          </button>
-          <button
-            type="button"
-            class="bpt-chip"
-            [class.on]="showFilter() === 'all'"
-            (click)="showFilter.set('all')"
-          >
-            Todos <span class="bpt-chip-count">{{ validatedTotal() }}</span>
-          </button>
-        </div>
+        }
 
         @if (filteredValidationOrders().length === 0) {
           <ui-empty
@@ -1034,10 +1091,6 @@ const RECALCULATE_CHUNK = 100;
         color: var(--st-pendiente);
         background: color-mix(in srgb, var(--st-pendiente) 14%, transparent);
       }
-      .bpt-chip-recalc.on {
-        background: var(--st-pendiente);
-        border-color: var(--st-pendiente);
-      }
       .bpt-summary-card-recalc {
         border-color: var(--st-pendiente);
         display: flex;
@@ -1080,8 +1133,47 @@ const RECALCULATE_CHUNK = 100;
         padding: 14px 20px;
         min-width: 110px;
       }
+      .bpt-summary-card-filter {
+        appearance: none;
+        text-align: left;
+        background: var(--bg);
+        font-family: var(--font-sans);
+        cursor: pointer;
+      }
+      .bpt-summary-card-filter:hover {
+        border-color: var(--accent);
+      }
+      .bpt-summary-card-on {
+        border-color: var(--ink);
+        border-width: 2px;
+      }
       .bpt-summary-card-warn {
         border-color: var(--st-pendiente);
+      }
+      .bpt-summary-card-neg {
+        display: flex;
+        flex-direction: column;
+      }
+      .bpt-summary-card-neg.bpt-summary-card-warn {
+        border-color: var(--st-mismatch);
+      }
+      .bpt-summary-card-neg.bpt-summary-card-warn .bpt-summary-value {
+        color: var(--st-mismatch);
+      }
+      .bpt-summary-card-neg.bpt-summary-card-ok {
+        border-color: var(--st-vigente);
+      }
+      .bpt-summary-card-neg.bpt-summary-card-ok .bpt-summary-value {
+        color: var(--st-vigente);
+      }
+      .bpt-summary-value-muted {
+        color: var(--ink-muted);
+      }
+      .bpt-summary-actions-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 6px;
       }
       .bpt-summary-value {
         display: block;
@@ -1099,41 +1191,29 @@ const RECALCULATE_CHUNK = 100;
         font-size: 12px;
         color: var(--ink-muted);
       }
-      .bpt-show-filter {
+      .bpt-neg-banner {
+        margin-top: 16px;
+        padding: 12px 16px;
+        font-size: 13px;
+        border-left: 3px solid var(--hairline);
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin: 20px 0 16px;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
       }
-      .bpt-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-family: var(--font-sans);
-        font-size: 13px;
-        font-weight: 700;
-        padding: 7px 14px;
-        border: 2px solid var(--divider);
-        border-radius: var(--radius-pill);
-        background: var(--surface);
+      .bpt-neg-banner-amber {
+        border-color: var(--st-pendiente);
+        background: color-mix(in srgb, var(--st-pendiente) 10%, transparent);
+      }
+      .bpt-neg-banner-gray {
+        border-color: var(--hairline);
+        background: var(--faint);
         color: var(--ink-muted);
-        cursor: pointer;
       }
-      .bpt-chip.on {
-        background: var(--ink);
-        border-color: var(--ink);
-        color: var(--bg);
-      }
-      .bpt-chip-count {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 18px;
-        height: 18px;
-        padding: 0 5px;
-        border-radius: var(--radius-pill);
-        background: color-mix(in srgb, currentColor 16%, transparent);
-        font-size: 11px;
+      .bpt-neg-banner-red {
+        border-color: var(--st-mismatch);
+        background: color-mix(in srgb, var(--st-mismatch) 8%, transparent);
       }
 
       .bpt-result-list {
@@ -1355,6 +1435,10 @@ export class BillingPendingTab {
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private reportSvc = inject(SalesReportAdminService);
+  private exporter = inject(TableExporter);
+  private counterSession = inject(CounterSessionStore);
 
   protected formatSoles = formatSoles;
   protected dateTimeText = dateTimeText;
@@ -1362,6 +1446,11 @@ export class BillingPendingTab {
   protected originName = originName;
   protected elsewhereLink = elsewhereLinkFor;
   protected recalcOutcomeText = recalcOutcomeText;
+  protected erpUploadScreenText = erpUploadScreenText;
+
+  protected shortDate(iso: string): string {
+    return format(parseISO(iso), 'dd/MM');
+  }
 
   protected userSearch = (q: string) =>
     this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
@@ -1419,6 +1508,7 @@ export class BillingPendingTab {
    * detalle de validación, sin pasar por el listado del día.
    */
   constructor() {
+    this.counterSession.ensureLoaded();
     const orderId = Number(this.route.snapshot.queryParamMap.get('orderId'));
     if (orderId) this.validateFromLink(orderId);
   }
@@ -1521,6 +1611,12 @@ export class BillingPendingTab {
   protected resolvingBonusKey = signal<string | null>(null);
   protected cancelingId = signal<number | null>(null);
 
+  // — Negativos del día — doc 63, sección 5 —
+  protected negReport = signal<NegativeStockReport | null>(null);
+  protected negLoading = signal(false);
+  protected negError = signal(false);
+  protected exportingNeg = signal(false);
+
   // — Recalcular (lote) — doc 55 —
   protected resultsSelected = signal<Set<number>>(new Set());
   protected resultsSelectedRecalculableIds = computed(() =>
@@ -1590,7 +1686,6 @@ export class BillingPendingTab {
     const orders = this.validationOrders();
     if (filter === 'valid') return orders.filter((o) => o.valid);
     if (filter === 'issues') return orders.filter((o) => !o.valid);
-    if (filter === 'recalculable') return orders.filter((o) => o.recalculable);
     return orders;
   });
 
@@ -1640,6 +1735,54 @@ export class BillingPendingTab {
     this.validationDate.set(this.dayFilter());
     this.phase.set('validating');
     this.runValidatePage(0);
+    this.loadNegatives();
+  }
+
+  /**
+   * Reporte de negativos — doc 63, sección 5.1. En paralelo a validar el
+   * día (no al validar una selección) y de nuevo tras cada recálculo.
+   */
+  private loadNegatives() {
+    const warehouseId = this.counterSession.warehouseId();
+    const date = this.validationDate();
+    if (!warehouseId || !date) {
+      this.negReport.set(null);
+      return;
+    }
+    this.negLoading.set(true);
+    this.negError.set(false);
+    this.reportSvc.negatives(warehouseId, date).subscribe({
+      next: (result) => {
+        this.negReport.set(result);
+        this.negLoading.set(false);
+      },
+      error: () => {
+        this.negLoading.set(false);
+        this.negError.set(true);
+      },
+    });
+  }
+
+  protected viewNegatives() {
+    this.router.navigate(['/reportes-ventas/validacion-stock'], {
+      queryParams: {
+        tab: 'negativos',
+        warehouseId: this.counterSession.warehouseId() ?? undefined,
+        date: this.validationDate() ?? undefined,
+      },
+    });
+  }
+
+  protected exportNegatives(format: ExportFormat) {
+    const r = this.negReport();
+    if (!r || r.negativeCount === 0) return;
+    this.exportingNeg.set(true);
+    this.exporter
+      .export(negativeStockExportTable(r), format)
+      .catch((err) => {
+        this.toast.error(err instanceof Error ? err.message : 'No se pudo generar el archivo.');
+      })
+      .finally(() => this.exportingNeg.set(false));
   }
 
   private runValidatePage(page: number) {
@@ -1771,6 +1914,7 @@ export class BillingPendingTab {
             ),
           );
         }
+        this.loadNegatives();
       },
       error: (err) => {
         this.recalculatingId.set(null);
@@ -1905,6 +2049,7 @@ export class BillingPendingTab {
         for (const id of target) next.delete(id);
         return next;
       });
+      this.loadNegatives();
       return;
     }
     this.billingSvc.recalculate({ orderIds: chunks[index] }).subscribe({

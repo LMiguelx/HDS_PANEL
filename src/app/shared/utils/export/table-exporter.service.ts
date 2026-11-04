@@ -11,7 +11,12 @@ import { buildCsv } from './export-csv';
 @Injectable({ providedIn: 'root' })
 export class TableExporter {
   async export<T>(table: ExportTable<T>, format: ExportFormat): Promise<void> {
-    const blob = format === 'xlsx' ? await this.buildXlsxSafe(table) : buildCsv(table);
+    const blob =
+      format === 'xlsx'
+        ? await this.buildXlsxSafe(table)
+        : format === 'pdf'
+          ? await this.buildPdfSafe(table)
+          : buildCsv(table);
     const fileName = table.fileName.endsWith(`.${format}`)
       ? table.fileName
       : `${table.fileName}.${format}`;
@@ -27,6 +32,18 @@ export class TableExporter {
         throw new Error(
           'No se pudo preparar el archivo de Excel. Revisa tu conexión o exporta en CSV.',
         );
+      }
+      throw new Error('No se pudo generar el archivo. Intenta de nuevo.');
+    }
+  }
+
+  private async buildPdfSafe<T>(table: ExportTable<T>): Promise<Blob> {
+    try {
+      const { buildPdf } = await import('./export-pdf');
+      return await buildPdf(table);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'JSPDF_LOAD_FAILED') {
+        throw new Error('No se pudo preparar el archivo de PDF. Revisa tu conexión.');
       }
       throw new Error('No se pudo generar el archivo. Intenta de nuevo.');
     }

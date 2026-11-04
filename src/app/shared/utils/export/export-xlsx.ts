@@ -4,6 +4,7 @@
 // en vez del entrypoint de Node (`main`), que usa `fs`/`stream` y no
 // resuelve con esbuild — ver `exceljs-browser.d.ts` para sus tipos.
 import type { CellValue } from 'exceljs';
+import { format, parseISO } from 'date-fns';
 import { ExportColumn, ExportTable } from './export.models';
 import {
   columnScreenText,
@@ -15,7 +16,16 @@ import {
 
 const HEADER_FILL = 'FFEFEFEF';
 const SUBTITLE_FONT_COLOR = 'FF5F6672';
+const RED_FONT_COLOR = 'FFD13B3B';
 const MAX_SHEET_NAME = 31;
+
+function dateOnly(iso: string): string {
+  return format(parseISO(iso), 'dd/MM/yyyy');
+}
+
+function dateTimeAmPm(iso: string): string {
+  return format(parseISO(iso), 'dd/MM/yyyy hh:mm:ss a');
+}
 
 function numFmtFor(type: ExportColumn<unknown>['type']): string | undefined {
   switch (type) {
@@ -98,12 +108,20 @@ export async function buildXlsx<T>(table: ExportTable<T>): Promise<Blob> {
     return row;
   };
 
+  if (table.generatedAt) {
+    addPlainRow(`HDS Gestor de pedidos · Fecha de consulta: ${dateOnly(table.generatedAt)}`, {
+      size: 9,
+      color: SUBTITLE_FONT_COLOR,
+    });
+  }
   addPlainRow(table.title, { bold: true, size: 14 });
   if (table.subtitle) addPlainRow(table.subtitle, { bold: true, size: 12 });
   if (table.filters.length > 0) {
     addPlainRow(table.filters.map((f) => `${f.label}: ${f.value}`).join(' · '));
   }
-  addPlainRow(`Generado el ${screenNow()}`, { size: 9, color: SUBTITLE_FONT_COLOR });
+  if (!table.generatedAt) {
+    addPlainRow(`Generado el ${screenNow()}`, { size: 9, color: SUBTITLE_FONT_COLOR });
+  }
   rowNumber++; // fila vacía
 
   rowNumber++;
@@ -131,7 +149,9 @@ export async function buildXlsx<T>(table: ExportTable<T>): Promise<Blob> {
       cell.alignment = {
         horizontal: col.type === 'text' || col.type === 'code' ? 'left' : 'right',
       };
-      if (col.bold) cell.font = { bold: true };
+      if (col.bold || col.redText) {
+        cell.font = { bold: !!col.bold, color: col.redText ? { argb: RED_FONT_COLOR } : undefined };
+      }
       screenTextsByColumn[i].push(columnScreenText(col, row, index));
     });
   });
@@ -163,6 +183,13 @@ export async function buildXlsx<T>(table: ExportTable<T>): Promise<Blob> {
   if (table.footnote) {
     rowNumber++;
     addPlainRow(table.footnote, { size: 9, color: SUBTITLE_FONT_COLOR });
+  }
+  if (table.generatedAt) {
+    rowNumber++;
+    addPlainRow(`---- Fin del reporte ----  ${dateTimeAmPm(table.generatedAt)}`, {
+      size: 9,
+      color: SUBTITLE_FONT_COLOR,
+    });
   }
 
   sheet.views = [{ state: 'frozen', ySplit: headerRowNumber }];
