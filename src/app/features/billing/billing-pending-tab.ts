@@ -1,5 +1,5 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs/operators';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -369,6 +369,20 @@ const RECALCULATE_CHUNK = 100;
               </div>
             }
 
+            @if (rr.manualFixOutcomes.length > 0) {
+              <div class="bpt-recalc-pending">
+                <div class="bpt-recalc-pending-title">
+                  Recalculados con motivos por corregir a mano
+                </div>
+                @for (o of rr.manualFixOutcomes; track o.orderId) {
+                  <div class="bpt-issue-row">
+                    <span class="bpt-cell-strong">{{ o.orderId }}</span>
+                    {{ o.customerName }} — {{ o.reason }}
+                  </div>
+                }
+              </div>
+            }
+
             @if (rr.failedOutcomes.length > 0) {
               <div class="bpt-recalc-pending">
                 <div class="bpt-recalc-pending-title">No recalculados</div>
@@ -589,7 +603,7 @@ const RECALCULATE_CHUNK = 100;
                           (click)="recalculateRow(o)"
                         >
                           <span class="material-icons" aria-hidden="true">autorenew</span>
-                          Recalcular promociones
+                          Recalcular pedido
                         </button>
                       </div>
                     }
@@ -1340,6 +1354,7 @@ export class BillingPendingTab {
   private lookupSvc = inject(LookupService);
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
+  private route = inject(ActivatedRoute);
 
   protected formatSoles = formatSoles;
   protected dateTimeText = dateTimeText;
@@ -1397,6 +1412,28 @@ export class BillingPendingTab {
       this.load();
     });
   });
+
+  /**
+   * Llega desde "Validar para facturar" del detalle del pedido —
+   * doc 62, sección 6.2: `?orderId=` valida ese pedido solo y abre su
+   * detalle de validación, sin pasar por el listado del día.
+   */
+  constructor() {
+    const orderId = Number(this.route.snapshot.queryParamMap.get('orderId'));
+    if (orderId) this.validateFromLink(orderId);
+  }
+
+  private validateFromLink(orderId: number) {
+    this.resetValidationState();
+    this.validationDate.set(null);
+    this.totalToValidate.set(1);
+    this.phase.set('validating');
+    // Mostrar el pedido sin importar si quedó válido o con motivos —
+    // el filtro por defecto ("issues") lo ocultaría si ya es válido.
+    this.showFilter.set('all');
+    this.expandedIds.set(new Set([orderId]));
+    this.runValidateChunks([[orderId]], 0);
+  }
 
   protected countText(): string {
     const n = this.totalElements();
@@ -1503,6 +1540,8 @@ export class BillingPendingTab {
   });
   protected recalculateOutcomes = signal<OrderRecalculationOutcome[]>([]);
   protected showRecalculateResult = signal(false);
+  private static readonly MANUAL_FIX_PREFIX = 'Recalculado. Quedan motivos por corregir a mano: ';
+
   protected recalculateResultView = computed(() => {
     const outcomes = this.recalculateOutcomes();
     const recalculatedCount = outcomes.filter((o) => o.recalculated).length;
@@ -1512,6 +1551,16 @@ export class BillingPendingTab {
     const failedOutcomes = outcomes.filter(
       (o) => !o.recalculated && o.reasonCode !== 'ALREADY_VALID',
     );
+    // Recalculados que igual quedaron con un motivo a mano — doc 62, sección 3.
+    const manualFixOutcomes = outcomes
+      .filter((o) => o.recalculated && !!o.reason)
+      .map((o) => ({
+        orderId: o.orderId,
+        customerName: o.customerName,
+        reason: o.reason!.startsWith(BillingPendingTab.MANUAL_FIX_PREFIX)
+          ? o.reason!.slice(BillingPendingTab.MANUAL_FIX_PREFIX.length)
+          : o.reason!,
+      }));
     const involvedIds = new Set(outcomes.map((o) => o.orderId));
     const involvedOrders = this.validationOrders().filter((o) => involvedIds.has(o.orderId));
     const stockPendingCount = involvedOrders.filter((o) =>
@@ -1524,6 +1573,7 @@ export class BillingPendingTab {
       recalculatedCount,
       alreadyValidCount,
       failedOutcomes,
+      manualFixOutcomes,
       stockPendingCount,
       choicePendingCount,
     };
@@ -1709,7 +1759,11 @@ export class BillingPendingTab {
         if (updated) this.replaceValidationOrder(updated);
         const outcome = result.orders[0];
         if (outcome?.recalculated) {
-          this.toast.success(`Pedido ${o.orderId} recalculado.`);
+          if (outcome.reason) {
+            this.toast.info(`Pedido ${o.orderId} recalculado; quedan motivos por corregir a mano.`);
+          } else {
+            this.toast.success(`Pedido ${o.orderId} recalculado.`);
+          }
         } else {
           this.toast.error(
             recalcOutcomeText(
@@ -1820,9 +1874,9 @@ export class BillingPendingTab {
     if (orderIds.length === 0) return;
     this.dialog
       .confirm({
-        title: `¿Recalcular las promociones de ${orderIds.length} pedido${orderIds.length === 1 ? '' : 's'}?`,
+        title: `¿Recalcular ${orderIds.length} pedido${orderIds.length === 1 ? '' : 's'}?`,
         message:
-          'Se volverán a calcular bonificaciones, descuentos y totales. Los precios y las cantidades no cambian. Las bonificaciones sin stock quedarán pendientes en su bandeja.',
+          'Se actualizarán los precios al vigente y se volverán a calcular bonificaciones, descuentos y totales. Las cantidades no cambian. Las bonificaciones sin stock quedarán pendientes en su bandeja.',
         confirmLabel: 'Recalcular',
       })
       .subscribe((confirmed) => {

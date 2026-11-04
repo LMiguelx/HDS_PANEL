@@ -22,12 +22,7 @@ import {
 } from './ui/substitute-bonus-dialog';
 import { PromoService } from '../promos/promo';
 import { CatalogLookupService } from '../catalog/catalog-lookup';
-import { BillingValidationAdminService } from '../billing/billing-validation-admin';
 import { OrderDetail, OrderItemView, ReturnedLineView } from '../../shared/models/order.models';
-import {
-  BillingRecalculationResult,
-  OrderBillingValidation,
-} from '../../shared/models/billing-validation.models';
 import { ApplicationView, PendingChoiceView } from '../promos/promo.types';
 import { PromoChoiceDialog, PromoChoiceDialogResult } from '../promos/ui/promo-choice-dialog';
 import { quantityText } from '../sales-reports/sales-report-format';
@@ -120,7 +115,7 @@ import { formatSoles } from '../../shared/pipes/money';
                 (click)="recalculateOrderPromotions(o)"
               >
                 <span class="material-icons" aria-hidden="true">autorenew</span>
-                Recalcular promociones
+                Recalcular pedido
               </button>
             }
             @if (canDeliver(o)) {
@@ -136,17 +131,17 @@ import { formatSoles } from '../../shared/pipes/money';
                 Entregar en mostrador
               </button>
             }
-            @if (canSendToBilling(o)) {
+            @if (canValidateForBilling(o)) {
               <button
                 uiButton
                 variant="secondary"
                 *hasPermission="'order.send_to_billing'"
-                [disabled]="blockedForClosing() || recalculatingOrderPromos()"
-                [title]="blockedForClosing() ? 'Resuelve lo pendiente antes de enviarlo' : ''"
-                [loading]="sendingToBilling()"
-                (click)="validateAndSend(o)"
+                [class.od-btn-disabled]="recalculatingOrderPromos()"
+                [routerLink]="recalculatingOrderPromos() ? null : ['/validacion-facturacion']"
+                [queryParams]="{ orderId: o.orderId }"
               >
-                Enviar a facturación
+                <span class="material-icons" aria-hidden="true">fact_check</span>
+                Validar para facturar
               </button>
             }
             @if (canCancel(o)) {
@@ -225,49 +220,6 @@ import { formatSoles } from '../../shared/pipes/money';
                 Ver bonificaciones sin stock
               </button>
             </div>
-          </div>
-        }
-
-        @if (billingValidation(); as bv) {
-          <div class="od-alert od-alert-warn">
-            <strong>El pedido no pasó la validación de facturación.</strong>
-            <div class="od-checks-row">
-              @for (c of bv.checks; track c.group) {
-                <span class="od-check" [class.fail]="!c.passed">
-                  {{ c.passed ? '✓' : '✗' }} {{ c.groupName }}
-                </span>
-              }
-            </div>
-            @for (issue of bv.issues; track $index) {
-              <div class="od-issue-row">
-                • {{ issue.lineNumber != null ? 'Línea ' + issue.lineNumber + ' · ' : '' }}
-                {{ issue.message }}
-              </div>
-            }
-            @if (bv.recalculable) {
-              <div class="od-recalc-band">
-                <span class="material-icons od-recalc-icon" aria-hidden="true">autorenew</span>
-                <p class="od-recalc-band-text">
-                  Estos motivos se corrigen recalculando las promociones del pedido. Precios y
-                  cantidades no cambian.
-                </p>
-                <button
-                  uiButton
-                  variant="primary"
-                  size="sm"
-                  [loading]="recalculatingPromos()"
-                  (click)="recalculatePromotions(o)"
-                >
-                  Recalcular promociones
-                </button>
-              </div>
-            } @else if (hasPromoNotApplied(bv)) {
-              <div class="od-recalc-band od-recalc-band-neutral">
-                <p class="od-recalc-band-text">
-                  Tiene promociones por aplicar, pero primero corrija los otros motivos.
-                </p>
-              </div>
-            }
           </div>
         }
 
@@ -917,52 +869,6 @@ import { formatSoles } from '../../shared/pipes/money';
         padding: 8px 10px;
         font-size: 13px;
       }
-      .od-checks-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 14px;
-        margin: 10px 0;
-        font-size: 13px;
-      }
-      .od-check {
-        color: var(--st-vigente);
-      }
-      .od-check.fail {
-        color: var(--status-danger);
-        font-weight: 700;
-      }
-      .od-issue-row {
-        font-size: 13px;
-        padding: 2px 0;
-      }
-      .od-recalc-band {
-        margin-top: 12px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
-        border: 1px solid var(--accent);
-        background: color-mix(in srgb, var(--accent) 8%, transparent);
-      }
-      .od-recalc-icon {
-        flex: none;
-        font-size: 20px;
-        color: var(--accent-ink);
-      }
-      .od-recalc-band-text {
-        flex: 1;
-        margin: 0;
-        font-size: 13px;
-        color: var(--ink);
-      }
-      .od-recalc-band-neutral {
-        border-color: var(--hairline);
-        background: var(--faint);
-      }
-      .od-recalc-band-neutral .od-recalc-band-text {
-        color: var(--ink-muted);
-      }
-
       @media (max-width: 900px) {
         .od-grid {
           grid-template-columns: 1fr;
@@ -1007,7 +913,6 @@ export class OrderDetailPage {
   private promoSvc = inject(PromoService);
   private telesalesApi = inject(TelesalesApi);
   private catalogSvc = inject(CatalogLookupService);
-  private billingSvc = inject(BillingValidationAdminService);
   private auth = inject(AuthService);
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
@@ -1047,12 +952,9 @@ export class OrderDetailPage {
       : this.applications().filter((a) => a.status !== 'REVERSED'),
   );
   protected delivering = signal(false);
-  protected sendingToBilling = signal(false);
   protected cancelling = signal(false);
   protected recalculating = signal(false);
-  protected recalculatingPromos = signal(false);
   protected recalculatingOrderPromos = signal(false);
-  protected billingValidation = signal<OrderBillingValidation | null>(null);
 
   private paymentConditionNames = signal<Map<number, string>>(new Map());
 
@@ -1096,7 +998,6 @@ export class OrderDetailPage {
       next: (detail) => {
         this.order.set(detail);
         this.loading.set(false);
-        this.billingValidation.set(null);
         this.loadPendingChoices(detail);
         this.loadApplications(id);
         if (detail.originCode === 'TELESALES') this.loadMobileOrderChoices(id);
@@ -1270,7 +1171,8 @@ export class OrderDetailPage {
     return o.statusCode === 'OPEN' && o.originCode === 'COUNTER';
   }
 
-  protected canSendToBilling(o: OrderDetail): boolean {
+  /** "Validar para facturar" — doc 62, sección 6.2: mismas condiciones que antes tenía Enviar a facturación. */
+  protected canValidateForBilling(o: OrderDetail): boolean {
     return o.statusCode === 'OPEN';
   }
 
@@ -1309,52 +1211,19 @@ export class OrderDetailPage {
       });
   }
 
-  /** `PROMO_NOT_APPLIED` sin ser recalculable: otro motivo lo bloquea — doc 55, sección 8.2. */
-  protected hasPromoNotApplied(bv: OrderBillingValidation): boolean {
-    return bv.issues.some((i) => i.code === 'PROMO_NOT_APPLIED');
-  }
-
-  /** "Recalcular promociones" — doc 55, sección 8.2. Sin confirmación: un solo pedido. */
-  protected recalculatePromotions(o: OrderDetail) {
-    this.recalculatingPromos.set(true);
-    this.billingSvc.recalculate({ orderIds: [o.orderId] }).subscribe({
-      next: (result: BillingRecalculationResult) => {
-        this.recalculatingPromos.set(false);
-        const outcome = result.orders[0];
-        const updatedValidation = result.validation.orders[0] ?? null;
-        if (updatedValidation) this.billingValidation.set(updatedValidation);
-        if (outcome?.recalculated) {
-          this.toast.success('Promociones recalculadas');
-        } else if (outcome?.reasonCode === 'ALREADY_VALID') {
-          this.toast.info(outcome.reason || 'El pedido ya estaba correcto.');
-        } else {
-          this.toast.error(outcome?.reason || 'No se pudo recalcular; intente de nuevo');
-        }
-        this.load();
-      },
-      error: (err) => {
-        this.recalculatingPromos.set(false);
-        this.toast.error(
-          err?.status === 403
-            ? 'No tiene permiso para recalcular pedidos.'
-            : 'No se pudo recalcular; intente de nuevo',
-        );
-      },
-    });
-  }
-
   /**
-   * "Recalcular promociones" de la cabecera — doc 59, sección 3. A
-   * diferencia de `recalculatePromotions` (doc 55, solo pedidos marcados
-   * recalculables por la validación), este siempre recalcula; no cambia
-   * precios, cantidades, productos, cliente, vendedor ni condición de pago.
+   * "Recalcular pedido" de la cabecera — doc 59, sección 3; doc 62, sección
+   * 4. Siempre recalcula (no depende de una validación previa). Actualiza
+   * el precio vigente de las líneas de venta además de promociones,
+   * descuentos y totales; no cambia cantidades, productos, cliente,
+   * vendedor ni condición de pago.
    */
   protected recalculateOrderPromotions(o: OrderDetail) {
     this.dialog
       .confirm({
-        title: '¿Recalcular las promociones de este pedido?',
+        title: '¿Recalcular este pedido?',
         message:
-          'Se volverán a calcular bonificaciones, descuentos y totales con las promociones vigentes hoy. Los precios y las cantidades no cambian. Una bonificación sin stock quedará pendiente.',
+          'Se actualizarán los precios al vigente y se volverán a calcular promociones, descuentos y totales. Las cantidades no cambian.',
         confirmLabel: 'Recalcular',
       })
       .subscribe((confirmed) => {
@@ -1365,22 +1234,25 @@ export class OrderDetailPage {
           next: (updated) => {
             this.recalculatingOrderPromos.set(false);
             this.order.set(updated);
-            this.billingValidation.set(null);
             this.loadPendingChoices(updated);
             const changed =
               updated.netAmount !== before.netAmount ||
               updated.discountAmount !== before.discountAmount ||
               JSON.stringify(updated.items) !== JSON.stringify(before.items);
-            this.toast.success(
-              changed ? 'Promociones recalculadas' : 'El pedido ya tenía todas sus promociones',
-            );
+            if (changed) {
+              this.toast.success('Pedido recalculado');
+            } else {
+              this.toast.info('El pedido ya estaba al día');
+            }
           },
           error: (err) => {
             this.recalculatingOrderPromos.set(false);
-            if (err?.status === 409) {
+            if (err?.status === 400 || err?.status === 409) {
+              // 400/409 de negocio (p. ej. producto sin precio vigente): el
+              // `detail` ya viene listo para mostrar — doc 62, sección 4.
               const detalle = err?.error?.detail;
-              this.toast.error(detalle || 'El pedido ya no está abierto.');
-              this.load();
+              this.toast.error(detalle || 'No se pudo recalcular; intente de nuevo');
+              if (err.status === 409) this.load();
             } else if (err?.status === 404) {
               this.toast.error('No se encontró el pedido');
               this.router.navigateByUrl('/pedidos');
@@ -1392,49 +1264,6 @@ export class OrderDetailPage {
           },
         });
       });
-  }
-
-  /** Valida antes de enviar (doc 32, sección 10.3): si falla, muestra los motivos en vez de enviar. */
-  protected validateAndSend(o: OrderDetail) {
-    this.sendingToBilling.set(true);
-    this.billingValidation.set(null);
-    this.billingSvc.validate({ orderIds: [o.orderId] }).subscribe({
-      next: (result) => {
-        this.sendingToBilling.set(false);
-        const validation = result.orders[0];
-        if (!validation || !validation.valid) {
-          if (validation) this.billingValidation.set(validation);
-          return;
-        }
-        this.dialog
-          .confirm({
-            title: 'Enviar a facturación',
-            message: `¿Enviar el pedido ${o.orderId} a facturación? Después no se podrá editar ni anular.`,
-            confirmLabel: 'Enviar',
-          })
-          .subscribe((confirmed) => {
-            if (!confirmed) return;
-            this.sendingToBilling.set(true);
-            this.orderSvc.sendToBilling(o.orderId).subscribe({
-              next: () => {
-                this.sendingToBilling.set(false);
-                this.toast.success('Pedido enviado a facturación.');
-                this.load();
-              },
-              error: (err) => {
-                this.sendingToBilling.set(false);
-                const detalle = err?.error?.detail ?? err?.error?.message;
-                this.toast.error(detalle || 'No pudimos enviar el pedido a facturación.');
-              },
-            });
-          });
-      },
-      error: (err) => {
-        this.sendingToBilling.set(false);
-        const detalle = err?.error?.detail ?? err?.error?.message;
-        this.toast.error(detalle || 'No pudimos validar el pedido.');
-      },
-    });
   }
 
   protected recalculateAndRevalidate(o: OrderDetail) {

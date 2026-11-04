@@ -1,4 +1,4 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, OnInit, inject, input, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { UiButton } from '../../../../shared/ui/button/button';
 import { UiField } from '../../../../shared/ui/field/field';
@@ -377,7 +377,7 @@ type Tab = 'perfil' | 'equivalencias';
     `,
   ],
 })
-export class BrandConfigPage {
+export class BrandConfigPage implements OnInit {
   private api = inject(GoodsReceiptsApi);
   private auth = inject(AuthService);
   private dialog = inject(UiDialogService);
@@ -424,7 +424,9 @@ export class BrandConfigPage {
     );
   }
 
-  constructor() {
+  // No leer input.required() en el constructor (NG0950): el router todavía
+  // no lo asignó. La primera carga se cuelga de ngOnInit — doc 62, sección 7.3.
+  ngOnInit(): void {
     this.load();
   }
 

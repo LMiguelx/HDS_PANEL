@@ -63,11 +63,6 @@ export class OrderAdminService {
     return this.http.post<void>(`${this.base}/${orderId}/deliver-at-counter`, {});
   }
 
-  /** Pasa de OPEN a SENT_TO_BILLING. Desde ahí es inmutable. */
-  sendToBilling(orderId: number) {
-    return this.http.post<void>(`${this.base}/${orderId}/send-to-billing`, {});
-  }
-
   /** Solo pedidos OPEN. Devuelve el stock y revierte las promociones. */
   cancel(orderId: number) {
     return this.http.post<void>(`${this.base}/${orderId}/cancel`, {});
