@@ -28,6 +28,16 @@ const SIZE_OPTIONS: UiFieldOption[] = [
   { value: '100', label: '100 por página' },
 ];
 
+/** Mismo set que los avatares de rol del Inicio (doc 66) — distingue cada chip de rol. */
+const ROLE_CHIP_COLORS = [
+  'var(--accent)',
+  'var(--st-in-route)',
+  'var(--status-ok)',
+  'var(--st-matched-manual)',
+  'var(--st-counter-delivered)',
+  'var(--st-telesales)',
+];
+
 interface FilterOverride {
   q?: string;
   roleCode?: string;
@@ -68,16 +78,23 @@ interface FilterOverride {
 
       @if (summary(); as s) {
         <div class="ul-role-chips">
-          <button type="button" class="ul-chip" [class.on]="!roleFilter()" (click)="selectRole('')">
+          <button
+            type="button"
+            class="ul-chip ul-chip-all"
+            [class.on]="!roleFilter()"
+            (click)="selectRole('')"
+          >
             Todos <span class="ul-chip-count">{{ s.total }}</span>
           </button>
-          @for (r of visibleRoles(s); track r.roleCode) {
+          @for (r of visibleRoles(s); track r.roleCode; let i = $index) {
             <button
               type="button"
               class="ul-chip"
               [class.on]="roleFilter() === r.roleCode"
+              [style.border-left-color]="roleColor(i)"
               (click)="selectRole(r.roleCode)"
             >
+              <span class="ul-chip-dot" [style.background]="roleColor(i)"></span>
               {{ r.roleName }} <span class="ul-chip-count">{{ r.total }}</span>
               @if (r.onRouteToday > 0) {
                 <span class="ul-chip-sub">· {{ r.onRouteToday }} en jornada</span>
@@ -269,27 +286,44 @@ interface FilterOverride {
       .ul-role-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 10px;
         margin-top: 18px;
       }
       .ul-chip {
         appearance: none;
         border: 1px solid var(--divider);
-        background: transparent;
+        border-left: 3px solid var(--divider);
+        background: var(--surface);
         color: var(--ink);
         font-family: var(--font-sans);
         font-weight: 700;
         font-size: 13px;
-        padding: 6px 14px;
-        border-radius: var(--radius-pill);
+        padding: 7px 16px;
+        border-radius: var(--radius-control);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
+        transition:
+          border-color var(--dur-fast) var(--ease-standard),
+          background var(--dur-fast) var(--ease-standard);
+      }
+      .ul-chip:hover {
+        border-color: var(--ink-muted);
+      }
+      .ul-chip-all {
+        border-left-color: var(--divider);
+      }
+      .ul-chip-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
       }
       .ul-chip.on {
         background: var(--accent-wash);
         border-color: var(--accent);
+        border-left-color: var(--accent);
         color: var(--accent-ink);
       }
       .ul-chip-count {
@@ -471,18 +505,25 @@ export class UserListPage {
     return s.byRole.filter((r) => r.total > 0);
   }
 
+  protected roleColor(index: number): string {
+    return ROLE_CHIP_COLORS[index % ROLE_CHIP_COLORS.length];
+  }
+
   constructor() {
     this.loadSummary();
 
     // La URL es la fuente de verdad: cada navegación (propia o del botón
     // Atrás) actualiza el estado local y vuelve a pedir la página.
+    // El binding de query params del router manda `undefined` (no el
+    // default del `input()`) cuando el parámetro no está en la URL — de
+    // ahí el `?? ''` en cada uno, si no `.trim()` revienta más abajo.
     effect(() => {
-      const q = this.qParam();
-      const roleCode = this.roleCodeParam();
-      const active = this.activeParam();
-      const onRouteToday = this.onRouteTodayParam();
-      const page = this.pageParam();
-      const size = this.sizeParam();
+      const q = this.qParam() ?? '';
+      const roleCode = this.roleCodeParam() ?? '';
+      const active = this.activeParam() ?? '';
+      const onRouteToday = this.onRouteTodayParam() ?? '';
+      const page = this.pageParam() ?? '';
+      const size = this.sizeParam() ?? '';
       untracked(() => {
         this.searchDraft.set(q);
         this.roleFilter.set(roleCode);
@@ -500,7 +541,7 @@ export class UserListPage {
       .subscribe((text) => {
         const trimmed = text.trim();
         if (trimmed.length === 1) return;
-        if (trimmed === this.qParam()) return;
+        if (trimmed === (this.qParam() ?? '')) return;
         this.navigateWithFilters({ q: trimmed, page: 0 });
       });
   }
