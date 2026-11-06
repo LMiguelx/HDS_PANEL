@@ -44,7 +44,11 @@ function fullPath(route: ActivatedRouteSnapshot): string {
 function isCacheable(route: ActivatedRouteSnapshot): boolean {
   if (route.children.length > 0) return false; // no es una hoja: su hijo activo decide
   const path = route.routeConfig?.path;
-  if (!path || path.includes(':')) return false; // sin ruta propia, o con parámetro (detalle/edición)
+  // `path: ''` es justo el patrón de casi todos los listados (la ruta
+  // índice de su módulo cargado perezoso, p. ej. Pedidos) — ahí sí hay que
+  // cachear. Solo se descarta si no hay routeConfig en absoluto o si trae
+  // parámetro (`:id`, detalle/edición).
+  if (path == null || path.includes(':')) return false;
   const key = fullPath(route);
   if (!key || DENY_PATHS.has(key)) return false;
   return !DENY_PREFIXES.some((prefix) => key === prefix || key.startsWith(`${prefix}/`));
