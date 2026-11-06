@@ -1,8 +1,6 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth';
-import { NAV, NavItem } from '../../core/layout/nav.config';
-import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiButton } from '../../shared/ui/button/button';
@@ -11,6 +9,7 @@ import {
   DashboardCustomersView,
   DashboardDeliverySummaryView,
   DashboardOrdersSummaryView,
+  DashboardPendingView,
   DashboardTodayView,
   TopProductView,
   TopSalespersonView,
@@ -25,6 +24,8 @@ const TOP_LIMIT_OPTIONS: UiFieldOption[] = [
   { value: '7', label: 'Top 7' },
 ];
 
+const PENDING_POLL_MS = 5 * 60_000;
+
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -37,33 +38,114 @@ const ROLE_AVATAR_COLORS = [
   'var(--st-matched-manual)',
 ];
 
+const ORDER_STATUS_TONE_VAR: Record<string, string> = {
+  OPEN: '--status-warn',
+  SENT_TO_BILLING: '--accent',
+  COUNTER_DELIVERED: '--success',
+  CANCELLED: '--ink-muted',
+};
+
+interface PendingCardVM {
+  key: string;
+  label: string;
+  value: number;
+  detail: string;
+  tone: 'accent' | 'warn' | 'danger';
+  route: string[] | null;
+  queryParams?: Record<string, string>;
+}
+
 /**
- * Home — resumen del día en 6 bloques (pedidos, reparto, usuarios activos
- * por rol, mejores ventas, producto en mejor movimiento, clientes
- * atendidos), todo desde un único endpoint agregado
- * (GET /api/admin/dashboard/today, `report.view`). Reemplaza la versión
- * anterior armada en frontend a partir de muestras de otros módulos.
+ * Home — doc 66. Pendientes de gestión (nuevo), Pedidos del día y Clientes
+ * del día rehechos, En jornada hoy (antes "Usuarios activos hoy"), Reparto y
+ * Mejores ventas/Producto en mejor movimiento sin cambios de contenido.
+ * Todo desde `GET /api/admin/dashboard/today` + `GET /.../pending`
+ * (`report.view`), en paralelo. Ya no hay tiles de navegación: todos los
+ * módulos viven en el navbar.
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, HasPermissionDirective, UiField, UiEmpty, UiButton],
+  imports: [RouterLink, UiField, UiEmpty, UiButton],
   template: `
     <section class="home-page">
-      <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
-      <p class="home-sub">Resumen del día de un vistazo.</p>
+      <div class="home-head">
+        <div>
+          <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
+          <p class="home-sub">Resumen del día de un vistazo.</p>
+        </div>
+        @if (showDashboard()) {
+          <div class="home-toolbar">
+            <ui-field label="Fecha" type="date" [(value)]="date" />
+            @if (canGoToReparto()) {
+              <button
+                uiButton
+                variant="secondary"
+                routerLink="/inicio-reparto"
+                class="home-reparto-link"
+              >
+                Ir al reparto del día
+              </button>
+            }
+          </div>
+        }
+      </div>
 
       @if (showDashboard()) {
-        <div class="home-toolbar">
-          <ui-field label="Fecha" type="date" [(value)]="date" />
-          @if (canGoToReparto()) {
-            <button
-              uiButton
-              variant="secondary"
-              routerLink="/inicio-reparto"
-              class="home-reparto-link"
-            >
-              Ir al reparto del día
-            </button>
+        <!-- Pendientes de gestión -->
+        <div class="home-block">
+          <div class="home-block-head">
+            <h2 class="home-block-title">Pendientes de gestión</h2>
+            <div class="home-pending-toolbar">
+              <span class="home-pending-flag">a hoy</span>
+              @if (pendingUpdatedAt(); as u) {
+                <span class="home-pending-updated"
+                  >Actualizado
+                  {{ u.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) }}</span
+                >
+              }
+              <button
+                uiButton
+                variant="ghost"
+                size="sm"
+                [loading]="pendingLoading()"
+                (click)="loadPending()"
+              >
+                <span class="material-icons" aria-hidden="true">refresh</span>
+                Actualizar
+              </button>
+            </div>
+          </div>
+
+          @if (pendingLoading() && !pendingData()) {
+            <div class="home-pending-skeleton" role="status" aria-label="Cargando"></div>
+          } @else if (pendingError() && !pendingData()) {
+            <ui-empty
+              variant="error"
+              title="No pudimos cargar los pendientes de gestión"
+              actionLabel="Reintentar"
+              (action)="loadPending()"
+            />
+          } @else {
+            <div class="home-pending-grid">
+              @for (card of pendingCards(); track card.key) {
+                <a
+                  class="home-pending-card"
+                  [class.home-pending-disabled]="!card.route"
+                  [class.home-pending-accent]="card.value > 0 && card.tone === 'accent'"
+                  [class.home-pending-warn]="card.value > 0 && card.tone === 'warn'"
+                  [class.home-pending-danger]="card.value > 0 && card.tone === 'danger'"
+                  [routerLink]="card.route"
+                  [queryParams]="card.queryParams ?? null"
+                  [attr.tabindex]="card.route ? 0 : -1"
+                >
+                  <span class="home-pending-value">{{ card.value }}</span>
+                  <span class="home-pending-label">{{ card.label }}</span>
+                  <span class="home-pending-detail">{{
+                    card.value === 0 ? 'Al día' : card.detail
+                  }}</span>
+                </a>
+              }
+            </div>
           }
         </div>
 
@@ -78,38 +160,195 @@ const ROLE_AVATAR_COLORS = [
             (action)="load()"
           />
         } @else if (data(); as d) {
-          <!-- 1. Pedidos del día -->
+          <!-- Pedidos del día -->
           <div class="home-block">
             <h2 class="home-block-title">Pedidos del día</h2>
-            <div class="home-kpi-row">
-              <a class="home-kpi" routerLink="/pedidos">
-                <span class="home-kpi-value">{{ d.orders.totalOrders }}</span>
-                <span class="home-kpi-label">Pedidos hoy</span>
-              </a>
-              <div class="home-kpi">
-                <span class="home-kpi-value">{{ formatSoles(d.orders.totalAmount) }}</span>
-                <span class="home-kpi-label">Monto total</span>
+            <p class="home-block-sub">{{ d.date }} · sin contar anulados</p>
+
+            <div class="home-orders-grid">
+              <div class="home-orders-summary">
+                <a class="home-orders-total" routerLink="/pedidos" [queryParams]="dayParams()">
+                  <span class="home-orders-total-value">{{ d.orders.totalOrders }}</span>
+                  <span class="home-orders-total-label">pedidos</span>
+                </a>
+                <div class="home-orders-net">
+                  <span class="home-orders-net-value">{{ formatSoles(d.orders.netAmount) }}</span>
+                  <span class="home-orders-net-label">neto</span>
+                </div>
+                <p class="home-orders-gross">Bruto {{ formatSoles(d.orders.totalAmount) }}</p>
+
+                <div class="home-brand-box">
+                  <span class="home-brand-label">Marca más vendida</span>
+                  @if (d.orders.topBrandName) {
+                    <span class="home-brand-name" [title]="d.orders.topBrandName">{{
+                      d.orders.topBrandName
+                    }}</span>
+                    <span class="home-brand-amount">{{
+                      formatSoles(d.orders.topBrandAmount!)
+                    }}</span>
+                  } @else {
+                    <span class="home-brand-name home-muted">—</span>
+                  }
+                </div>
               </div>
-              <div class="home-kpi">
-                <span class="home-kpi-value">{{ d.orders.totalBonusLines }}</span>
-                <span class="home-kpi-label">Bonificaciones entregadas</span>
-                <span class="home-kpi-compare">{{ d.orders.totalBonusUnits }} unidades</span>
-              </div>
-              <div class="home-kpi">
-                <span class="home-kpi-value">{{ d.orders.topBrandName ?? 'Sin ventas' }}</span>
-                <span class="home-kpi-label">Marca más vendida</span>
-                @if (d.orders.topBrandAmount != null) {
-                  <span class="home-kpi-compare"
-                    >{{ formatSoles(d.orders.topBrandAmount) }} · {{ topBrandPct(d.orders) }}% del
-                    monto del día</span
-                  >
+
+              <div class="home-orders-status">
+                <span class="home-orders-col-title">Por estado</span>
+                <div class="home-status-bar">
+                  @for (s of d.orders.byStatus; track s.statusCode) {
+                    @if (s.count > 0) {
+                      <span
+                        class="home-status-bar-seg"
+                        [style.width.%]="statusBarPct(d.orders, s)"
+                        [style.background]="'var(' + statusTone(s.statusCode) + ')'"
+                      ></span>
+                    }
+                  }
+                </div>
+                <div class="home-status-legend">
+                  @for (s of d.orders.byStatus; track s.statusCode) {
+                    <a
+                      class="home-legend-row"
+                      [class.home-legend-disabled]="!canSeeOrders()"
+                      [routerLink]="canSeeOrders() ? ['/pedidos'] : null"
+                      [queryParams]="orderStatusParams(s.statusCode)"
+                    >
+                      <span
+                        class="home-legend-dot"
+                        [style.background]="'var(' + statusTone(s.statusCode) + ')'"
+                      ></span>
+                      <span class="home-legend-name">{{ s.statusName }}</span>
+                      <span class="home-legend-value">{{ s.count }}</span>
+                      @if (s.statusCode !== 'CANCELLED') {
+                        <span class="home-legend-amount">{{ formatSoles(s.netAmount) }}</span>
+                      }
+                    </a>
+                  }
+                </div>
+
+                @if (erpFacturadosLine(d.orders); as erp) {
+                  <div class="home-erp-line">
+                    <div class="home-erp-head">
+                      <span>Facturados por el ERP</span>
+                      <span>{{ erp.uploaded }} de {{ erp.sent }} enviados</span>
+                    </div>
+                    <div class="home-erp-track">
+                      <div class="home-erp-fill" [style.width.%]="erp.pct"></div>
+                    </div>
+                  </div>
                 }
+              </div>
+
+              <div class="home-orders-side">
+                <div class="home-orders-origin">
+                  <span class="home-orders-col-title">Por origen</span>
+                  <div class="home-origin-list">
+                    @for (o of visibleOrigins(d.orders); track o.originCode) {
+                      <a
+                        class="home-origin-row"
+                        [class.home-legend-disabled]="!canSeeOrders()"
+                        [routerLink]="canSeeOrders() ? ['/pedidos'] : null"
+                        [queryParams]="orderOriginParams(o.originCode)"
+                      >
+                        <span class="home-origin-name">{{ o.originName }}</span>
+                        <div class="home-origin-track">
+                          <div
+                            class="home-origin-fill"
+                            [style.width.%]="originBarPct(d.orders, o.count)"
+                          ></div>
+                        </div>
+                        <span class="home-origin-value">{{ o.count }}</span>
+                      </a>
+                    }
+                  </div>
+                </div>
+
+                <div class="home-bonus-box">
+                  <span class="home-orders-col-title">Bonificaciones</span>
+                  <p class="home-bonus-line">
+                    {{ d.orders.totalBonusLines }} línea{{
+                      d.orders.totalBonusLines === 1 ? '' : 's'
+                    }}
+                    · {{ d.orders.totalBonusUnits }} u.
+                  </p>
+                  @if (d.orders.pendingStockBonusLines > 0) {
+                    <a
+                      class="home-bonus-warn"
+                      [class.home-legend-disabled]="!canManageBonusTray()"
+                      [routerLink]="
+                        canManageBonusTray() ? ['/pedidos/bonificaciones-sin-stock'] : null
+                      "
+                    >
+                      ⚠ {{ d.orders.pendingStockBonusLines }} sin stock ({{
+                        d.orders.pendingStockBonusUnits
+                      }}
+                      u.)
+                    </a>
+                  }
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- 2. Reparto -->
-          <div class="home-block">
+          <!-- Clientes del día + En jornada hoy -->
+          <div class="home-side-grid">
+            <a
+              class="home-block home-customers-block"
+              [class.home-block-disabled]="!canSeeAssignments()"
+              [routerLink]="canSeeAssignments() ? ['/asignaciones/mapa'] : null"
+              [queryParams]="{ date: d.customers.date }"
+            >
+              <h2 class="home-block-title">Clientes del día</h2>
+              @if (d.customers.scheduled === 0) {
+                <p class="home-block-empty">No hay clientes programados para esta fecha</p>
+              } @else {
+                <p class="home-customers-scheduled">{{ d.customers.scheduled }} programados</p>
+                <div class="home-customers-bar">
+                  <div
+                    class="home-customers-bar-fill"
+                    [style.width.%]="d.customers.visitPercentage"
+                  ></div>
+                </div>
+                <p class="home-customers-bar-label">{{ d.customers.visitPercentage }}% visitados</p>
+                <div class="home-customers-breakdown">
+                  <span class="home-customers-ok"
+                    >Con pedido {{ d.customers.ordered }} ({{ d.customers.orderPercentage }}%)</span
+                  >
+                  <span class="home-customers-warn">Sin compra {{ d.customers.noOrder }}</span>
+                  <span class="home-customers-muted">Cerrados {{ d.customers.closed }}</span>
+                  <span class="home-customers-neutral">Pendientes {{ d.customers.pending }}</span>
+                </div>
+              }
+            </a>
+
+            <div class="home-block">
+              <h2 class="home-block-title">En jornada hoy</h2>
+              <p class="home-block-sub">Abrieron jornada en la fecha · clic para ver en Usuarios</p>
+              @if (d.activeUsers.byRole.length === 0) {
+                <p class="home-block-empty">Nadie abrió jornada en esta fecha</p>
+              } @else {
+                <div class="home-roles-grid">
+                  @for (r of d.activeUsers.byRole; track r.roleCode; let i = $index) {
+                    <a
+                      class="home-role-card"
+                      [class.home-role-disabled]="!canManageUsers()"
+                      [routerLink]="canManageUsers() ? ['/usuarios'] : null"
+                      [queryParams]="{ roleCode: r.roleCode, onRouteToday: 'true' }"
+                    >
+                      <span class="home-role-avatar" [style.background]="roleColor(i)">{{
+                        r.roleName.charAt(0)
+                      }}</span>
+                      <span class="home-role-count">{{ r.activeCount }}</span>
+                      <span class="home-role-name">{{ r.roleName }}</span>
+                    </a>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Reparto -->
+          <div class="home-block home-block-compact">
             <h2 class="home-block-title">Reparto</h2>
             <div class="home-reparto-grid">
               <div class="home-reparto-bars">
@@ -193,28 +432,8 @@ const ROLE_AVATAR_COLORS = [
             </div>
           </div>
 
-          <!-- 3. Usuarios activos hoy -->
-          <div class="home-block">
-            <h2 class="home-block-title">Usuarios activos hoy</h2>
-            @if (d.activeUsers.byRole.length === 0) {
-              <p class="home-block-empty">Nadie ha iniciado ruta todavía.</p>
-            } @else {
-              <div class="home-roles-grid">
-                @for (r of d.activeUsers.byRole; track r.roleCode; let i = $index) {
-                  <div class="home-role-card">
-                    <span class="home-role-avatar" [style.background]="roleColor(i)">{{
-                      r.roleName.charAt(0)
-                    }}</span>
-                    <span class="home-role-count">{{ r.activeCount }}</span>
-                    <span class="home-role-name">{{ r.roleName }}</span>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-
-          <!-- 4-5-6 -->
-          <div class="home-triple-grid">
+          <!-- Mejores ventas + Producto en mejor movimiento -->
+          <div class="home-double-grid">
             <div class="home-block">
               <div class="home-block-head">
                 <h2 class="home-block-title">Mejores ventas del día</h2>
@@ -278,139 +497,11 @@ const ROLE_AVATAR_COLORS = [
                 <p class="home-block-note">Unidades despachadas hoy.</p>
               }
             </div>
-
-            <div class="home-block">
-              <h2 class="home-block-title">Clientes atendidos hoy</h2>
-              <div class="home-ring-wrap">
-                <div class="home-ring" [style.background]="customersRingGradient(d.customers)">
-                  <div class="home-ring-hole">
-                    <span class="home-ring-value"
-                      >{{ d.customers.coveragePercentage.toFixed(0) }}%</span
-                    >
-                  </div>
-                </div>
-                <div class="home-ring-body">
-                  <span class="home-ring-count">{{ d.customers.customersWithOrder }}</span>
-                  <span class="home-ring-note"
-                    >clientes con pedido hoy de {{ d.customers.totalActiveCustomers }} activos en
-                    cartera</span
-                  >
-                </div>
-              </div>
-            </div>
           </div>
 
           <p class="home-dash-footer">Datos al {{ d.date }}.</p>
         }
       }
-
-      <div class="home-section-label">Disponible</div>
-      <div class="home-grid">
-        <a
-          class="home-tile is-ready"
-          routerLink="/pedidos"
-          *hasPermission="['order.view_all', 'order.create']"
-        >
-          <span class="home-tile-name">Pedidos</span>
-          <span class="home-tile-note"
-            >Búsqueda global, historial por cliente y bonificaciones pendientes.</span
-          >
-        </a>
-        <a
-          class="home-tile is-ready"
-          routerLink="/reportes-ventas"
-          *hasPermission="'order.view_all'"
-        >
-          <span class="home-tile-name">Reportes de ventas</span>
-          <span class="home-tile-note"
-            >Resumen del día, liquidación de vendedores y ventas por marca.</span
-          >
-        </a>
-        <a class="home-tile is-ready" routerLink="/promociones" *hasPermission="promoPermissions">
-          <span class="home-tile-name">Promociones</span>
-          <span class="home-tile-note"
-            >Campañas, premios pendientes y dotaciones a vendedores.</span
-          >
-        </a>
-        <a class="home-tile is-ready" routerLink="/asignaciones" *hasPermission="'customer.assign'">
-          <span class="home-tile-name">Asignaciones</span>
-          <span class="home-tile-note">Cartera por vendedor, ausencias del día y cobertura.</span>
-        </a>
-        <a class="home-tile is-ready" routerLink="/clientes" *hasPermission="'customer.view'">
-          <span class="home-tile-name">Clientes</span>
-          <span class="home-tile-note">Buscador y ficha con métricas de compra.</span>
-        </a>
-        <a
-          class="home-tile is-ready"
-          routerLink="/aprobaciones"
-          *hasPermission="'customer.approve'"
-        >
-          <span class="home-tile-name">Aprobaciones</span>
-          <span class="home-tile-note">Solicitudes de creación, cambio de campo y cierre.</span>
-        </a>
-        <a
-          class="home-tile is-ready"
-          routerLink="/empresa/sistema"
-          *hasPermission="['config.edit', 'system.maintenance.manage']"
-        >
-          <span class="home-tile-name">Mantenimiento</span>
-          <span class="home-tile-note">Activa o desactiva el modo mantenimiento del sistema.</span>
-        </a>
-        <a
-          class="home-tile is-ready"
-          routerLink="/reparto"
-          *hasPermission="['delivery.deliver', 'delivery.settle', 'delivery.manage']"
-        >
-          <span class="home-tile-name">Reparto</span>
-          <span class="home-tile-note">Planillas, mapa de entregas y devoluciones.</span>
-        </a>
-        <a
-          class="home-tile is-ready"
-          routerLink="/flota"
-          *hasPermission="['delivery.settle', 'delivery.manage']"
-        >
-          <span class="home-tile-name">Flota</span>
-          <span class="home-tile-note">Vehículos y equipos de reparto.</span>
-        </a>
-        <a class="home-tile is-ready" routerLink="/facturas" *hasPermission="'invoice.reconcile'">
-          <span class="home-tile-name">Facturas</span>
-          <span class="home-tile-note">Conciliación con pedidos y bandeja sin conciliar.</span>
-        </a>
-        <a
-          class="home-tile is-ready"
-          routerLink="/precios"
-          *hasPermission="['price.view', 'product.edit']"
-        >
-          <span class="home-tile-name">Catálogo y precios</span>
-          <span class="home-tile-note">Productos, escala de precios y seguimiento sin precio.</span>
-        </a>
-        <a
-          class="home-tile is-ready"
-          routerLink="/inventario"
-          *hasPermission="['report.view', 'config.edit']"
-        >
-          <span class="home-tile-name">Inventario</span>
-          <span class="home-tile-note">Stock por almacén, kardex y ajustes.</span>
-        </a>
-        <a class="home-tile is-ready" routerLink="/usuarios" *hasPermission="'user.manage'">
-          <span class="home-tile-name">Usuarios</span>
-          <span class="home-tile-note">Alta, roles, contraseñas y estado de cada usuario.</span>
-        </a>
-        <a class="home-tile is-ready" routerLink="/empresa" *hasPermission="'config.edit'">
-          <span class="home-tile-name">Empresa</span>
-          <span class="home-tile-note">Sedes y parámetros de configuración.</span>
-        </a>
-      </div>
-
-      <div class="home-section-label">Próximamente</div>
-      <div class="home-grid">
-        @for (item of pendingModules(); track item.route) {
-          <a class="home-tile" [routerLink]="item.route">
-            <span class="home-tile-name">{{ item.label }}</span>
-            <span class="home-tile-note">Se rediseñará próximamente.</span>
-          </a>
-        }
-      </div>
     </section>
   `,
   styles: [
@@ -424,6 +515,13 @@ const ROLE_AVATAR_COLORS = [
         box-sizing: border-box;
         padding: var(--sp-8);
       }
+      .home-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
         margin: 0 0 4px;
@@ -432,19 +530,17 @@ const ROLE_AVATAR_COLORS = [
         margin: 0;
         color: var(--ink-muted);
         font-size: 14px;
-        max-width: 620px;
+        max-width: 420px;
       }
 
       .home-toolbar {
-        margin-top: 20px;
-        max-width: 620px;
         display: flex;
         align-items: flex-end;
         gap: 16px;
         flex-wrap: wrap;
       }
       .home-toolbar ui-field {
-        max-width: 220px;
+        max-width: 180px;
       }
       .home-reparto-link {
         white-space: nowrap;
@@ -452,11 +548,14 @@ const ROLE_AVATAR_COLORS = [
       .home-dash-skeleton {
         height: 320px;
         background: var(--faint);
-        margin-top: 20px;
+        margin-top: 18px;
       }
       .home-dash-footer {
         margin: 4px 0 0;
         font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .home-muted {
         color: var(--ink-muted);
       }
 
@@ -464,11 +563,25 @@ const ROLE_AVATAR_COLORS = [
         border: 1px solid var(--hairline);
         padding: 18px 20px;
         margin-top: 18px;
+        display: block;
+        color: inherit;
+        text-decoration: none;
+      }
+      .home-block-compact {
+        padding: 14px 20px;
+      }
+      .home-block-disabled {
+        cursor: default;
       }
       .home-block-title {
         font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
-        margin: 0 0 16px;
+        margin: 0 0 4px;
         color: var(--ink);
+      }
+      .home-block-sub {
+        margin: 0 0 14px;
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .home-block-head {
         display: flex;
@@ -503,52 +616,373 @@ const ROLE_AVATAR_COLORS = [
         color: var(--ink-muted);
       }
 
-      /* — Bloque 1: KPIs — */
-      .home-kpi-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
-        gap: 14px;
+      /* — Pendientes de gestión — */
+      .home-pending-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
       }
-      .home-kpi {
+      .home-pending-flag {
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
         border: 1px solid var(--hairline);
-        padding: 14px 16px;
+        padding: 3px 8px;
+      }
+      .home-pending-updated {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .home-pending-skeleton {
+        height: 160px;
+        background: var(--faint);
+        margin-top: 4px;
+      }
+      .home-pending-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
+        gap: 12px;
+        margin-top: 4px;
+      }
+      .home-pending-card {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        border: 1px solid var(--hairline);
+        border-left: 3px solid var(--hairline);
+        padding: 12px 14px;
         text-decoration: none;
         color: inherit;
-        display: block;
         transition: border-color var(--dur-fast) var(--ease-standard);
       }
-      a.home-kpi:hover {
-        border-color: var(--accent);
+      a.home-pending-card:hover {
+        border-color: var(--ink-muted);
       }
-      .home-kpi-value {
-        display: block;
+      .home-pending-disabled {
+        cursor: default;
+      }
+      .home-pending-disabled:hover {
+        border-color: var(--hairline);
+      }
+      .home-pending-accent {
+        border-left-color: var(--accent);
+      }
+      .home-pending-warn {
+        border-left-color: var(--status-warn);
+      }
+      .home-pending-danger {
+        border-left-color: var(--status-danger);
+      }
+      .home-pending-value {
         font-size: var(--fs-metric);
         font-weight: var(--fw-metric);
         color: var(--ink);
         font-variant-numeric: var(--tnum);
       }
-      .home-kpi-label {
-        display: block;
-        margin-top: 4px;
-        font-size: 12px;
-        color: var(--ink-muted);
+      .home-pending-accent .home-pending-value {
+        color: var(--accent-ink);
       }
-      .home-kpi-compare {
-        display: block;
-        margin-top: 2px;
+      .home-pending-warn .home-pending-value {
+        color: var(--status-warn);
+      }
+      .home-pending-danger .home-pending-value {
+        color: var(--status-danger);
+      }
+      .home-pending-label {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .home-pending-detail {
         font-size: 11px;
         color: var(--ink-muted);
       }
 
-      /* — Bloque 2: Reparto — */
+      /* — Pedidos del día — */
+      .home-orders-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.3fr 1fr;
+        gap: 28px;
+      }
+      .home-orders-summary {
+        display: grid;
+        gap: 2px;
+        align-content: start;
+      }
+      .home-orders-total {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        text-decoration: none;
+        color: inherit;
+      }
+      .home-orders-total-value {
+        font-size: var(--fs-metric);
+        font-weight: var(--fw-metric);
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .home-orders-total-label {
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+      .home-orders-net {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .home-orders-net-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .home-orders-net-label {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .home-orders-gross {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .home-brand-box {
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px dashed var(--hairline);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .home-brand-label {
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+      }
+      .home-brand-name {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 220px;
+      }
+      .home-brand-amount {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .home-orders-col-title {
+        display: block;
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin-bottom: 8px;
+      }
+      .home-status-bar {
+        display: flex;
+        height: 10px;
+        width: 100%;
+        background: var(--faint);
+        overflow: hidden;
+      }
+      .home-status-bar-seg {
+        height: 100%;
+      }
+      .home-status-legend {
+        margin-top: 10px;
+        display: grid;
+        gap: 2px;
+      }
+      .home-erp-line {
+        margin-top: 14px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--hairline);
+      }
+      .home-erp-head {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--ink);
+        margin-bottom: 4px;
+      }
+      .home-erp-track {
+        height: 6px;
+        background: var(--faint);
+      }
+      .home-erp-fill {
+        height: 100%;
+        background: var(--accent);
+      }
+
+      .home-orders-side {
+        display: grid;
+        gap: 18px;
+        align-content: start;
+      }
+      .home-origin-list {
+        display: grid;
+        gap: 8px;
+      }
+      .home-origin-row {
+        display: grid;
+        grid-template-columns: 76px 1fr 28px;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        color: inherit;
+        font-size: 12px;
+      }
+      .home-origin-name {
+        color: var(--ink-muted);
+      }
+      .home-origin-track {
+        height: 8px;
+        background: var(--faint);
+      }
+      .home-origin-fill {
+        height: 100%;
+        background: var(--st-in-route);
+      }
+      .home-origin-value {
+        font-weight: 800;
+        text-align: right;
+        font-variant-numeric: var(--tnum);
+      }
+      .home-bonus-box {
+        border-top: 1px dashed var(--hairline);
+        padding-top: 12px;
+      }
+      .home-bonus-line {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .home-bonus-warn {
+        display: inline-block;
+        margin-top: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--status-warn);
+        text-decoration: none;
+      }
+      .home-legend-disabled,
+      .home-role-disabled,
+      a.home-block-disabled {
+        pointer-events: none;
+      }
+
+      /* — Clientes del día / En jornada hoy — */
+      .home-side-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.4fr;
+        gap: 18px;
+        margin-top: 18px;
+      }
+      .home-side-grid .home-block {
+        margin-top: 0;
+      }
+      .home-customers-block:hover {
+        border-color: var(--accent);
+      }
+      .home-customers-scheduled {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .home-customers-bar {
+        margin-top: 10px;
+        height: 12px;
+        background: var(--faint);
+      }
+      .home-customers-bar-fill {
+        height: 100%;
+        background: var(--accent);
+      }
+      .home-customers-bar-label {
+        margin: 4px 0 0;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .home-customers-breakdown {
+        margin-top: 12px;
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+      }
+      .home-customers-ok {
+        color: var(--success);
+        font-weight: 700;
+      }
+      .home-customers-warn {
+        color: var(--status-warn);
+      }
+      .home-customers-muted {
+        color: var(--ink-muted);
+      }
+      .home-customers-neutral {
+        color: var(--ink);
+      }
+
+      /* — Bloque usuarios activos — */
+      .home-roles-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));
+        gap: 12px;
+      }
+      .home-role-card {
+        border: 1px solid var(--hairline);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        text-align: center;
+        text-decoration: none;
+        color: inherit;
+      }
+      a.home-role-card:hover {
+        border-color: var(--accent);
+      }
+      .home-role-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--on-accent);
+        font-weight: 800;
+      }
+      .home-role-count {
+        font-size: var(--fs-metric);
+        font-weight: var(--fw-metric);
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
+      }
+      .home-role-name {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      /* — Reparto — */
       .home-reparto-grid {
         display: grid;
         grid-template-columns: 1.4fr 1fr;
-        gap: 32px;
+        gap: 28px;
       }
       .home-reparto-bars {
         display: grid;
-        gap: 14px;
+        gap: 10px;
         align-content: start;
       }
       .home-amount-row {
@@ -562,7 +996,7 @@ const ROLE_AVATAR_COLORS = [
         color: var(--ink-muted);
       }
       .home-amount-track {
-        height: 14px;
+        height: 10px;
         background: var(--faint);
       }
       .home-amount-fill {
@@ -577,7 +1011,7 @@ const ROLE_AVATAR_COLORS = [
         white-space: nowrap;
       }
       .home-progress {
-        margin-top: 6px;
+        margin-top: 2px;
       }
       .home-progress-head {
         display: flex;
@@ -591,7 +1025,7 @@ const ROLE_AVATAR_COLORS = [
         font-variant-numeric: var(--tnum);
       }
       .home-progress-track {
-        height: 14px;
+        height: 10px;
         background: var(--faint);
       }
       .home-progress-fill {
@@ -608,7 +1042,7 @@ const ROLE_AVATAR_COLORS = [
 
       .home-donut-wrap {
         display: grid;
-        gap: 12px;
+        gap: 10px;
         align-content: start;
         justify-items: center;
       }
@@ -618,16 +1052,16 @@ const ROLE_AVATAR_COLORS = [
         color: var(--ink);
       }
       .home-donut {
-        width: 140px;
-        height: 140px;
+        width: 108px;
+        height: 108px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
       }
       .home-donut-hole {
-        width: 88px;
-        height: 88px;
+        width: 68px;
+        height: 68px;
         border-radius: 50%;
         background: var(--bg);
         display: flex;
@@ -636,13 +1070,13 @@ const ROLE_AVATAR_COLORS = [
         justify-content: center;
       }
       .home-donut-value {
-        font-size: 22px;
+        font-size: 18px;
         font-weight: 800;
         color: var(--ink);
         font-variant-numeric: var(--tnum);
       }
       .home-donut-label {
-        font-size: 11px;
+        font-size: 10px;
         color: var(--ink-muted);
       }
       .home-donut-legend {
@@ -676,51 +1110,19 @@ const ROLE_AVATAR_COLORS = [
         font-weight: 800;
         font-variant-numeric: var(--tnum);
       }
-
-      /* — Bloque 3: usuarios activos — */
-      .home-roles-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
-        gap: 14px;
-      }
-      .home-role-card {
-        border: 1px solid var(--hairline);
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
-        text-align: center;
-      }
-      .home-role-avatar {
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--on-accent);
-        font-weight: 800;
-      }
-      .home-role-count {
-        font-size: var(--fs-metric);
-        font-weight: var(--fw-metric);
-        color: var(--ink);
+      .home-legend-amount {
+        color: var(--ink-muted);
         font-variant-numeric: var(--tnum);
       }
-      .home-role-name {
-        font-size: 12px;
-        color: var(--ink-muted);
-      }
 
-      /* — Bloques 4-5-6 — */
-      .home-triple-grid {
+      /* — Mejores ventas / Producto — */
+      .home-double-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 18px;
         margin-top: 18px;
       }
-      .home-triple-grid .home-block {
+      .home-double-grid .home-block {
         margin-top: 0;
       }
 
@@ -807,110 +1209,27 @@ const ROLE_AVATAR_COLORS = [
         font-variant-numeric: var(--tnum);
       }
 
-      .home-ring-wrap {
-        display: flex;
-        align-items: center;
-        gap: 18px;
+      @media (max-width: 1200px) {
+        .home-orders-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .home-orders-side {
+          grid-column: 1 / -1;
+        }
       }
-      .home-ring {
-        width: 110px;
-        height: 110px;
-        border-radius: 50%;
-        flex: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .home-ring-hole {
-        width: 72px;
-        height: 72px;
-        border-radius: 50%;
-        background: var(--bg);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .home-ring-value {
-        font-size: 18px;
-        font-weight: 800;
-        color: var(--ink);
-        font-variant-numeric: var(--tnum);
-      }
-      .home-ring-body {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-      .home-ring-count {
-        font-size: var(--fs-metric);
-        font-weight: var(--fw-metric);
-        color: var(--ink);
-        font-variant-numeric: var(--tnum);
-      }
-      .home-ring-note {
-        font-size: 12px;
-        color: var(--ink-muted);
-        max-width: 160px;
-      }
-
-      /* — Navegación por tiles (ya existente) — */
-      .home-section-label {
-        font-size: var(--fs-label);
-        letter-spacing: var(--ls-label);
-        text-transform: uppercase;
-        color: var(--ink-muted);
-        border-bottom: var(--border-rule);
-        padding-bottom: 8px;
-        margin: 28px 0 14px;
-      }
-      .home-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
-        gap: 12px;
-      }
-      .home-tile {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        border: 1px solid var(--hairline);
-        padding: 16px 18px;
-        min-height: var(--touch-min);
-        text-decoration: none;
-        color: var(--ink-muted);
-        opacity: 0.6;
-        transition: border-color var(--dur-fast) var(--ease-standard);
-      }
-      .home-tile:hover {
-        border-color: var(--ink-muted);
-      }
-      .home-tile:focus-visible {
-        outline: var(--border-focus);
-        outline-offset: 2px;
-      }
-      .home-tile.is-ready {
-        border: 2px solid var(--divider);
-        color: var(--ink);
-        opacity: 1;
-      }
-      .home-tile.is-ready:hover {
-        border-color: var(--accent);
-      }
-      .home-tile-name {
-        font-weight: 800;
-        font-size: 16px;
-      }
-      .home-tile-note {
-        font-size: 13px;
-        line-height: 1.45;
-      }
-
       @media (max-width: 1100px) {
-        .home-triple-grid {
+        .home-double-grid {
+          grid-template-columns: 1fr;
+        }
+        .home-side-grid {
           grid-template-columns: 1fr;
         }
       }
       @media (max-width: 900px) {
         .home-reparto-grid {
+          grid-template-columns: 1fr;
+        }
+        .home-orders-grid {
           grid-template-columns: 1fr;
         }
       }
@@ -928,18 +1247,102 @@ export class DashboardPage {
   private lookupSvc = inject(LookupService);
 
   readonly user = this.auth.currentUser;
-  readonly promoPermissions = ['promo.create', 'promo.approve', 'promo.allocate'];
 
   protected formatSoles = formatSoles;
   protected showDashboard = computed(() => this.auth.hasAny('report.view'));
   /** Doc 50, sección 5.1: también tiene reparto (p. ej. el Administrador) — acceso directo a su inicio. */
   protected canGoToReparto = computed(() => this.auth.hasAny('delivery.manage'));
+  protected canSeeOrders = computed(() =>
+    this.auth.hasAny('order.view_all', 'order.create', 'order.manage'),
+  );
+  protected canSeeAssignments = computed(() => this.auth.hasAny('customer.assign'));
+  protected canManageUsers = computed(() => this.auth.hasAny('user.manage'));
+  protected canApproveCustomers = computed(() => this.auth.hasAny('customer.approve'));
+  protected canManageBonusTray = computed(() => this.auth.hasAny('order.manage'));
+  protected canSendToBilling = computed(() => this.auth.hasAny('order.send_to_billing'));
 
   protected date = signal(todayIso());
   protected data = signal<DashboardTodayView | null>(null);
   protected loading = signal(true);
   protected error = signal(false);
 
+  // — Pendientes de gestión — doc 66, sección 3.2 —
+  protected pendingData = signal<DashboardPendingView | null>(null);
+  protected pendingLoading = signal(true);
+  protected pendingError = signal(false);
+  protected pendingUpdatedAt = signal<Date | null>(null);
+
+  protected pendingCards = computed<PendingCardVM[]>(() => {
+    const p = this.pendingData();
+    if (!p) return [];
+    const approve = this.canApproveCustomers();
+    const assign = this.canSeeAssignments();
+    const bonusTray = this.canManageBonusTray();
+    const billing = this.canSendToBilling();
+    return [
+      {
+        key: 'creation',
+        label: 'Creación de clientes',
+        value: p.creationRequests.pending,
+        detail: `${p.creationRequests.readyToApprove} lista${p.creationRequests.readyToApprove === 1 ? '' : 's'} para aprobar`,
+        tone: 'accent',
+        route: approve ? ['/aprobaciones'] : null,
+        queryParams: { tab: 'creation' },
+      },
+      {
+        key: 'field-change',
+        label: 'Edición de clientes',
+        value: p.fieldChangeRequests.pending,
+        detail: `${p.fieldChangeRequests.readyToApprove} lista${p.fieldChangeRequests.readyToApprove === 1 ? '' : 's'}`,
+        tone: 'accent',
+        route: approve ? ['/aprobaciones'] : null,
+        queryParams: { tab: 'field-change' },
+      },
+      {
+        key: 'closure',
+        label: 'Cierre de clientes',
+        value: p.closureRequests.pending,
+        detail: `${p.closureRequests.readyToApprove} listo${p.closureRequests.readyToApprove === 1 ? '' : 's'}`,
+        tone: 'accent',
+        route: approve ? ['/aprobaciones'] : null,
+        queryParams: { tab: 'closure' },
+      },
+      {
+        key: 'incomplete-schedules',
+        label: 'Horario incompleto',
+        value: p.incompleteSchedules,
+        detail: 'asignaciones sin días o semanas',
+        tone: 'warn',
+        route: assign ? ['/asignaciones/pendientes'] : null,
+      },
+      {
+        key: 'orphan-customers',
+        label: 'Sin vendedor',
+        value: p.orphanCustomers,
+        detail: 'clientes activos',
+        tone: 'warn',
+        route: assign ? ['/asignaciones/huerfanos'] : null,
+      },
+      {
+        key: 'pending-stock-bonus',
+        label: 'Bonificaciones sin stock',
+        value: p.pendingStockBonusOrders,
+        detail: 'pedidos abiertos',
+        tone: 'warn',
+        route: bonusTray ? ['/pedidos/bonificaciones-sin-stock'] : null,
+      },
+      {
+        key: 'negative-stock',
+        label: 'Negativos hoy',
+        value: p.negativeStockProducts,
+        detail: 'productos',
+        tone: 'danger',
+        route: billing ? ['/validacion-facturacion'] : null,
+      },
+    ];
+  });
+
+  // — tarjeta "Mejores ventas del día" —
   protected topLimitOptions = TOP_LIMIT_OPTIONS;
   protected channelOptions = signal<UiFieldOption[]>([{ value: '', label: 'Todos' }]);
   protected topLimitStr = signal('5');
@@ -955,6 +1358,8 @@ export class DashboardPage {
       ? 'Sin ventas en este canal para el día.'
       : 'Todavía no hay ventas registradas hoy.',
   );
+
+  protected dayParams = computed(() => ({ from: this.date(), to: this.date() }));
 
   private loadEffect = effect(() => {
     this.date();
@@ -988,6 +1393,12 @@ export class DashboardPage {
         ...items.map((i) => ({ value: String(i.id), label: i.name ?? '' })),
       ]);
     });
+
+    if (this.showDashboard()) {
+      this.loadPending();
+      const handle = setInterval(() => this.loadPending(), PENDING_POLL_MS);
+      inject(DestroyRef).onDestroy(() => clearInterval(handle));
+    }
   }
 
   load() {
@@ -1008,6 +1419,23 @@ export class DashboardPage {
     });
   }
 
+  /** Independiente de `/today`: si falla, no rompe el resto del Inicio — doc 66, sección 3.2. */
+  loadPending() {
+    this.pendingLoading.set(true);
+    this.pendingError.set(false);
+    this.dashboardSvc.pending().subscribe({
+      next: (result) => {
+        this.pendingData.set(result);
+        this.pendingLoading.set(false);
+        this.pendingUpdatedAt.set(new Date());
+      },
+      error: () => {
+        this.pendingLoading.set(false);
+        this.pendingError.set(true);
+      },
+    });
+  }
+
   private loadTopSalespeople(limit: number, salesChannelId?: number) {
     this.topLoading.set(true);
     this.dashboardSvc.topSalespeople(this.date(), limit, salesChannelId).subscribe({
@@ -1019,11 +1447,6 @@ export class DashboardPage {
         this.topLoading.set(false);
       },
     });
-  }
-
-  protected topBrandPct(orders: DashboardOrdersSummaryView): number {
-    if (!orders.topBrandAmount || !orders.totalAmount) return 0;
-    return Math.round((orders.topBrandAmount / orders.totalAmount) * 100);
   }
 
   protected amountPct(part: number, whole: number): number {
@@ -1072,18 +1495,47 @@ export class DashboardPage {
     return Math.round((qty / max) * 100);
   }
 
-  protected customersRingGradient(c: DashboardCustomersView): string {
-    const pct = Math.max(0, Math.min(100, c.coveragePercentage));
-    const deg = pct * 3.6;
-    return `conic-gradient(var(--accent) 0deg ${deg}deg, var(--faint) ${deg}deg 360deg)`;
-  }
-
   protected roleColor(index: number): string {
     return ROLE_AVATAR_COLORS[index % ROLE_AVATAR_COLORS.length];
   }
 
-  /** Los módulos apagados que este usuario sí puede ver en el menú. */
-  pendingModules(): NavItem[] {
-    return NAV.filter((i) => i.comingSoon && this.auth.hasAny(...i.anyOf));
+  // — Pedidos del día —
+  protected statusTone(statusCode: string): string {
+    return ORDER_STATUS_TONE_VAR[statusCode] ?? '--ink-muted';
+  }
+
+  protected statusBarPct(orders: DashboardOrdersSummaryView, s: { count: number }): number {
+    const total = orders.byStatus.reduce((sum, o) => sum + o.count, 0) || 1;
+    return Math.round((s.count / total) * 100);
+  }
+
+  protected orderStatusParams(statusCode: string) {
+    return { ...this.dayParams(), statusCode };
+  }
+
+  protected orderOriginParams(originCode: string) {
+    return { ...this.dayParams(), originCode };
+  }
+
+  protected visibleOrigins(orders: DashboardOrdersSummaryView) {
+    return orders.byOrigin.filter((o) => o.count > 0);
+  }
+
+  protected originBarPct(orders: DashboardOrdersSummaryView, count: number): number {
+    const max = Math.max(...orders.byOrigin.map((o) => o.count), 1);
+    return Math.round((count / max) * 100);
+  }
+
+  /** "Facturados por el ERP: N de M enviados" — solo si hubo enviados (sección 3.3). */
+  protected erpFacturadosLine(
+    orders: DashboardOrdersSummaryView,
+  ): { uploaded: number; sent: number; pct: number } | null {
+    const sent = orders.byStatus.find((s) => s.statusCode === 'SENT_TO_BILLING')?.count ?? 0;
+    if (sent === 0) return null;
+    return {
+      uploaded: orders.erpUploadedCount,
+      sent,
+      pct: Math.min(100, Math.round((orders.erpUploadedCount / sent) * 100)),
+    };
   }
 }

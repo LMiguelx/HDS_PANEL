@@ -1,7 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
-import { DashboardTodayView, TopSalespersonView } from '../../shared/models/dashboard.models';
+import {
+  DashboardPendingView,
+  DashboardTodayView,
+  TopSalespersonView,
+} from '../../shared/models/dashboard.models';
 
 /** DashboardController, /api/admin/dashboard. `report.view`. */
 @Injectable({ providedIn: 'root' })
@@ -25,5 +29,13 @@ export class DashboardAdminService {
     if (limit) params = params.set('limit', limit);
     if (salesChannelId != null) params = params.set('salesChannelId', salesChannelId);
     return this.http.get<TopSalespersonView[]>(`${this.base}/top-salespeople`, { params });
+  }
+
+  /**
+   * Pendientes de gestión — doc 66, sección 2.5. Sin parámetros, siempre a
+   * hoy: se pide aparte de `today()`, nunca junto con un `date`.
+   */
+  pending() {
+    return this.http.get<DashboardPendingView>(`${this.base}/pending`);
   }
 }

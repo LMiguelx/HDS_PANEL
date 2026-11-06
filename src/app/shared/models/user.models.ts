@@ -25,12 +25,34 @@ export interface UserView {
 }
 
 export interface UserSummaryView {
-  userId: number;
+  userId: number; // NO mostrar
   code: string;
   username: string;
   fullName: string;
   active: boolean;
-  roleCodes: string[];
+  roleCodes: string[]; // se conserva por compatibilidad; NO usar para mostrar
+  roles: Role[]; // NUEVO — roles con nombre: mostrar name
+  lastLoginAt: string | null; // NUEVO — último ingreso; null = nunca ingresó
+  routeStartedAt: string | null; // NUEVO — hora en que abrió jornada HOY; null = no la abrió
+  routeEndedAt: string | null; // NUEVO — hora en que la cerró; null = sigue en jornada (o no la abrió)
+}
+
+/** doc 66, sección 4.2 — GET /api/users/summary. Tampoco cuenta al usuario que consulta. */
+export interface UserSummaryCounts {
+  total: number; // usuarios (cada uno una vez)
+  active: number;
+  inactive: number;
+  onRouteToday: number; // abrieron jornada hoy
+  byRole: RoleUserCount[]; // todos los roles activos, con 0 si no tienen usuarios; orden por nombre
+}
+
+export interface RoleUserCount {
+  roleId: number; // NO mostrar
+  roleCode: string; // NO mostrar; es el valor para el filtro roleCode
+  roleName: string;
+  total: number;
+  active: number;
+  onRouteToday: number;
 }
 
 // — Autoservicio —

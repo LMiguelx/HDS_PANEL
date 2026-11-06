@@ -8,9 +8,19 @@ import {
   AssignRolesCommand,
   CreateUserCommand,
   UserCreatedResult,
+  UserSummaryCounts,
   UserSummaryView,
   UserView,
 } from '../../shared/models/user.models';
+
+export interface UserListFilters {
+  q?: string;
+  roleCode?: string;
+  active?: boolean;
+  onRouteToday?: boolean;
+  page?: number;
+  size?: number;
+}
 
 /** UserAdminController, /api/users — requiere `user.manage`. */
 @Injectable({ providedIn: 'root' })
@@ -22,9 +32,19 @@ export class UserAdminService {
     return this.http.post<UserCreatedResult>(this.base, cmd);
   }
 
-  list(page = 0, size = 20) {
-    let params = new HttpParams().set('page', page).set('size', size);
+  /** doc 66, sección 4.1 — filtros en el servidor; ya no trae al usuario que consulta. */
+  list(filters: UserListFilters = {}) {
+    let params = new HttpParams().set('page', filters.page ?? 0).set('size', filters.size ?? 20);
+    if (filters.q) params = params.set('q', filters.q);
+    if (filters.roleCode) params = params.set('roleCode', filters.roleCode);
+    if (filters.active != null) params = params.set('active', filters.active);
+    if (filters.onRouteToday != null) params = params.set('onRouteToday', filters.onRouteToday);
     return this.http.get<PageResponse<UserSummaryView>>(this.base, { params });
+  }
+
+  /** doc 66, sección 4.2 — totales y resumen por rol. Sin parámetros. */
+  summary() {
+    return this.http.get<UserSummaryCounts>(`${this.base}/summary`);
   }
 
   detail(userId: number) {
