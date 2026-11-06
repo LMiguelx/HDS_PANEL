@@ -40,6 +40,8 @@ import {
 } from './order-format';
 import { dateTimeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
+import { IntakeStatusService } from '../../core/order-intake/intake-status.service';
+import { closedUntilText } from '../../shared/utils/order-intake-closure-text';
 
 /** Detalle de un pedido con sus líneas (GET /orders/{id}) y sus acciones (doc 30, sección 8). */
 @Component({
@@ -101,8 +103,15 @@ import { formatSoles } from '../../shared/pipes/money';
                 uiButton
                 variant="secondary"
                 *hasPermission="['order.edit', 'order.manage']"
-                [class.od-btn-disabled]="recalculatingOrderPromos()"
-                [routerLink]="recalculatingOrderPromos() ? null : ['/pedidos/editar', o.orderId]"
+                [class.od-btn-disabled]="recalculatingOrderPromos() || !!blocksMe()"
+                [title]="
+                  blocksMe()
+                    ? 'Toma de pedidos cerrada hasta ' + intakeClosedUntilText(blocksMe()!)
+                    : ''
+                "
+                [routerLink]="
+                  recalculatingOrderPromos() || blocksMe() ? null : ['/pedidos/editar', o.orderId]
+                "
               >
                 Editar
               </button>
@@ -149,7 +158,12 @@ import { formatSoles } from '../../shared/pipes/money';
                 uiButton
                 variant="secondary"
                 *hasPermission="'order.cancel'"
-                [disabled]="recalculatingOrderPromos()"
+                [disabled]="recalculatingOrderPromos() || !!blocksMe()"
+                [title]="
+                  blocksMe()
+                    ? 'Toma de pedidos cerrada hasta ' + intakeClosedUntilText(blocksMe()!)
+                    : ''
+                "
                 [loading]="cancelling()"
                 (click)="cancelOrder(o)"
               >
@@ -917,10 +931,17 @@ export class OrderDetailPage {
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
   private router = inject(Router);
+  private intake = inject(IntakeStatusService);
 
   orderId = input<string>('');
 
   protected PERMISSIONS = PERMISSIONS;
+  protected intakeClosedUntilText = closedUntilText;
+  /** doc 65, sección 2.7 — cierre en curso que bloquea a este usuario (null si no hay). */
+  protected blocksMe = computed(() => {
+    const s = this.intake.status();
+    return s?.blocksMe && s.current ? s.current : null;
+  });
   protected statusName = orderStatusName;
   protected deliveryName = deliveryStatusName;
   protected dateTimeText = dateTimeText;

@@ -3,6 +3,45 @@
 // lo decide el servidor (`OrderBillingValidation.recalculable`); el panel
 // ya no lo adivina a partir de los códigos de motivo.
 
+import { BillingAction } from '../../shared/models/billing-validation.models';
+
+/** Orden fijo de los chips de grupo — doc 65, sección 1.7. Es también el orden de prioridad (sección 1.5). */
+export const BILLING_ACTION_ORDER: BillingAction[] = [
+  'DEFINE_PRICE',
+  'RECALCULATE',
+  'EDIT_QUANTITY',
+  'BONUS_TRAY',
+  'CHOOSE_PRIZE',
+  'MANUAL',
+];
+
+const BILLING_ACTION_LABELS: Record<BillingAction, string> = {
+  DEFINE_PRICE: 'Definir precio',
+  RECALCULATE: 'Recalcular',
+  EDIT_QUANTITY: 'Editar cantidades',
+  BONUS_TRAY: 'Bonificación sin stock',
+  CHOOSE_PRIZE: 'Premio por elegir',
+  MANUAL: 'Corregir a mano',
+};
+
+/** Variable CSS de tono — doc 65, sección 1.5. */
+const BILLING_ACTION_TONES: Record<BillingAction, string> = {
+  DEFINE_PRICE: '--status-danger',
+  RECALCULATE: '--status-warn',
+  EDIT_QUANTITY: '--status-danger',
+  BONUS_TRAY: '--status-warn',
+  CHOOSE_PRIZE: '--accent',
+  MANUAL: '--ink-muted',
+};
+
+export function billingActionLabel(action: BillingAction): string {
+  return BILLING_ACTION_LABELS[action];
+}
+
+export function billingActionTone(action: BillingAction): string {
+  return BILLING_ACTION_TONES[action];
+}
+
 export interface ElsewhereLink {
   label: string;
   route: string[];

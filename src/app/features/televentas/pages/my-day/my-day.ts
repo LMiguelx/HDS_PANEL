@@ -27,6 +27,8 @@ import { TelesalesDayStore } from '../../data-access/televentas.store';
 import { RouteStore } from '../../../orders/route-store';
 import { CustomerService } from '../../../customers/customer';
 import { OrderAdminService } from '../../../orders/order-admin';
+import { IntakeStatusService } from '../../../../core/order-intake/intake-status.service';
+import { closedUntilText } from '../../../../shared/utils/order-intake-closure-text';
 import { CustomerDetail, CustomerSummary } from '../../../../shared/models/customer.models';
 import { OrderSummary } from '../../../../shared/models/order.models';
 import { resolveCssVar } from '../../../assignments/map/map-markers';
@@ -80,6 +82,7 @@ const DEFAULT_CENTER: [number, number] = [-16.409, -71.537];
 export class MyDayPage {
   protected store = inject(TelesalesDayStore);
   protected routeStore = inject(RouteStore);
+  protected intake = inject(IntakeStatusService);
   private customerSvc = inject(CustomerService);
   private orderSvc = inject(OrderAdminService);
   private dialog = inject(UiDialogService);
@@ -319,7 +322,9 @@ export class MyDayPage {
   private redrawMap(rows: DayRow[]) {
     const map = this.leafletMap;
     if (!map) return;
-    const withCoords = rows.filter((r) => r.summary.latitude != null && r.summary.longitude != null);
+    const withCoords = rows.filter(
+      (r) => r.summary.latitude != null && r.summary.longitude != null,
+    );
     const seen = new Set<number>();
     const bounds: L.LatLngExpression[] = [];
     for (const row of withCoords) {
@@ -376,6 +381,13 @@ export class MyDayPage {
     return this.visibleRows().find((r) => r.customerId === id) ?? null;
   });
 
+  /** doc 65, sección 2.7 — cierre en curso que bloquea a este usuario (null si no hay). */
+  protected blocksMe = computed(() => {
+    const s = this.intake.status();
+    return s?.blocksMe && s.current ? s.current : null;
+  });
+  protected intakeClosedUntilText = closedUntilText;
+
   protected canTakeOrder = computed(() => {
     const d = this.customerDetail();
     return !!d && d.isActive && d.customerTypeId != null;
@@ -385,7 +397,8 @@ export class MyDayPage {
     const d = this.customerDetail();
     if (!d) return '';
     if (!d.isActive) return 'El cliente está inactivo';
-    if (d.customerTypeId == null) return 'El cliente no tiene tipo asignado; comuníquese con supervisión';
+    if (d.customerTypeId == null)
+      return 'El cliente no tiene tipo asignado; comuníquese con supervisión';
     return '';
   });
 

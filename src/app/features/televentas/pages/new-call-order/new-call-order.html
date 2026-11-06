@@ -7,6 +7,16 @@
     <button uiButton variant="secondary" (click)="cancel()">Cancelar</button>
   </div>
 
+  @if (blocksMe(); as closure) {
+    <div class="nco-alert">
+      <strong>Toma de pedidos cerrada</strong> hasta el {{ intakeClosedUntilText(closure) }}.
+      @if (closure.reason) {
+        Motivo: {{ closure.reason }}.
+      }
+      No se pueden crear, editar ni anular pedidos.
+    </div>
+  }
+
   @if (!jornadaOpen()) {
     <ui-empty
       title="Abre tu jornada"

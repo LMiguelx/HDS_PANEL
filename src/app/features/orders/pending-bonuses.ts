@@ -1,5 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiEmpty } from '../../shared/ui/empty/empty';
@@ -98,126 +98,142 @@ function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: str
             body="Los pedidos abiertos tienen todos sus premios reservados."
           />
         } @else {
+          @if (filterOrderId()) {
+            <div class="pb-filter-banner">
+              <span>Mostrando solo el pedido {{ filterOrderId() }}.</span>
+              <button type="button" class="pb-filter-clear" (click)="clearOrderFilter()">
+                Ver todas
+              </button>
+            </div>
+          }
           <div class="pb-groups">
             @for (group of data.promoBonuses; track groupKeyOf(group)) {
-              <div class="pb-group-card">
-                <div class="pb-group-head">
-                  <div>
-                    <div class="pb-group-promo">{{ group.promoName }} · {{ group.promoCode }}</div>
-                    <div class="pb-group-product">
-                      Premio: {{ group.productName }} · {{ group.productCode }} ·
-                      {{ group.brandName }}
+              @if (groupMatchesFilter(group)) {
+                <div class="pb-group-card">
+                  <div class="pb-group-head">
+                    <div>
+                      <div class="pb-group-promo">
+                        {{ group.promoName }} · {{ group.promoCode }}
+                      </div>
+                      <div class="pb-group-product">
+                        Premio: {{ group.productName }} · {{ group.productCode }} ·
+                        {{ group.brandName }}
+                      </div>
                     </div>
+                    @if (group.availableStock != null) {
+                      <span
+                        class="pb-stock-badge"
+                        [style.color]="'var(' + badgeColorVar(group) + ')'"
+                      >
+                        ■ {{ badgeText(group) }}
+                      </span>
+                    }
                   </div>
-                  @if (group.availableStock != null) {
-                    <span
-                      class="pb-stock-badge"
-                      [style.color]="'var(' + badgeColorVar(group) + ')'"
-                    >
-                      ■ {{ badgeText(group) }}
-                    </span>
+                  <div class="pb-group-meta">
+                    {{ group.orderCount }} pedido{{ group.orderCount === 1 ? '' : 's' }} · Se
+                    {{ group.orderCount === 1 ? 'debe' : 'deben' }}
+                    {{ quantityText(group.totalQuantity) }} unidad{{
+                      group.totalQuantity === 1 ? '' : 'es'
+                    }}
+                    @if (group.availableStock != null) {
+                      · Stock hoy: {{ quantityText(group.availableStock) }}
+                    } @else {
+                      · Pedidos de varias sedes: ver el stock en cada pedido
+                    }
+                  </div>
+                  @if (
+                    group.availableStock != null && group.availableStock >= group.totalQuantity
+                  ) {
+                    <p class="pb-group-hint">
+                      Ya hay stock: edita el pedido o vuelve a guardarlo para que se reserve el
+                      premio original.
+                    </p>
                   }
-                </div>
-                <div class="pb-group-meta">
-                  {{ group.orderCount }} pedido{{ group.orderCount === 1 ? '' : 's' }} · Se
-                  {{ group.orderCount === 1 ? 'debe' : 'deben' }}
-                  {{ quantityText(group.totalQuantity) }} unidad{{
-                    group.totalQuantity === 1 ? '' : 'es'
-                  }}
-                  @if (group.availableStock != null) {
-                    · Stock hoy: {{ quantityText(group.availableStock) }}
-                  } @else {
-                    · Pedidos de varias sedes: ver el stock en cada pedido
-                  }
-                </div>
-                @if (group.availableStock != null && group.availableStock >= group.totalQuantity) {
-                  <p class="pb-group-hint">
-                    Ya hay stock: edita el pedido o vuelve a guardarlo para que se reserve el premio
-                    original.
-                  </p>
-                }
 
-                <table class="ui-table-grid pb-table">
-                  <thead>
-                    <tr>
-                      <th class="pb-check-cell">
-                        <input
-                          type="checkbox"
-                          [checked]="allSelected(group)"
-                          (change)="toggleSelectAll(group, $event)"
-                        />
-                      </th>
-                      <th>N.º pedido</th>
-                      <th>Fecha</th>
-                      <th>Origen</th>
-                      <th>Cliente</th>
-                      <th>Vendedor</th>
-                      <th>Debe</th>
-                      @if (group.availableStock == null) {
-                        <th>Stock</th>
-                      }
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (o of sortedOrders(group); track o.orderId) {
+                  <table class="ui-table-grid pb-table">
+                    <thead>
                       <tr>
-                        <td class="pb-check-cell">
+                        <th class="pb-check-cell">
                           <input
                             type="checkbox"
-                            [checked]="isSelected(group, o.orderId)"
-                            (change)="toggleSelect(group, o.orderId)"
+                            [checked]="allSelected(group)"
+                            (change)="toggleSelectAll(group, $event)"
                           />
-                        </td>
-                        <td>
-                          <a [routerLink]="['/pedidos/detalle', o.orderId]" class="pb-order-link">{{
-                            o.orderId
-                          }}</a>
-                        </td>
-                        <td class="pb-muted">{{ dateTimeText(o.orderDate) }}</td>
-                        <td class="pb-muted">{{ originName(o.originCode) }}</td>
-                        <td>
-                          <span class="pb-muted">{{ o.customerCode }}</span> {{ o.customerName }}
-                        </td>
-                        <td>
-                          <span class="pb-muted">{{ o.salespersonCode }}</span>
-                          {{ o.salespersonName }}
-                        </td>
-                        <td class="pb-cell-strong">{{ quantityText(o.quantity) }}</td>
+                        </th>
+                        <th>N.º pedido</th>
+                        <th>Fecha</th>
+                        <th>Origen</th>
+                        <th>Cliente</th>
+                        <th>Vendedor</th>
+                        <th>Debe</th>
                         @if (group.availableStock == null) {
-                          <td class="pb-muted">{{ quantityText(o.availableStock ?? 0) }}</td>
+                          <th>Stock</th>
                         }
                       </tr>
-                    }
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      @for (o of sortedOrders(group); track o.orderId) {
+                        <tr>
+                          <td class="pb-check-cell">
+                            <input
+                              type="checkbox"
+                              [checked]="isSelected(group, o.orderId)"
+                              (change)="toggleSelect(group, o.orderId)"
+                            />
+                          </td>
+                          <td>
+                            <a
+                              [routerLink]="['/pedidos/detalle', o.orderId]"
+                              class="pb-order-link"
+                              >{{ o.orderId }}</a
+                            >
+                          </td>
+                          <td class="pb-muted">{{ dateTimeText(o.orderDate) }}</td>
+                          <td class="pb-muted">{{ originName(o.originCode) }}</td>
+                          <td>
+                            <span class="pb-muted">{{ o.customerCode }}</span> {{ o.customerName }}
+                          </td>
+                          <td>
+                            <span class="pb-muted">{{ o.salespersonCode }}</span>
+                            {{ o.salespersonName }}
+                          </td>
+                          <td class="pb-cell-strong">{{ quantityText(o.quantity) }}</td>
+                          @if (group.availableStock == null) {
+                            <td class="pb-muted">{{ quantityText(o.availableStock ?? 0) }}</td>
+                          }
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
 
-                <div class="pb-group-actions" *hasPermission="PERMISSIONS.ORDER_MANAGE">
-                  <span class="pb-selected-count"
-                    >{{ selectedCount(group) }} seleccionado{{
-                      selectedCount(group) === 1 ? '' : 's'
-                    }}</span
-                  >
-                  <button
-                    uiButton
-                    variant="secondary"
-                    size="sm"
-                    [disabled]="selectedCount(group) === 0 || busyGroup() === groupKeyOf(group)"
-                    (click)="resolveGroup(group, 'decline')"
-                  >
-                    No otorgar
-                  </button>
-                  <button
-                    uiButton
-                    variant="primary"
-                    size="sm"
-                    [loading]="busyGroup() === groupKeyOf(group)"
-                    [disabled]="selectedCount(group) === 0"
-                    (click)="resolveGroup(group, 'substitute')"
-                  >
-                    Sustituir por otro producto…
-                  </button>
+                  <div class="pb-group-actions" *hasPermission="PERMISSIONS.ORDER_MANAGE">
+                    <span class="pb-selected-count"
+                      >{{ selectedCount(group) }} seleccionado{{
+                        selectedCount(group) === 1 ? '' : 's'
+                      }}</span
+                    >
+                    <button
+                      uiButton
+                      variant="secondary"
+                      size="sm"
+                      [disabled]="selectedCount(group) === 0 || busyGroup() === groupKeyOf(group)"
+                      (click)="resolveGroup(group, 'decline')"
+                    >
+                      No otorgar
+                    </button>
+                    <button
+                      uiButton
+                      variant="primary"
+                      size="sm"
+                      [loading]="busyGroup() === groupKeyOf(group)"
+                      [disabled]="selectedCount(group) === 0"
+                      (click)="resolveGroup(group, 'substitute')"
+                    >
+                      Sustituir por otro producto…
+                    </button>
+                  </div>
                 </div>
-              </div>
+              }
             }
           </div>
 
@@ -300,6 +316,28 @@ function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: str
         height: 200px;
         background: var(--faint);
         margin-top: 20px;
+      }
+      .pb-filter-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 20px;
+        padding: 10px 16px;
+        border-left: 3px solid var(--accent);
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        font-size: 13px;
+      }
+      .pb-filter-clear {
+        appearance: none;
+        border: 0;
+        background: none;
+        padding: 0;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        font-weight: 800;
+        font-size: 13px;
+        color: var(--accent-ink);
       }
       .pb-groups {
         display: grid;
@@ -430,6 +468,11 @@ export class PendingBonusesPage {
   private companySvc = inject(CompanyAdminService);
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
+  private router = inject(Router);
+
+  /** `?orderId=` — doc 65, sección 1.7: "Resolver" del grupo "Bonificación sin stock" llega con el pedido filtrado. */
+  orderIdQuery = input('', { alias: 'orderId' });
+  protected filterOrderId = computed(() => Number(this.orderIdQuery()) || null);
 
   protected PERMISSIONS = PERMISSIONS;
   protected dateTimeText = dateTimeText;
@@ -490,9 +533,20 @@ export class PendingBonusesPage {
   }
 
   protected sortedOrders(group: PendingBonusGroupView): PendingBonusOrderRow[] {
-    return [...group.orders].sort(
+    const filterId = this.filterOrderId();
+    const orders = filterId ? group.orders.filter((o) => o.orderId === filterId) : group.orders;
+    return [...orders].sort(
       (a, b) => new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime(),
     );
+  }
+
+  protected groupMatchesFilter(group: PendingBonusGroupView): boolean {
+    const filterId = this.filterOrderId();
+    return !filterId || group.orders.some((o) => o.orderId === filterId);
+  }
+
+  protected clearOrderFilter() {
+    this.router.navigate([], { queryParams: {} });
   }
 
   protected isSelected(group: PendingBonusGroupView, orderId: number): boolean {

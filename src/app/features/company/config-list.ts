@@ -193,7 +193,9 @@ export class ConfigListPage {
     this.error.set(false);
     this.companySvc.configurations(this.group().trim() || undefined).subscribe({
       next: (list) => {
-        this.rows.set(list);
+        // CYCLE_ANCHOR se cambia desde la tarjeta "Ciclo de asignaciones" (doc
+        // 65, sección 3.5), que muestra el impacto antes de aplicar — acá no.
+        this.rows.set(list.filter((c) => c.code !== 'CYCLE_ANCHOR'));
         this.loading.set(false);
       },
       error: () => {

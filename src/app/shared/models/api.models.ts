@@ -26,4 +26,8 @@ export interface ProblemDetail {
   status?: number;
   detail?: string;
   instance?: string;
+  /** doc 65, sección 2.7 — presente en el 409 ORDER_INTAKE_CLOSED. */
+  code?: string;
+  closedUntil?: string;
+  reason?: string;
 }

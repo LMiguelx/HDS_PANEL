@@ -22,6 +22,8 @@ import { MobileDrawerState } from '../mobile-drawer.state';
 import { RouteStore } from '../../../features/orders/route-store';
 import { UserSelfService } from '../../../features/users/user-self';
 import { MaintenanceService } from '../../maintenance/maintenance.service';
+import { IntakeStatusService } from '../../order-intake/intake-status.service';
+import { PERMISSIONS } from '../../auth/permissions';
 import { timeText } from '../../../features/assignments/assignment-format';
 
 /**
@@ -48,13 +50,16 @@ export class ShellTopbar {
   readonly routeStore = inject(RouteStore);
   readonly userSelf = inject(UserSelfService);
   readonly maintenance = inject(MaintenanceService);
+  readonly intake = inject(IntakeStatusService);
 
   readonly user = this.auth.currentUser;
   readonly showJornada = computed(
     () => this.auth.hasAny('order.manage') || this.auth.isTelesalesMode(),
   );
   readonly canManageMaintenance = computed(() => this.auth.hasAny('system.maintenance.manage'));
+  readonly canManageIntake = computed(() => this.auth.hasAny(PERMISSIONS.ORDER_INTAKE_MANAGE));
   readonly userMenuOpen = signal(false);
+  protected timeText = timeText;
 
   readonly isHandset = toSignal(
     this.breakpoints.observe([Breakpoints.Handset]).pipe(map((r) => r.matches)),
@@ -100,6 +105,12 @@ export class ShellTopbar {
       this.maintenance.refresh();
       this.maintenance.startPolling();
       inject(DestroyRef).onDestroy(() => this.maintenance.stopPolling());
+    }
+    // doc 65, sección 2.8: al cargar el shell, si puede crear/ver pedidos o administrar cierres.
+    if (this.auth.hasAny('order.create', 'order.view_all', PERMISSIONS.ORDER_INTAKE_MANAGE)) {
+      this.intake.refresh();
+      this.intake.startPolling();
+      inject(DestroyRef).onDestroy(() => this.intake.stopPolling());
     }
     // Cierra el menú del usuario al navegar, igual que antes de separar el shell.
     effect(() => {

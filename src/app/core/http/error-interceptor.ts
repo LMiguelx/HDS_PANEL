@@ -9,6 +9,7 @@ import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../ui/toast';
 import { ProblemDetail } from '../../shared/models/api.models';
 import { MaintenanceBlockState } from './maintenance-block.state';
+import { IntakeStatusService } from '../order-intake/intake-status.service';
 
 /**
  * Marca una petición cuyo error es esperado y ya se maneja en la pantalla
@@ -34,6 +35,7 @@ function cleanDetail(detail: string | undefined): string | null {
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const maintenanceBlock = inject(MaintenanceBlockState);
+  const intakeStatus = inject(IntakeStatusService);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
@@ -45,6 +47,18 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         (err.error as ProblemDetail | undefined)?.title?.includes('mantenimiento')
       ) {
         maintenanceBlock.block((err.error as ProblemDetail).detail ?? null);
+        return throwError(() => err);
+      }
+      // Toma de pedidos cerrada (doc 65, sección 2.7): no es un error genérico
+      // — toast con el detalle, refrescar el estado compartido y no cerrar el
+      // diálogo ni perder lo que el usuario estaba escribiendo.
+      if (
+        err.status === 409 &&
+        (err.error as ProblemDetail | undefined)?.code === 'ORDER_INTAKE_CLOSED'
+      ) {
+        const problem = err.error as ProblemDetail;
+        toast.error(problem.detail ?? 'La toma de pedidos está cerrada.');
+        intakeStatus.refresh();
         return throwError(() => err);
       }
       // El 401 lo maneja el authInterceptor (refresh). No mostramos toast ahí.

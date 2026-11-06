@@ -9,6 +9,18 @@
   </button>
 </div>
 
+@if (blocksMe(); as closure) {
+  <div class="md-jornada-banner">
+    <span
+      ><strong>Toma de pedidos cerrada</strong> hasta el {{ intakeClosedUntilText(closure) }}.
+      @if (closure.reason) {
+        Motivo: {{ closure.reason }}.
+      }
+      No se pueden crear, editar ni anular pedidos.</span
+    >
+  </div>
+}
+
 @if (store.loading() && store.plan().length === 0 && store.portfolio().length === 0) {
   <div class="md-skeleton" role="status" aria-label="Cargando"></div>
 } @else if (store.error()) {
@@ -205,8 +217,14 @@
                 <button
                   uiButton
                   variant="primary"
-                  [disabled]="!canTakeOrder() || !jornadaOpen()"
-                  [title]="!jornadaOpen() ? 'Abre tu jornada para tomar pedidos' : ''"
+                  [disabled]="!canTakeOrder() || !jornadaOpen() || !!blocksMe()"
+                  [title]="
+                    blocksMe()
+                      ? 'Toma de pedidos cerrada hasta ' + intakeClosedUntilText(blocksMe()!)
+                      : !jornadaOpen()
+                        ? 'Abre tu jornada para tomar pedidos'
+                        : ''
+                  "
                   (click)="takeOrder()"
                 >
                   Tomar pedido

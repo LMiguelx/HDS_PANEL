@@ -35,6 +35,7 @@ export const PERMISSIONS = {
   GOODS_RECEIPT_MANAGE: 'goods_receipt.manage',
   GOODS_RECEIPT_STORE: 'goods_receipt.store',
   GOODS_RECEIPT_CONFIG: 'goods_receipt.config',
+  ORDER_INTAKE_MANAGE: 'order.intake.manage',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -31,6 +31,14 @@ export interface BillingIssue {
   productName: string | null;
 }
 
+/**
+ * Qué hacer con un pedido con motivos — doc 65, sección 1.5. El orden de
+ * los valores es la prioridad: la primera acción que tenga el pedido es su
+ * `nextAction`.
+ */
+export type BillingAction =
+  'DEFINE_PRICE' | 'RECALCULATE' | 'EDIT_QUANTITY' | 'BONUS_TRAY' | 'CHOOSE_PRIZE' | 'MANUAL';
+
 export interface OrderBillingValidation {
   orderId: number;
   orderDate: string; // ISO datetime
@@ -53,6 +61,10 @@ export interface OrderBillingValidation {
    * válido siempre trae `false`.
    */
   recalculable: boolean;
+  /** doc 65, sección 1.4 — qué hacer primero; null si el pedido es válido. */
+  nextAction: BillingAction | null;
+  /** doc 65, sección 1.4 — todas las acciones, en orden de prioridad; [] si es válido. `actions[0]` siempre es `nextAction`. */
+  actions: BillingAction[];
 }
 
 /** `POST /orders/billing/recalculate` — doc 55, sección 6. De 1 a 100 ids, sin repetir. */

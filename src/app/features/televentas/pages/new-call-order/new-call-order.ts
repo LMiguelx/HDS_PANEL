@@ -35,6 +35,8 @@ import {
 import { formatSoles } from '../../../../shared/pipes/money';
 import { isWholeQuantity, toWholeQuantity } from '../../../../shared/utils/quantity';
 import { ratingText } from '../../../customers/customer-format';
+import { IntakeStatusService } from '../../../../core/order-intake/intake-status.service';
+import { closedUntilText } from '../../../../shared/utils/order-intake-closure-text';
 
 interface CartLine {
   productId: number;
@@ -98,6 +100,8 @@ export class NewCallOrderPage {
   protected store = inject(TelesalesDayStore);
   protected session = inject(TelesalesSessionService);
   protected routeStore = inject(RouteStore);
+  protected intake = inject(IntakeStatusService);
+  protected intakeClosedUntilText = closedUntilText;
 
   customerIdParam = input<string | undefined>(undefined, { alias: 'customerId' });
   assignmentIdParam = input<string | undefined>(undefined, { alias: 'assignmentId' });
@@ -187,9 +191,16 @@ export class NewCallOrderPage {
   private previewTrigger$ = new Subject<void>();
   private productSearchTrigger$ = new Subject<void>();
 
+  /** doc 65, sección 2.7 — cierre en curso que bloquea a este usuario (null si no hay). */
+  protected blocksMe = computed(() => {
+    const s = this.intake.status();
+    return s?.blocksMe && s.current ? s.current : null;
+  });
+
   protected canSubmit = computed(
     () =>
       this.jornadaOpen() &&
+      !this.blocksMe() &&
       !this.submitting() &&
       !!this.customer() &&
       !!this.assignmentId() &&
@@ -199,6 +210,8 @@ export class NewCallOrderPage {
 
   protected submitDisabledReason = computed(() => {
     if (!this.jornadaOpen()) return 'Abre tu jornada para registrar el pedido';
+    const closure = this.blocksMe();
+    if (closure) return `Toma de pedidos cerrada hasta ${this.intakeClosedUntilText(closure)}`;
     if (!this.customer()) return 'Elige un cliente';
     if (!this.assignmentId()) return 'Este cliente no tiene una asignación vigente';
     if (!this.paymentConditionId()) return 'Elige la condición de pago';

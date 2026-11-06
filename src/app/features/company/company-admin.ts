@@ -7,6 +7,11 @@ import {
   CreateBranchCommand,
   UpsertConfigCommand,
 } from '../../shared/models/tenant.models';
+import {
+  CycleAnchorImpactPreview,
+  CycleInfoView,
+  UpdateCycleAnchorCommand,
+} from '../../shared/models/assignment-cycle.models';
 
 /**
  * TenantController, /api/tenant — sedes y configuración. `branches()` es de
@@ -39,5 +44,18 @@ export class CompanyAdminService {
 
   putConfiguration(cmd: UpsertConfigCommand) {
     return this.http.put<ConfigView>(`${this.api}/tenant/configurations`, cmd);
+  }
+
+  /** Ciclo de asignaciones — doc 65, sección 3.2. */
+  cycleInfo() {
+    return this.http.get<CycleInfoView>(`${this.api}/tenant/assignment-cycle-anchor`);
+  }
+
+  /** `confirm: false` solo previsualiza el impacto; `confirm: true` lo aplica. */
+  updateCycleAnchor(cmd: UpdateCycleAnchorCommand) {
+    return this.http.put<CycleAnchorImpactPreview>(
+      `${this.api}/tenant/assignment-cycle-anchor`,
+      cmd,
+    );
   }
 }

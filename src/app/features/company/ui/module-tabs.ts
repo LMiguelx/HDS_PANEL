@@ -1,8 +1,13 @@
 import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission';
+import { PERMISSIONS } from '../../../core/auth/permissions';
 
-/** Pestañas del módulo de Empresa, mismo patrón que los demás módulos. */
+/**
+ * Pestañas del módulo de Empresa, mismo patrón que los demás módulos.
+ * *Sistema* aparece si el usuario tiene al menos uno de los permisos de sus
+ * tres tarjetas — doc 65, sección 6.
+ */
 @Component({
   selector: 'app-company-module-tabs',
   imports: [RouterLink, RouterLinkActive, HasPermissionDirective],
@@ -13,7 +18,11 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
       <a
         routerLink="/empresa/sistema"
         routerLinkActive="active"
-        *hasPermission="'system.maintenance.manage'"
+        *hasPermission="[
+          'system.maintenance.manage',
+          PERMISSIONS.ORDER_INTAKE_MANAGE,
+          PERMISSIONS.CONFIG_EDIT,
+        ]"
         >Sistema</a
       >
     </nav>
@@ -59,4 +68,6 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
     `,
   ],
 })
-export class CompanyModuleTabs {}
+export class CompanyModuleTabs {
+  protected PERMISSIONS = PERMISSIONS;
+}

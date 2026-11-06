@@ -6,76 +6,98 @@ import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { MaintenanceService } from '../../core/maintenance/maintenance.service';
+import { PERMISSIONS } from '../../core/auth/permissions';
 import { CompanyModuleTabs } from './ui/module-tabs';
+import { OrderIntakeCard } from './ui/order-intake-card';
+import { AssignmentCycleCard } from './ui/assignment-cycle-card';
 import { dateTimeText } from '../assignments/assignment-format';
 
 /**
- * Empresa → Sistema → Modo mantenimiento — doc 38, sección 10. Reemplaza la
- * pantalla suelta de Mantenimiento: ahora vive como la última tarjeta de
- * Empresa, visible solo con `system.maintenance.manage`. El estado es
- * compartido (`MaintenanceService`) con el aviso de la barra superior.
+ * Empresa → Sistema — doc 38 (Modo mantenimiento) y doc 65, secciones 2 y 3
+ * (Toma de pedidos, Ciclo de asignaciones). Cada tarjeta se muestra solo con
+ * su propio permiso (sección 6 del doc 65); la pestaña misma aparece si el
+ * usuario tiene al menos uno de los tres (ver `CompanyModuleTabs`).
  */
 @Component({
   selector: 'app-system-tab',
-  imports: [UiButton, UiField, UiCard, UiEmpty, HasPermissionDirective, CompanyModuleTabs],
+  imports: [
+    UiButton,
+    UiField,
+    UiCard,
+    UiEmpty,
+    HasPermissionDirective,
+    CompanyModuleTabs,
+    OrderIntakeCard,
+    AssignmentCycleCard,
+  ],
   template: `
     <app-company-module-tabs />
-    <section class="sys-page" *hasPermission="'system.maintenance.manage'">
+    <section class="sys-page">
       <h1>Sistema</h1>
 
-      @if (maintenance.loading() && !maintenance.status()) {
-        <div class="sys-skeleton" role="status" aria-label="Cargando"></div>
-      } @else if (maintenance.error() && !maintenance.status()) {
-        <ui-empty
-          variant="error"
-          title="No pudimos cargar el estado del mantenimiento"
-          actionLabel="Reintentar"
-          (action)="maintenance.refresh()"
-        />
-      } @else if (maintenance.status(); as s) {
-        <ui-card title="Modo mantenimiento" class="sys-card">
-          <p class="sys-help">
-            Bloquea el acceso al sistema mientras se hace una intervención.
-            <strong>Afecta a todas las empresas del sistema.</strong> Quien tiene este permiso sigue
-            pudiendo entrar.
-          </p>
+      <div class="sys-grid">
+        <app-order-intake-card *hasPermission="PERMISSIONS.ORDER_INTAKE_MANAGE" />
 
-          @if (s.enabled) {
-            <div class="sys-status sys-status-on">
-              <span class="sys-dot"></span>
-              Activo
-            </div>
-            <p class="sys-meta">
-              Desde las {{ dateTimeText(s.enabledAt) }} · por {{ s.enabledBy }}
-              @if (s.reason) {
-                · "{{ s.reason }}"
-              }
+        <app-assignment-cycle-card *hasPermission="PERMISSIONS.CONFIG_EDIT" />
+
+        @if (maintenance.loading() && !maintenance.status()) {
+          <div class="sys-skeleton" role="status" aria-label="Cargando"></div>
+        } @else if (maintenance.error() && !maintenance.status()) {
+          <ui-empty
+            variant="error"
+            title="No pudimos cargar el estado del mantenimiento"
+            actionLabel="Reintentar"
+            (action)="maintenance.refresh()"
+          />
+        } @else if (maintenance.status(); as s) {
+          <ui-card
+            title="Modo mantenimiento"
+            class="sys-card"
+            *hasPermission="'system.maintenance.manage'"
+          >
+            <p class="sys-help">
+              Bloquea el acceso al sistema mientras se hace una intervención.
+              <strong>Afecta a todas las empresas del sistema.</strong> Quien tiene este permiso
+              sigue pudiendo entrar.
             </p>
-            <div class="sys-actions">
-              <button uiButton variant="primary" [loading]="saving()" (click)="turnOff()">
-                Desactivar mantenimiento
-              </button>
-            </div>
-          } @else {
-            <div class="sys-status sys-status-off">
-              <span class="sys-dot"></span>
-              Inactivo
-            </div>
-            <ui-field label="Motivo (opcional)" [(value)]="reason" />
-            <div class="sys-actions">
-              <button uiButton variant="primary" [loading]="saving()" (click)="turnOn()">
-                Activar mantenimiento
-              </button>
-            </div>
-          }
 
-          @if (actionError()) {
-            <p class="sys-error">{{ actionError() }}</p>
-          }
+            @if (s.enabled) {
+              <div class="sys-status sys-status-on">
+                <span class="sys-dot"></span>
+                Activo
+              </div>
+              <p class="sys-meta">
+                Desde las {{ dateTimeText(s.enabledAt) }} · por {{ s.enabledBy }}
+                @if (s.reason) {
+                  · "{{ s.reason }}"
+                }
+              </p>
+              <div class="sys-actions">
+                <button uiButton variant="primary" [loading]="saving()" (click)="turnOff()">
+                  Desactivar mantenimiento
+                </button>
+              </div>
+            } @else {
+              <div class="sys-status sys-status-off">
+                <span class="sys-dot"></span>
+                Inactivo
+              </div>
+              <ui-field label="Motivo (opcional)" [(value)]="reason" />
+              <div class="sys-actions">
+                <button uiButton variant="primary" [loading]="saving()" (click)="turnOn()">
+                  Activar mantenimiento
+                </button>
+              </div>
+            }
 
-          <p class="sys-note">Si el servidor se reinicia, el modo mantenimiento se desactiva.</p>
-        </ui-card>
-      }
+            @if (actionError()) {
+              <p class="sys-error">{{ actionError() }}</p>
+            }
+
+            <p class="sys-note">Si el servidor se reinicia, el modo mantenimiento se desactiva.</p>
+          </ui-card>
+        }
+      </div>
     </section>
   `,
   styles: [
@@ -93,6 +115,20 @@ import { dateTimeText } from '../assignments/assignment-format';
       .sys-skeleton {
         height: 200px;
         background: var(--faint);
+      }
+      .sys-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--sp-5);
+        align-items: start;
+      }
+      .sys-grid > app-order-intake-card {
+        grid-column: 1 / -1;
+      }
+      @media (max-width: 900px) {
+        .sys-grid {
+          grid-template-columns: 1fr;
+        }
       }
       .sys-card {
         max-width: var(--card-w-sm);
@@ -161,6 +197,7 @@ import { dateTimeText } from '../assignments/assignment-format';
 })
 export class SystemTabPage {
   protected maintenance = inject(MaintenanceService);
+  protected PERMISSIONS = PERMISSIONS;
   private dialog = inject(UiDialogService);
 
   protected dateTimeText = dateTimeText;

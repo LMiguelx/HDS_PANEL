@@ -1190,6 +1190,12 @@ export class CounterOrderFormPage implements OnInit {
   protected counterSession = inject(CounterSessionStore);
 
   orderId = input('', { alias: 'orderId' });
+  /**
+   * `returnTo=validacion-facturacion` — doc 65, sección 1.7: viene del botón
+   * "Editar pedido" del grupo "Editar cantidades"; al volver hay que
+   * revalidar solo ese pedido, no todo el día.
+   */
+  returnTo = input('');
 
   protected formatSoles = formatSoles;
   protected quantityText = quantityText;
@@ -1883,7 +1889,7 @@ export class CounterOrderFormPage implements OnInit {
         } else {
           this.toast.success('Pedido actualizado.');
         }
-        this.router.navigate(['/pedidos/detalle', order.orderId]);
+        this.navigateBack(order.orderId);
       },
       error: (err) => {
         this.submitting.set(false);
@@ -1896,9 +1902,18 @@ export class CounterOrderFormPage implements OnInit {
   protected cancel() {
     // En edición vuelve al detalle aunque el pedido no haya cargado.
     if (this.editMode()) {
-      this.router.navigate(['/pedidos/detalle', this.orderId()]);
+      this.navigateBack(Number(this.orderId()));
     } else {
       this.router.navigate(['/pedidos']);
+    }
+  }
+
+  /** Vuelve al detalle, salvo que `returnTo` pida volver a Validación de pedidos (doc 65, sección 1.7). */
+  private navigateBack(orderId: number) {
+    if (this.returnTo() === 'validacion-facturacion') {
+      this.router.navigate(['/validacion-facturacion'], { queryParams: { orderId } });
+    } else {
+      this.router.navigate(['/pedidos/detalle', orderId]);
     }
   }
 }

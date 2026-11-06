@@ -20,6 +20,7 @@ let nextId = 0;
         [id]="id"
         class="ui-checkbox-input"
         [checked]="checked()"
+        [indeterminate]="indeterminate()"
         [disabled]="disabled()"
         (change)="onChange($event)"
       />
@@ -74,6 +75,8 @@ let nextId = 0;
 export class UiCheckbox {
   label = input.required<string>();
   disabled = input(false);
+  /** Estado intermedio visual (algunos marcados, no todos) — no afecta `checked`. */
+  indeterminate = input(false);
   /** Texto o contador a la derecha (p. ej. cuántas personas tienen el rol). */
   hint = input('');
 

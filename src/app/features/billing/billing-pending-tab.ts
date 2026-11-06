@@ -7,6 +7,7 @@ import { UiButton } from '../../shared/ui/button/button';
 import { UiField } from '../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiCheckbox } from '../../shared/ui/checkbox/checkbox';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { UiExportMenu } from '../../shared/ui/export-menu/export-menu';
 import { ToastService } from '../../core/ui/toast';
@@ -24,6 +25,7 @@ import { BillingValidationAdminService } from './billing-validation-admin';
 import { BillingValidationModuleTabs } from './ui/billing-module-tabs';
 import { AdminOrderSummary } from '../../shared/models/order.models';
 import {
+  BillingAction,
   BillingIssue,
   OrderBillingSendOutcome,
   OrderBillingValidation,
@@ -31,11 +33,18 @@ import {
 } from '../../shared/models/billing-validation.models';
 import { NegativeStockReport } from '../../shared/models/sales-report.models';
 import { originName } from '../orders/order-format';
-import { elsewhereLinkFor, recalcOutcomeText } from './billing-validation-format';
+import {
+  BILLING_ACTION_ORDER,
+  billingActionLabel,
+  billingActionTone,
+  elsewhereLinkFor,
+  recalcOutcomeText,
+} from './billing-validation-format';
 import { erpUploadScreenText } from '../sales-reports/stock-validation-format';
 import { dateTimeText, timeText } from '../assignments/assignment-format';
 import { formatSoles } from '../../shared/pipes/money';
 import { CounterSessionStore } from '../orders/counter-session-store';
+import { IntakeStatusService } from '../../core/order-intake/intake-status.service';
 import { SalesReportAdminService } from '../sales-reports/sales-report-admin';
 import { negativeStockExportTable } from '../sales-reports/domain/negative-stock.columns';
 
@@ -45,7 +54,8 @@ function todayIso(): string {
 }
 
 type Phase = 'browse' | 'validating' | 'results' | 'sending' | 'sent';
-type ShowFilter = 'issues' | 'valid' | 'all';
+/** doc 65, sección 1.7 — chips "Por resolver": Todos, Válidos o una acción. */
+type GroupFilter = 'all' | 'valid' | BillingAction;
 
 const VALIDATE_CHUNK = 200;
 const SEND_CHUNK = 100;
@@ -64,6 +74,7 @@ const RECALCULATE_CHUNK = 100;
     UiField,
     UiTypeahead,
     UiEmpty,
+    UiCheckbox,
     UiExportMenu,
     BillingValidationModuleTabs,
   ],
@@ -73,7 +84,12 @@ const RECALCULATE_CHUNK = 100;
       @if (phase() === 'browse') {
         <div class="bpt-head">
           <div>
-            <h1>Validación de pedidos</h1>
+            <h1>
+              Validación de pedidos
+              <button type="button" class="bpt-help-link" (click)="helpOpen.set(true)">
+                ¿Cómo cerrar el día?
+              </button>
+            </h1>
             <p class="bpt-sub">Pedidos abiertos del {{ dayLongText() }}</p>
           </div>
           <div class="bpt-toolbar-actions">
@@ -423,8 +439,8 @@ const RECALCULATE_CHUNK = 100;
           <button
             type="button"
             class="bpt-summary-card bpt-summary-card-filter"
-            [class.bpt-summary-card-on]="showFilter() === 'all'"
-            (click)="showFilter.set('all')"
+            [class.bpt-summary-card-on]="groupFilter() === 'all'"
+            (click)="groupFilter.set('all')"
           >
             <span class="bpt-summary-value">{{ validatedTotal() }}</span>
             <span class="bpt-summary-label">Validados</span>
@@ -432,8 +448,8 @@ const RECALCULATE_CHUNK = 100;
           <button
             type="button"
             class="bpt-summary-card bpt-summary-card-filter"
-            [class.bpt-summary-card-on]="showFilter() === 'valid'"
-            (click)="showFilter.set('valid')"
+            [class.bpt-summary-card-on]="groupFilter() === 'valid'"
+            (click)="groupFilter.set('valid')"
           >
             <span class="bpt-summary-value">{{ validCount() }}</span>
             <span class="bpt-summary-label">Válidos</span>
@@ -441,26 +457,11 @@ const RECALCULATE_CHUNK = 100;
           <button
             type="button"
             class="bpt-summary-card bpt-summary-card-filter bpt-summary-card-warn"
-            [class.bpt-summary-card-on]="showFilter() === 'issues'"
-            (click)="showFilter.set('issues')"
+            (click)="activateFirstIssueGroup()"
           >
             <span class="bpt-summary-value">{{ invalidCount() }}</span>
             <span class="bpt-summary-label">Con motivos</span>
           </button>
-          @if (recalculableCount() > 0) {
-            <div class="bpt-summary-card bpt-summary-card-recalc">
-              <span class="bpt-summary-value">{{ recalculableCount() }}</span>
-              <span class="bpt-summary-label">Recalculables</span>
-              <button
-                type="button"
-                class="bpt-summary-action"
-                [disabled]="recalculatingBatch()"
-                (click)="recalculateAllRecalculable()"
-              >
-                <span class="material-icons" aria-hidden="true">autorenew</span> Recalcular
-              </button>
-            </div>
-          }
           @if (negError()) {
             <div class="bpt-summary-card bpt-summary-card-neg">
               <span class="bpt-summary-label">Negativos</span>
@@ -526,6 +527,49 @@ const RECALCULATE_CHUNK = 100;
           }
         }
 
+        <div class="bpt-group-chips">
+          <span class="bpt-group-chips-label">Por resolver</span>
+          <button
+            type="button"
+            class="bpt-group-chip"
+            [class.on]="groupFilter() === 'all'"
+            (click)="groupFilter.set('all')"
+          >
+            Todos <span class="bpt-group-chip-count">{{ validatedTotal() }}</span>
+          </button>
+          <button
+            type="button"
+            class="bpt-group-chip"
+            [class.on]="groupFilter() === 'valid'"
+            (click)="groupFilter.set('valid')"
+          >
+            Válidos <span class="bpt-group-chip-count">{{ validCount() }}</span>
+          </button>
+          @for (chip of visibleActionChips(); track chip.action) {
+            <button
+              type="button"
+              class="bpt-group-chip"
+              [class.on]="groupFilter() === chip.action"
+              (click)="groupFilter.set(chip.action)"
+            >
+              {{ chip.label }} <span class="bpt-group-chip-count">{{ chip.count }}</span>
+            </button>
+          }
+        </div>
+
+        @if (groupFilter() === 'EDIT_QUANTITY') {
+          <div class="bpt-neg-banner bpt-neg-banner-red">
+            <div>
+              Estos pedidos venden más de lo que tiene el ERP. Baje la cantidad o quite el producto
+              en el pedido que corresponda. Si el almacén va a subir stock, espere la subida y pulse
+              <strong>Validar de nuevo</strong>.
+            </div>
+            <a routerLink="/reportes-ventas/validacion-stock" class="bpt-summary-action"
+              >Ver por producto</a
+            >
+          </div>
+        }
+
         @if (filteredValidationOrders().length === 0) {
           <ui-empty
             variant="al-dia"
@@ -534,6 +578,19 @@ const RECALCULATE_CHUNK = 100;
             body="Prueba con otro filtro de arriba."
           />
         } @else {
+          <div class="bpt-select-all-bar">
+            <ui-checkbox
+              [label]="
+                'Seleccionar ' +
+                (groupFilter() === 'all'
+                  ? 'los ' + activeGroupIds().length + ' pedidos de la lista'
+                  : 'los ' + activeGroupIds().length + ' pedidos de «' + groupFilterLabel() + '»')
+              "
+              [checked]="activeGroupAllSelected()"
+              [indeterminate]="activeGroupIndeterminate()"
+              (checkedChange)="toggleSelectAllGroup()"
+            />
+          </div>
           <div class="bpt-result-list">
             @for (o of filteredValidationOrders(); track o.orderId) {
               <div class="bpt-result-row">
@@ -569,14 +626,20 @@ const RECALCULATE_CHUNK = 100;
                   <span class="bpt-cell-strong">{{ formatSoles(o.netAmount) }}</span>
                   @if (o.valid) {
                     <span class="bpt-badge bpt-badge-ok">● Válido</span>
-                  } @else if (o.recalculable) {
-                    <span class="bpt-badge bpt-badge-recalc" title="Recalculable"
-                      >⟳ Recalculable</span
+                  } @else if (o.nextAction; as action) {
+                    <span
+                      class="bpt-badge bpt-badge-action"
+                      [style.color]="'var(' + billingActionTone(action) + ')'"
+                      [style.background]="
+                        'color-mix(in srgb, var(' +
+                        billingActionTone(action) +
+                        ') 14%, transparent)'
+                      "
+                      >● {{ billingActionLabel(action) }}</span
                     >
-                  } @else {
-                    <span class="bpt-badge bpt-badge-warn"
-                      >● Con motivos ({{ o.issues.length }})</span
-                    >
+                    @if (rowExtraActionsText(o)) {
+                      <span class="bpt-badge-more">{{ rowExtraActionsText(o) }}</span>
+                    }
                   }
                   <button
                     uiButton
@@ -586,6 +649,45 @@ const RECALCULATE_CHUNK = 100;
                   >
                     Ver pedido
                   </button>
+                  @if (o.nextAction === 'DEFINE_PRICE' && priceIssueProductId(o); as productId) {
+                    <button
+                      uiButton
+                      variant="secondary"
+                      size="sm"
+                      [routerLink]="['/catalogo', productId]"
+                    >
+                      Definir precio
+                    </button>
+                  } @else if (o.nextAction === 'EDIT_QUANTITY') {
+                    <button
+                      uiButton
+                      variant="secondary"
+                      size="sm"
+                      [routerLink]="['/pedidos/editar', o.orderId]"
+                      [queryParams]="{ returnTo: 'validacion-facturacion' }"
+                    >
+                      Editar pedido
+                    </button>
+                  } @else if (o.nextAction === 'BONUS_TRAY') {
+                    <button
+                      uiButton
+                      variant="secondary"
+                      size="sm"
+                      routerLink="/pedidos/bonificaciones-sin-stock"
+                      [queryParams]="{ orderId: o.orderId }"
+                    >
+                      Resolver
+                    </button>
+                  } @else if (o.nextAction === 'CHOOSE_PRIZE') {
+                    <button
+                      uiButton
+                      variant="secondary"
+                      size="sm"
+                      routerLink="/promociones/pendientes"
+                    >
+                      Elegir premio
+                    </button>
+                  }
                   <button
                     type="button"
                     class="bpt-cancel-link"
@@ -598,6 +700,17 @@ const RECALCULATE_CHUNK = 100;
 
                 @if (expandedIds().has(o.orderId)) {
                   <div class="bpt-result-detail">
+                    @if (o.nextAction; as action) {
+                      <p class="bpt-next-action-line">
+                        Qué hacer:
+                        <span [style.color]="'var(' + billingActionTone(action) + ')'">{{
+                          billingActionLabel(action)
+                        }}</span>
+                        @if (o.actions.length > 1) {
+                          · Después: {{ billingActionLabel(o.actions[1]) }}
+                        }
+                      </p>
+                    }
                     <div class="bpt-checks-row">
                       <div class="bpt-checks-row-title">Validaciones realizadas</div>
                       @for (c of o.checks; track c.group) {
@@ -768,6 +881,50 @@ const RECALCULATE_CHUNK = 100;
         }
       }
     </section>
+
+    @if (helpOpen()) {
+      <div class="bpt-help-backdrop" (click)="helpOpen.set(false)"></div>
+      <aside class="bpt-help-panel">
+        <div class="bpt-help-head">
+          <h2>¿Cómo cerrar el día?</h2>
+          <button
+            type="button"
+            class="bpt-help-close"
+            aria-label="Cerrar"
+            (click)="helpOpen.set(false)"
+          >
+            ✕
+          </button>
+        </div>
+        <ol class="bpt-help-steps">
+          <li [class.bpt-help-done]="activeClosure()">
+            <strong>Empresa → Sistema → Toma de pedidos:</strong> programa el cierre (p. ej. de
+            18:00 a 06:00).
+            @if (activeClosure(); as c) {
+              <div class="bpt-help-done-note">
+                Hecho — cierra hasta {{ dateTimeText(c.endsAt) }}
+              </div>
+            }
+          </li>
+          <li><strong>ERP / almacén:</strong> el almacén sube el stock.</li>
+          <li><strong>Validación de pedidos:</strong> Validar todos.</li>
+          <li><strong>Chip Recalcular:</strong> Seleccionar todos → Recalcular seleccionados.</li>
+          <li>
+            <strong>Chip Editar cantidades:</strong> Ver por producto y editar los pedidos que
+            correspondan (o espera otra subida del ERP y Validar de nuevo).
+          </li>
+          <li>
+            <strong>Chip Bonificación sin stock:</strong> resuelve en la bandeja (sustituir o no
+            otorgar).
+          </li>
+          <li>
+            <strong>Chips Premio por elegir, Definir precio, Corregir a mano:</strong> resuelve uno
+            por uno.
+          </li>
+          <li><strong>Validación de pedidos:</strong> Validar de nuevo y Enviar válidos.</li>
+        </ol>
+      </aside>
+    }
   `,
   styles: [
     `
@@ -793,6 +950,78 @@ const RECALCULATE_CHUNK = 100;
         margin: 0;
         color: var(--ink-muted);
         font-size: 14px;
+      }
+      .bpt-help-link {
+        appearance: none;
+        border: 0;
+        background: none;
+        padding: 0;
+        margin-left: 12px;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--accent-ink);
+        vertical-align: middle;
+      }
+      .bpt-help-backdrop {
+        position: fixed;
+        inset: 0;
+        background: color-mix(in srgb, black 35%, transparent);
+        z-index: 1200;
+      }
+      .bpt-help-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(380px, 100%);
+        background: var(--bg);
+        border-left: 1px solid var(--divider);
+        box-shadow: var(--elev-dialog);
+        z-index: 1201;
+        padding: var(--sp-5);
+        overflow-y: auto;
+        box-sizing: border-box;
+      }
+      .bpt-help-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: var(--sp-4);
+      }
+      .bpt-help-head h2 {
+        margin: 0;
+        font-size: var(--fs-h2);
+        color: var(--ink);
+      }
+      .bpt-help-close {
+        appearance: none;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        color: var(--ink-muted);
+        font-size: 16px;
+        padding: 4px;
+      }
+      .bpt-help-steps {
+        margin: 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 14px;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .bpt-help-steps li {
+        padding-left: 4px;
+      }
+      .bpt-help-done {
+        color: var(--success);
+      }
+      .bpt-help-done-note {
+        margin-top: 4px;
+        font-weight: 700;
       }
       .bpt-toolbar-actions {
         display: flex;
@@ -1078,7 +1307,7 @@ const RECALCULATE_CHUNK = 100;
         flex: none;
         accent-color: var(--accent);
       }
-      .bpt-badge-recalc {
+      .bpt-badge-action {
         flex: none;
         display: inline-flex;
         align-items: center;
@@ -1088,16 +1317,57 @@ const RECALCULATE_CHUNK = 100;
         padding: 4px 10px;
         border-radius: var(--radius-pill);
         white-space: nowrap;
-        color: var(--st-pendiente);
-        background: color-mix(in srgb, var(--st-pendiente) 14%, transparent);
       }
-      .bpt-summary-card-recalc {
-        border-color: var(--st-pendiente);
+      .bpt-badge-more {
+        flex: none;
+        font-size: 12px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+      .bpt-group-chips {
         display: flex;
-        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 20px;
       }
-      .bpt-summary-card-recalc .bpt-summary-value {
-        color: var(--st-pendiente);
+      .bpt-group-chips-label {
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin-right: 4px;
+      }
+      .bpt-group-chip {
+        appearance: none;
+        border: 1px solid var(--divider);
+        background: transparent;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-weight: 700;
+        font-size: 13px;
+        padding: 6px 14px;
+        border-radius: var(--radius-pill);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .bpt-group-chip.on {
+        background: var(--accent-wash);
+        border-color: var(--accent);
+        color: var(--accent-ink);
+      }
+      .bpt-group-chip-count {
+        font-variant-numeric: var(--tnum);
+        font-weight: 800;
+      }
+      .bpt-select-all-bar {
+        margin-top: 16px;
+        padding: 10px 16px;
+        border: 1px solid var(--hairline);
+        border-bottom: none;
+        background: var(--faint);
       }
       .bpt-summary-action {
         appearance: none;
@@ -1106,6 +1376,7 @@ const RECALCULATE_CHUNK = 100;
         padding: 0;
         margin-top: 6px;
         cursor: pointer;
+        text-decoration: none;
         display: inline-flex;
         align-items: center;
         gap: 4px;
@@ -1303,6 +1574,12 @@ const RECALCULATE_CHUNK = 100;
         display: grid;
         gap: 12px;
       }
+      .bpt-next-action-line {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
       .bpt-checks-row {
         display: flex;
         flex-wrap: wrap;
@@ -1439,6 +1716,11 @@ export class BillingPendingTab {
   private reportSvc = inject(SalesReportAdminService);
   private exporter = inject(TableExporter);
   private counterSession = inject(CounterSessionStore);
+  private intake = inject(IntakeStatusService);
+
+  /** doc 65, sección 4 — panel de ayuda "¿Cómo cerrar el día?". */
+  protected helpOpen = signal(false);
+  protected activeClosure = computed(() => this.intake.status()?.current ?? null);
 
   protected formatSoles = formatSoles;
   protected dateTimeText = dateTimeText;
@@ -1518,9 +1800,9 @@ export class BillingPendingTab {
     this.validationDate.set(null);
     this.totalToValidate.set(1);
     this.phase.set('validating');
-    // Mostrar el pedido sin importar si quedó válido o con motivos —
-    // el filtro por defecto ("issues") lo ocultaría si ya es válido.
-    this.showFilter.set('all');
+    // Mostrar el pedido sin importar si quedó válido o con motivos — el
+    // filtro por defecto (el primer grupo con pedidos) lo ocultaría si ya es válido.
+    this.groupFilter.set('all');
     this.expandedIds.set(new Set([orderId]));
     this.runValidateChunks([[orderId]], 0);
   }
@@ -1605,7 +1887,8 @@ export class BillingPendingTab {
   );
   private cancelRequested = signal(false);
 
-  protected showFilter = signal<ShowFilter>('issues');
+  /** doc 65, sección 1.7 — chip activo por defecto es Todos. */
+  protected groupFilter = signal<GroupFilter>('all');
   protected expandedIds = signal<Set<number>>(new Set());
   protected recalculatingId = signal<number | null>(null);
   protected resolvingBonusKey = signal<string | null>(null);
@@ -1624,10 +1907,9 @@ export class BillingPendingTab {
       .filter((o) => this.resultsSelected().has(o.orderId) && o.recalculable)
       .map((o) => o.orderId),
   );
-  protected recalculableOrders = computed(() =>
-    this.validationOrders().filter((o) => o.recalculable),
+  protected recalculableCount = computed(
+    () => this.validationOrders().filter((o) => o.recalculable).length,
   );
-  protected recalculableCount = computed(() => this.recalculableOrders().length);
   protected recalculatingBatch = signal(false);
   protected recalculateBatchProgress = signal({ done: 0, total: 0 });
   protected recalculateBatchPct = computed(() => {
@@ -1681,13 +1963,91 @@ export class BillingPendingTab {
       .reduce((sum, o) => sum + o.netAmount, 0),
   );
 
+  /** doc 65, sección 1.7 — cuántos pedidos "con motivos" hay de cada acción. */
+  protected groupCounts = computed(() => {
+    const counts: Record<BillingAction, number> = {
+      DEFINE_PRICE: 0,
+      RECALCULATE: 0,
+      EDIT_QUANTITY: 0,
+      BONUS_TRAY: 0,
+      CHOOSE_PRIZE: 0,
+      MANUAL: 0,
+    };
+    for (const o of this.validationOrders()) {
+      if (!o.valid && o.nextAction) counts[o.nextAction]++;
+    }
+    return counts;
+  });
+
+  /** Chips con pedidos (sección 1.7: un chip con 0 no se muestra, salvo Todos y Válidos). */
+  protected visibleActionChips = computed(() => {
+    const counts = this.groupCounts();
+    return BILLING_ACTION_ORDER.filter((a) => counts[a] > 0).map((action) => ({
+      action,
+      label: billingActionLabel(action),
+      count: counts[action],
+    }));
+  });
+
+  protected groupFilterLabel = computed(() => {
+    const f = this.groupFilter();
+    if (f === 'all') return 'la lista';
+    if (f === 'valid') return 'Válidos';
+    return billingActionLabel(f);
+  });
+
+  protected billingActionLabel = billingActionLabel;
+  protected billingActionTone = billingActionTone;
+
   protected filteredValidationOrders = computed(() => {
-    const filter = this.showFilter();
+    const filter = this.groupFilter();
     const orders = this.validationOrders();
     if (filter === 'valid') return orders.filter((o) => o.valid);
-    if (filter === 'issues') return orders.filter((o) => !o.valid);
-    return orders;
+    if (filter === 'all') return orders;
+    return orders.filter((o) => !o.valid && o.nextAction === filter);
   });
+
+  /** Fila del segundo motivo de la fila: "+ {siguiente}" o "+ N más" — sección 1.7. */
+  protected rowExtraActionsText(o: OrderBillingValidation): string {
+    if (o.actions.length <= 1) return '';
+    if (o.actions.length === 2) return `+ ${billingActionLabel(o.actions[1])}`;
+    return `+ ${o.actions.length - 1} más`;
+  }
+
+  // — Seleccionar todos del grupo activo — doc 65, sección 1.7 —
+  protected activeGroupIds = computed(() => this.filteredValidationOrders().map((o) => o.orderId));
+  protected activeGroupSelectedCount = computed(() => {
+    const sel = this.resultsSelected();
+    return this.activeGroupIds().filter((id) => sel.has(id)).length;
+  });
+  protected activeGroupAllSelected = computed(() => {
+    const ids = this.activeGroupIds();
+    return ids.length > 0 && this.activeGroupSelectedCount() === ids.length;
+  });
+  protected activeGroupIndeterminate = computed(() => {
+    const n = this.activeGroupSelectedCount();
+    return n > 0 && n < this.activeGroupIds().length;
+  });
+
+  protected toggleSelectAllGroup() {
+    const ids = this.activeGroupIds();
+    const selectAll = !this.activeGroupAllSelected();
+    this.resultsSelected.update((set) => {
+      const next = new Set(set);
+      for (const id of ids) {
+        if (selectAll) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  /** Tarjeta "Con motivos" — activa el primer grupo con pedidos, en el orden de prioridad (sección 1.5). */
+  protected activateFirstIssueGroup() {
+    const counts = this.groupCounts();
+    const first = BILLING_ACTION_ORDER.find((a) => counts[a] > 0);
+    if (first) this.groupFilter.set(first);
+  }
 
   protected passedChecksCount(o: OrderBillingValidation): number {
     return o.checks.filter((c) => c.passed).length;
@@ -1709,7 +2069,7 @@ export class BillingPendingTab {
     this.invalidCount.set(0);
     this.cancelRequested.set(false);
     this.expandedIds.set(new Set());
-    this.showFilter.set('issues');
+    this.groupFilter.set('all');
     this.resultsSelected.set(new Set());
     this.recalculateOutcomes.set([]);
     this.showRecalculateResult.set(false);
@@ -1871,6 +2231,11 @@ export class BillingPendingTab {
       : issue.message;
   }
 
+  /** `productId` del motivo `PRICE_NOT_DEFINED` — destino de "Definir precio" (sección 1.7). */
+  protected priceIssueProductId(o: OrderBillingValidation): number | null {
+    return o.issues.find((i) => i.code === 'PRICE_NOT_DEFINED')?.productId ?? null;
+  }
+
   private replaceValidationOrder(updated: OrderBillingValidation) {
     const previous = this.validationOrders().find((o) => o.orderId === updated.orderId);
     if (previous) {
@@ -2004,11 +2369,6 @@ export class BillingPendingTab {
       });
   }
 
-  /** Tarjeta "Recalculables" — doc 55, sección 7.2: TODOS los recalculables validados, no solo la página. */
-  protected recalculateAllRecalculable() {
-    this.confirmAndRecalculateBatch(this.recalculableOrders().map((o) => o.orderId));
-  }
-
   /** "Recalcular seleccionados (N)" — doc 55, sección 7.2: solo los seleccionados con recalculable = true. */
   protected recalculateSelected() {
     this.confirmAndRecalculateBatch(this.resultsSelectedRecalculableIds());
@@ -2049,6 +2409,12 @@ export class BillingPendingTab {
         for (const id of target) next.delete(id);
         return next;
       });
+      // doc 65, sección 1.8, punto 4: si el grupo activo quedó en 0, pasar al siguiente con pedidos.
+      const filter = this.groupFilter();
+      if (filter !== 'all' && filter !== 'valid' && this.groupCounts()[filter] === 0) {
+        const next = BILLING_ACTION_ORDER.find((a) => a !== filter && this.groupCounts()[a] > 0);
+        if (next) this.groupFilter.set(next);
+      }
       this.loadNegatives();
       return;
     }

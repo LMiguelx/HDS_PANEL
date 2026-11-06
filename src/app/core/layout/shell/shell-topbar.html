@@ -50,6 +50,12 @@
         Mantenimiento activo · Desactivar
       </a>
     }
+    @if (canManageIntake() && intake.status()?.current; as closure) {
+      <a class="maintenance-chip" routerLink="/empresa/sistema">
+        <span class="material-icons" aria-hidden="true">lock_clock</span>
+        Pedidos cerrados · hasta {{ timeText(closure.endsAt) }}
+      </a>
+    }
     @if (showJornada()) {
       @if (routeStore.loading()) {
         <span class="jornada-chip jornada-loading">Jornada…</span>

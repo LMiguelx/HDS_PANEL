@@ -1,6 +1,6 @@
 import { Component, model, input } from '@angular/core';
 
-export type UiFieldType = 'text' | 'number' | 'date' | 'password' | 'textarea' | 'select';
+export type UiFieldType = 'text' | 'number' | 'date' | 'time' | 'password' | 'textarea' | 'select';
 
 export interface UiFieldOption {
   value: string;

@@ -97,6 +97,14 @@ export class ConfigFormDialog {
       this.error.set('Código, grupo y valor son obligatorios.');
       return;
     }
+    // doc 65, sección 3.5: CYCLE_ANCHOR solo se cambia desde "Ciclo de
+    // asignaciones", que muestra el impacto antes de aplicar.
+    if (!this.data.config && this.code().trim().toUpperCase() === 'CYCLE_ANCHOR') {
+      this.error.set(
+        'CYCLE_ANCHOR no se crea aquí: use "Cambiar fecha ancla" en Empresa → Sistema → Ciclo de asignaciones.',
+      );
+      return;
+    }
     this.saving.set(true);
     this.error.set('');
     this.companySvc
