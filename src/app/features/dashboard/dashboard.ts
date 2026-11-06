@@ -1279,6 +1279,9 @@ export class DashboardPage {
     const assign = this.canSeeAssignments();
     const bonusTray = this.canManageBonusTray();
     const billing = this.canSendToBilling();
+    // doc 66, sección 3.2: en 0 la tarjeta nunca es clicable, tenga o no permiso.
+    const routeIf = (value: number, allowed: boolean, route: string[]) =>
+      value > 0 && allowed ? route : null;
     return [
       {
         key: 'creation',
@@ -1286,7 +1289,7 @@ export class DashboardPage {
         value: p.creationRequests.pending,
         detail: `${p.creationRequests.readyToApprove} lista${p.creationRequests.readyToApprove === 1 ? '' : 's'} para aprobar`,
         tone: 'accent',
-        route: approve ? ['/aprobaciones'] : null,
+        route: routeIf(p.creationRequests.pending, approve, ['/aprobaciones']),
         queryParams: { tab: 'creation' },
       },
       {
@@ -1295,7 +1298,7 @@ export class DashboardPage {
         value: p.fieldChangeRequests.pending,
         detail: `${p.fieldChangeRequests.readyToApprove} lista${p.fieldChangeRequests.readyToApprove === 1 ? '' : 's'}`,
         tone: 'accent',
-        route: approve ? ['/aprobaciones'] : null,
+        route: routeIf(p.fieldChangeRequests.pending, approve, ['/aprobaciones']),
         queryParams: { tab: 'field-change' },
       },
       {
@@ -1304,7 +1307,7 @@ export class DashboardPage {
         value: p.closureRequests.pending,
         detail: `${p.closureRequests.readyToApprove} listo${p.closureRequests.readyToApprove === 1 ? '' : 's'}`,
         tone: 'accent',
-        route: approve ? ['/aprobaciones'] : null,
+        route: routeIf(p.closureRequests.pending, approve, ['/aprobaciones']),
         queryParams: { tab: 'closure' },
       },
       {
@@ -1313,7 +1316,7 @@ export class DashboardPage {
         value: p.incompleteSchedules,
         detail: 'asignaciones sin días o semanas',
         tone: 'warn',
-        route: assign ? ['/asignaciones/pendientes'] : null,
+        route: routeIf(p.incompleteSchedules, assign, ['/asignaciones/pendientes']),
       },
       {
         key: 'orphan-customers',
@@ -1321,7 +1324,7 @@ export class DashboardPage {
         value: p.orphanCustomers,
         detail: 'clientes activos',
         tone: 'warn',
-        route: assign ? ['/asignaciones/huerfanos'] : null,
+        route: routeIf(p.orphanCustomers, assign, ['/asignaciones/huerfanos']),
       },
       {
         key: 'pending-stock-bonus',
@@ -1329,7 +1332,7 @@ export class DashboardPage {
         value: p.pendingStockBonusOrders,
         detail: 'pedidos abiertos',
         tone: 'warn',
-        route: bonusTray ? ['/pedidos/bonificaciones-sin-stock'] : null,
+        route: routeIf(p.pendingStockBonusOrders, bonusTray, ['/pedidos/bonificaciones-sin-stock']),
       },
       {
         key: 'negative-stock',
@@ -1337,7 +1340,7 @@ export class DashboardPage {
         value: p.negativeStockProducts,
         detail: 'productos',
         tone: 'danger',
-        route: billing ? ['/validacion-facturacion'] : null,
+        route: routeIf(p.negativeStockProducts, billing, ['/validacion-facturacion']),
       },
     ];
   });
