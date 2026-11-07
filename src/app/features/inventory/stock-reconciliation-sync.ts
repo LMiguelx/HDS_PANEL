@@ -36,6 +36,9 @@ const PAGE_SIZE = 50;
         @if (failedCount() > 0) {
           · {{ failedCount() }} fallaron
         }
+        @if (supersededCount() > 0) {
+          · {{ supersededCount() }} reemplazadas
+        }
       </p>
 
       <div class="esp-filters">
@@ -69,7 +72,9 @@ const PAGE_SIZE = 50;
           [title]="
             resultFilter() === 'DIFFERENCE'
               ? 'En esta actualización todo cuadró.'
-              : 'Sin productos para este filtro.'
+              : resultFilter() === 'SUPERSEDED'
+                ? 'En esta actualización no hubo subidas repetidas.'
+                : 'Sin productos para este filtro.'
           "
         />
       } @else {
@@ -96,7 +101,11 @@ const PAGE_SIZE = 50;
           </thead>
           <tbody>
             @for (row of filteredRows(); track row.reconciliation.uploadId) {
-              <tr class="esp-row" (click)="openDetail(row)">
+              <tr
+                class="esp-row"
+                [class.esp-row-muted]="row.reconciliation.statusCode === 'SUPERSEDED'"
+                (click)="openDetail(row)"
+              >
                 <td>
                   {{ row.reconciliation.productName }}
                   <div class="esp-muted">{{ row.reconciliation.productCode }}</div>
@@ -104,7 +113,8 @@ const PAGE_SIZE = 50;
                 <td class="esp-num">{{ row.reconciliation.erpQuantity ?? '—' }}</td>
                 <td class="esp-num">
                   {{
-                    row.reconciliation.statusCode === 'FAILED'
+                    row.reconciliation.statusCode === 'FAILED' ||
+                    row.reconciliation.statusCode === 'SUPERSEDED'
                       ? '—'
                       : row.reconciliation.stockBefore
                   }}
@@ -195,6 +205,12 @@ const PAGE_SIZE = 50;
       .esp-row:hover {
         background: var(--faint);
       }
+      .esp-row-muted {
+        color: var(--ink-muted);
+      }
+      .esp-row-muted .esp-reason-text {
+        color: var(--ink-muted);
+      }
       .esp-muted {
         color: var(--ink-muted);
         font-size: 12px;
@@ -278,6 +294,7 @@ export class StockReconciliationSyncPage {
   protected increasedCount = signal(Number(this.qp.get('increasedCount') ?? 0));
   protected decreasedCount = signal(Number(this.qp.get('decreasedCount') ?? 0));
   protected failedCount = signal(Number(this.qp.get('failedCount') ?? 0));
+  protected supersededCount = signal(Number(this.qp.get('supersededCount') ?? 0));
 
   protected resultFilter = signal<SyncProductResultFilter | ''>('DIFFERENCE');
   protected searchQuery = signal('');

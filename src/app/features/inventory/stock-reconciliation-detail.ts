@@ -1,5 +1,5 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { InventoryAdminService } from './inventory-admin';
@@ -66,6 +66,20 @@ import {
               </button>
             }
           </div>
+        } @else if (d.reconciliation.statusCode === 'SUPERSEDED') {
+          <p class="erd-reason-line">
+            <span class="erd-badge" [style.color]="'var(' + toneVar(d) + ')'">{{
+              reasonLabel(d.explanation.reason)
+            }}</span>
+            — {{ d.explanation.reasonText }}
+          </p>
+          <p class="erd-superseded-info">
+            El ERP subió {{ d.reconciliation.erpQuantity }} en esta subida. La app tomó en cuenta la
+            subida más nueva de este producto.
+          </p>
+          <button uiButton variant="ghost" size="sm" (click)="goToProductHistory(d.reconciliation)">
+            Ver la historia del producto
+          </button>
         } @else {
           <p class="erd-reason-line">
             <span class="erd-badge" [style.color]="'var(' + toneVar(d) + ')'">{{
@@ -212,63 +226,65 @@ import {
           </div>
         }
 
-        <div class="erd-movements">
-          <button type="button" class="erd-toggle" (click)="showMovements.set(!showMovements())">
-            {{ showMovements() ? '▾' : '▸' }} Ver movimientos
-          </button>
-          @if (showMovements()) {
-            @if (d.movements.length === 0) {
-              <ui-empty title="Sin movimientos registrados" />
-            } @else {
-              <table class="ui-table-grid erd-movements-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Cantidad</th>
-                    <th>Origen</th>
-                    <th>Nota</th>
-                    <th>Hecho por</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (m of d.movements; track m.stockMovementId) {
+        @if (d.reconciliation.statusCode !== 'SUPERSEDED') {
+          <div class="erd-movements">
+            <button type="button" class="erd-toggle" (click)="showMovements.set(!showMovements())">
+              {{ showMovements() ? '▾' : '▸' }} Ver movimientos
+            </button>
+            @if (showMovements()) {
+              @if (d.movements.length === 0) {
+                <ui-empty title="Sin movimientos registrados" />
+              } @else {
+                <table class="ui-table-grid erd-movements-table">
+                  <thead>
                     <tr>
-                      <td class="erd-muted">{{ dateTimeText(m.createdAt) }}</td>
-                      <td>{{ m.movementTypeName }}</td>
-                      <td
-                        [class.erd-positive]="m.quantity > 0"
-                        [class.erd-negative]="m.quantity < 0"
-                        class="erd-qty"
-                      >
-                        {{ m.quantity > 0 ? '+' : '' }}{{ m.quantity }}
-                      </td>
-                      <td>
-                        @if (ref(m).route) {
-                          <a [routerLink]="ref(m).route" class="erd-link">{{ ref(m).text }}</a>
-                        } @else {
-                          <span class="erd-muted">{{ ref(m).text }}</span>
-                        }
-                      </td>
-                      <td class="erd-muted">{{ m.note || '—' }}</td>
-                      <td class="erd-muted">{{ m.createdByName || 'Automático' }}</td>
+                      <th>Fecha</th>
+                      <th>Tipo</th>
+                      <th>Cantidad</th>
+                      <th>Origen</th>
+                      <th>Nota</th>
+                      <th>Hecho por</th>
                     </tr>
-                  }
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    @for (m of d.movements; track m.stockMovementId) {
+                      <tr>
+                        <td class="erd-muted">{{ dateTimeText(m.createdAt) }}</td>
+                        <td>{{ m.movementTypeName }}</td>
+                        <td
+                          [class.erd-positive]="m.quantity > 0"
+                          [class.erd-negative]="m.quantity < 0"
+                          class="erd-qty"
+                        >
+                          {{ m.quantity > 0 ? '+' : '' }}{{ m.quantity }}
+                        </td>
+                        <td>
+                          @if (ref(m).route) {
+                            <a [routerLink]="ref(m).route" class="erd-link">{{ ref(m).text }}</a>
+                          } @else {
+                            <span class="erd-muted">{{ ref(m).text }}</span>
+                          }
+                        </td>
+                        <td class="erd-muted">{{ m.note || '—' }}</td>
+                        <td class="erd-muted">{{ m.createdByName || 'Automático' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
             }
-          }
-        </div>
+          </div>
 
-        <button
-          uiButton
-          variant="ghost"
-          size="sm"
-          [routerLink]="['/inventario/kardex', d.reconciliation.productId]"
-          [queryParams]="{ warehouseId: d.reconciliation.warehouseId }"
-        >
-          Ver kardex completo
-        </button>
+          <button
+            uiButton
+            variant="ghost"
+            size="sm"
+            [routerLink]="['/inventario/kardex', d.reconciliation.productId]"
+            [queryParams]="{ warehouseId: d.reconciliation.warehouseId }"
+          >
+            Ver kardex completo
+          </button>
+        }
       }
     </section>
   `,
@@ -323,6 +339,12 @@ import {
         margin: 0 0 4px;
         font-size: 12px;
         color: var(--ink-muted);
+      }
+      .erd-superseded-info {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: var(--ink-muted);
+        max-width: 560px;
       }
       .erd-advance-line {
         margin: 0 0 4px;
@@ -428,6 +450,7 @@ export class StockReconciliationDetailPage {
   private inventorySvc = inject(InventoryAdminService);
   private auth = inject(AuthService);
   private toast = inject(ToastService);
+  private router = inject(Router);
 
   uploadId = input.required<string>();
 
@@ -465,6 +488,10 @@ export class StockReconciliationDetailPage {
         this.error.set(true);
       },
     });
+  }
+
+  protected goToProductHistory(row: StockReconciliationView) {
+    this.router.navigate(['/inventario/cuadre/producto', row.productId]);
   }
 
   protected retry(row: StockReconciliationView) {

@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { timeout } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
 import {
@@ -115,9 +116,15 @@ export class InventoryAdminService {
     );
   }
 
-  /** stock.advance */
+  /**
+   * stock.advance — vacía la cola en una corrida de hasta ~45 s (doc 67,
+   * sección 5.6): timeout propio de 60 s, mayor al de cualquier
+   * interceptor/timeout global del panel.
+   */
   processReconciliations() {
-    return this.http.post<ProcessUploadsResult>(`${this.base}/stock-reconciliations/process`, {});
+    return this.http
+      .post<ProcessUploadsResult>(`${this.base}/stock-reconciliations/process`, {})
+      .pipe(timeout(60_000));
   }
 
   /** stock.advance o report.view — actualizaciones del ERP, doc 56, sección 9.3. Sin paginar. */

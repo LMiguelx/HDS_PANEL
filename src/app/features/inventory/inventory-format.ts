@@ -49,10 +49,11 @@ export function advanceStatusTone(code: StockAdvanceStatusCode): BadgeTone {
 
 // ─────────────────────────── Cuadre con el ERP — doc 35, secciones 3.3-3.6 ───────────────────────────
 
-export type ReconciliationResult = 'FAILED' | 'INCREASED' | 'DECREASED' | 'MATCHED';
+export type ReconciliationResult = 'FAILED' | 'INCREASED' | 'DECREASED' | 'MATCHED' | 'SUPERSEDED';
 
-/** Deduce el resultado de una fila — doc 35, sección 3.5. No es un campo del backend. */
+/** Deduce el resultado de una fila — doc 35, sección 3.5; `SUPERSEDED` — doc 67, sección 3.1. No es un campo del backend. */
 export function reconciliationResult(row: StockReconciliationView): ReconciliationResult {
+  if (row.statusCode === 'SUPERSEDED') return 'SUPERSEDED';
   if (row.statusCode === 'FAILED') return 'FAILED';
   const delta = row.appliedDelta ?? 0;
   if (delta > 0) return 'INCREASED';
@@ -65,6 +66,7 @@ const RESULT_LABEL: Record<ReconciliationResult, { label: string; tone: BadgeTon
   INCREASED: { label: 'Entró stock', tone: 'blue' },
   DECREASED: { label: 'Sobraba', tone: 'red' },
   MATCHED: { label: 'Cuadró', tone: 'green' },
+  SUPERSEDED: { label: 'Reemplazada', tone: 'gray' },
 };
 
 export function reconciliationResultLabel(row: StockReconciliationView): string {
@@ -93,6 +95,7 @@ export const RECONCILIATION_RESULT_OPTIONS: UiFieldOption[] = [
   { value: 'DECREASED', label: 'Sobraba' },
   { value: 'SHORTFALL', label: 'Ventas sin respaldo' },
   { value: 'FAILED', label: 'Fallidas' },
+  { value: 'SUPERSEDED', label: 'Reemplazadas' },
 ];
 
 export function resultFilterLabel(value: ReconciliationResultFilter | ''): string {
@@ -110,6 +113,7 @@ const REASON_LABEL: Record<ReconciliationReason, { label: string; tone: BadgeTon
   UNEXPLAINED: { label: 'Sin causa en la app', tone: 'red' },
   FIRST_SYNC: { label: 'Primera subida', tone: 'gray' },
   FAILED: { label: 'Falló', tone: 'red' },
+  SUPERSEDED: { label: 'Reemplazada', tone: 'gray' },
 };
 
 export function reasonLabel(reason: ReconciliationReason): string {
@@ -127,6 +131,7 @@ export const SYNC_PRODUCT_RESULT_OPTIONS: UiFieldOption[] = [
   { value: 'DECREASED', label: 'La app tenía de más' },
   { value: 'FAILED', label: 'Fallidas' },
   { value: 'MATCHED', label: 'Cuadraron' },
+  { value: 'SUPERSEDED', label: 'Reemplazadas' },
 ];
 
 export function syncProductResultLabel(value: SyncProductResultFilter | ''): string {

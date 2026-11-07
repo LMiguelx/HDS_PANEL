@@ -78,7 +78,11 @@ const RESULT_OPTIONS = RECONCILIATION_RESULT_OPTIONS.filter((o) => o.value !== '
           </thead>
           <tbody>
             @for (row of rows(); track row.uploadId) {
-              <tr class="eph-row" (click)="openDetail(row)">
+              <tr
+                class="eph-row"
+                [class.eph-row-muted]="row.statusCode === 'SUPERSEDED'"
+                (click)="openDetail(row)"
+              >
                 <td class="eph-muted">{{ row.warehouseName }}</td>
                 <td class="eph-muted">{{ row.erpQuantity ?? '—' }}</td>
                 <td class="eph-muted">{{ row.stockBefore ?? '—' }}</td>
@@ -170,6 +174,9 @@ const RESULT_OPTIONS = RECONCILIATION_RESULT_OPTIONS.filter((o) => o.value !== '
       }
       .eph-row:hover {
         background: var(--faint);
+      }
+      .eph-row-muted {
+        color: var(--ink-muted);
       }
       .eph-muted {
         color: var(--ink-muted);

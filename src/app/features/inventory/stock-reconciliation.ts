@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
-import { Observable, of } from 'rxjs';
+import { Observable, TimeoutError, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
@@ -29,7 +29,13 @@ function todayIso(): string {
 }
 
 interface SummaryCard {
-  key: 'pendingUploads' | 'failedCount' | 'matchedCount' | 'increasedCount' | 'decreasedCount';
+  key:
+    | 'pendingUploads'
+    | 'failedCount'
+    | 'matchedCount'
+    | 'increasedCount'
+    | 'decreasedCount'
+    | 'supersededCount';
   label: string;
   tip: string;
   tone: string;
@@ -66,6 +72,12 @@ const CARDS: SummaryCard[] = [
     tip: 'La app tenía más que el ERP y se le restó. Revisa el "Por qué" de cada producto para ver la causa.',
     tone: '--st-in-route',
   },
+  {
+    key: 'supersededCount',
+    label: 'Reemplazadas',
+    tip: 'Subidas que no se cuadraron porque el ERP volvió a subir el mismo producto. Cuenta la más nueva.',
+    tone: '--ink-muted',
+  },
 ];
 
 /**
@@ -93,7 +105,7 @@ const CARDS: SummaryCard[] = [
         <div class="esl-head-actions">
           @if (canManage() && summary()?.pendingUploads) {
             <button uiButton variant="secondary" [loading]="processing()" (click)="processNow()">
-              Procesar ahora
+              {{ processing() ? 'Procesando…' : 'Procesar ahora' }}
             </button>
           }
           <button uiButton variant="ghost" (click)="refresh()" [loading]="loadingSummary()">
@@ -105,13 +117,19 @@ const CARDS: SummaryCard[] = [
       @if (summary(); as s) {
         <div class="esl-cards">
           @for (c of cards; track c.key) {
-            <div class="esl-card">
+            <div class="esl-card" [class.esl-card-muted]="c.key === 'supersededCount'">
               <div class="esl-card-top">
                 <span
                   class="esl-card-value"
-                  [style.color]="s[c.key] > 0 ? 'var(' + c.tone + ')' : 'var(--ink)'"
+                  [style.color]="
+                    c.key === 'supersededCount'
+                      ? 'var(--ink-muted)'
+                      : s[c.key] > 0
+                        ? 'var(' + c.tone + ')'
+                        : 'var(--ink)'
+                  "
                 >
-                  {{ s[c.key] }}
+                  {{ c.key === 'supersededCount' && s[c.key] === 0 ? '—' : s[c.key] }}
                 </span>
                 <span [uiInfoTip]="c.tip"></span>
               </div>
@@ -168,6 +186,12 @@ const CARDS: SummaryCard[] = [
               <th>Entró mercadería</th>
               <th>La app tenía de más</th>
               <th>Fallaron</th>
+              <th>
+                Reemplazadas
+                <span
+                  [uiInfoTip]="'Subidas que no se cuadraron porque el ERP volvió a subir el mismo producto. Cuenta la más nueva.'"
+                ></span>
+              </th>
               <th></th>
             </tr>
           </thead>
@@ -179,6 +203,9 @@ const CARDS: SummaryCard[] = [
                   @if (s.pendingCount > 0) {
                     <span class="esl-tag-amber">{{ s.pendingCount }} en proceso</span>
                   }
+                  @if (s.supersededCount > 0) {
+                    <div class="esl-sub-line">El ERP subió esta tanda más de una vez</div>
+                  }
                 </td>
                 <td class="esl-muted">{{ s.warehouseName }}</td>
                 <td class="esl-num">{{ s.productCount }}</td>
@@ -186,6 +213,7 @@ const CARDS: SummaryCard[] = [
                 <td class="esl-num esl-blue">{{ s.increasedCount || '—' }}</td>
                 <td class="esl-num esl-amber">{{ s.decreasedCount || '—' }}</td>
                 <td class="esl-num esl-red">{{ s.failedCount || '—' }}</td>
+                <td class="esl-num esl-muted-cell">{{ s.supersededCount || '—' }}</td>
                 <td class="esl-chevron">›</td>
               </tr>
             }
@@ -232,9 +260,15 @@ const CARDS: SummaryCard[] = [
       }
       .esl-cards {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(6, 1fr);
         gap: 10px;
         margin: 20px 0;
+      }
+      .esl-card-muted .esl-card-value {
+        font-size: 18px;
+      }
+      .esl-card-muted .esl-card-label {
+        font-size: 11px;
       }
       .esl-card {
         border: 1px solid var(--hairline);
@@ -312,6 +346,15 @@ const CARDS: SummaryCard[] = [
         font-weight: 700;
         color: var(--st-in-route);
         white-space: nowrap;
+      }
+      .esl-sub-line {
+        margin-top: 2px;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--ink-muted);
+      }
+      .esl-muted-cell {
+        color: var(--ink-muted);
       }
       .esl-chevron {
         color: var(--ink-muted);
@@ -483,6 +526,7 @@ export class StockReconciliationPage {
         increasedCount: s.increasedCount,
         decreasedCount: s.decreasedCount,
         failedCount: s.failedCount,
+        supersededCount: s.supersededCount,
       },
     });
   }
@@ -492,17 +536,27 @@ export class StockReconciliationPage {
     this.inventorySvc.processReconciliations().subscribe({
       next: (result) => {
         this.processing.set(false);
-        this.toast.success(
-          result.processed === 0
-            ? 'No había subidas en cola'
-            : `${result.processed} subidas procesadas`,
-        );
+        this.toast.success(this.processResultText(result.processed, result.superseded));
         this.refresh();
       },
-      error: () => {
+      error: (err) => {
         this.processing.set(false);
+        if (err instanceof TimeoutError) {
+          this.toast.info('El proceso sigue en segundo plano. Actualice en un momento.');
+          this.refresh();
+          return;
+        }
         this.toast.error('No pudimos procesar la cola.');
       },
     });
+  }
+
+  private processResultText(processed: number, superseded: number): string {
+    if (processed > 0 && superseded > 0) {
+      return `${processed} subidas cuadradas · ${superseded} reemplazadas por una más nueva`;
+    }
+    if (processed > 0) return `${processed} subidas cuadradas`;
+    if (superseded > 0) return `${superseded} subidas reemplazadas por una más nueva`;
+    return 'No había subidas en cola';
   }
 }

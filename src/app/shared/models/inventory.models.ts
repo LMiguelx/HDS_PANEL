@@ -178,15 +178,15 @@ export interface ReleaseStockAdvanceCommand {
 
 // ───────────────────────── Cuadre con el ERP (doc 35, sección 8) ─────────────────────────
 
-/** Estado de una subida del ERP — doc 35, sección 3.3. */
-export type ReconciliationStatusCode = 'APPLIED' | 'FAILED';
+/** Estado de una subida del ERP — doc 35, sección 3.3; `SUPERSEDED` — doc 67, sección 3.1. */
+export type ReconciliationStatusCode = 'APPLIED' | 'FAILED' | 'SUPERSEDED';
 
 /** Motivo de una subida fallida — doc 35, sección 3.4. Solo si statusCode = FAILED. */
 export type ReconciliationFailureCode = 'WAREHOUSE_NOT_FOUND' | 'UNEXPECTED_ERROR';
 
-/** Filtro por resultado del listado de cuadres — doc 35, sección 3.6. */
+/** Filtro por resultado del listado de cuadres — doc 35, sección 3.6; `SUPERSEDED` — doc 67, sección 3.3. */
 export type ReconciliationResultFilter =
-  'DIFFERENCE' | 'MATCHED' | 'INCREASED' | 'DECREASED' | 'SHORTFALL' | 'FAILED';
+  'DIFFERENCE' | 'MATCHED' | 'INCREASED' | 'DECREASED' | 'SHORTFALL' | 'FAILED' | 'SUPERSEDED';
 
 export interface StockReconciliationSummary {
   from: string;
@@ -200,6 +200,7 @@ export interface StockReconciliationSummary {
   increasedCount: number;
   decreasedCount: number;
   shortfallCount: number;
+  supersededCount: number; // NUEVO — doc 67, sección 4.1: reemplazadas del período
 }
 
 export interface StockReconciliationView {
@@ -254,7 +255,8 @@ export interface StockReconciliationDetail {
 }
 
 export interface ProcessUploadsResult {
-  processed: number; // cuántas subidas tomó en esta llamada
+  processed: number; // subidas cuadradas (aplicadas o fallidas) en TODA la llamada — doc 67, sección 4.4
+  superseded: number; // NUEVO — subidas cerradas como reemplazadas en esta llamada
 }
 
 // ───────────────────── Cuadre con el ERP (rediseño) — doc 56, sección 9 ─────────────────────
@@ -273,6 +275,7 @@ export interface ErpSyncView {
   increasedCount: number;
   decreasedCount: number;
   failedCount: number;
+  supersededCount: number; // NUEVO — doc 67, sección 4.2: reemplazadas por una subida más nueva
 }
 
 export interface ErpSyncListFilters {
@@ -281,7 +284,7 @@ export interface ErpSyncListFilters {
   to?: string;
 }
 
-/** Motivo de un cuadre — doc 56, sección 4.2. */
+/** Motivo de un cuadre — doc 56, sección 4.2; `SUPERSEDED` — doc 67, sección 3.2. */
 export type ReconciliationReason =
   | 'MATCHED'
   | 'ERP_INCREASE'
@@ -290,11 +293,12 @@ export type ReconciliationReason =
   | 'UNRECORDED_CHANGE'
   | 'UNEXPLAINED'
   | 'FIRST_SYNC'
-  | 'FAILED';
+  | 'FAILED'
+  | 'SUPERSEDED';
 
-/** Filtro por resultado de los productos de una actualización — doc 56, sección 4.3. */
+/** Filtro por resultado de los productos de una actualización — doc 56, sección 4.3; `SUPERSEDED` — doc 67, sección 5.3. */
 export type SyncProductResultFilter =
-  'DIFFERENCE' | 'INCREASED' | 'DECREASED' | 'FAILED' | 'MATCHED';
+  'DIFFERENCE' | 'INCREASED' | 'DECREASED' | 'FAILED' | 'MATCHED' | 'SUPERSEDED';
 
 export interface ReconciliationExplanation {
   previousUploadId: number | null; // NO mostrar
