@@ -1,42 +1,60 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { PageResponse, SliceResponse } from '../../shared/models/api.models';
+import { PageResponse } from '../../shared/models/api.models';
 import {
-  AssignmentAdminView,
-  AssignmentListFilters,
   AssignmentView,
-  AutoAssignmentResult,
+  BulkAssignCommand,
+  BulkAssignResult,
   CoverageAdminView,
   CoverageCandidateView,
   CoverageListFilters,
   CoverageView,
   CreateAssignmentCommand,
   CreateCoverageCommand,
-  IncompleteScheduleView,
   ImportCoverageParams,
   ImportCoverageResult,
   OrphanCustomerView,
-  PendingScheduleFilters,
+  PortfolioCustomerRow,
+  PortfolioFilters,
+  PortfolioSummary,
   UpdateScheduleCommand,
   VendorOnRouteView,
 } from '../../shared/models/assignment-admin.models';
 import { environment } from '../../../environments/environment';
+
+function paramsFrom(filters: object): HttpParams {
+  let params = new HttpParams();
+  for (const [key, value] of Object.entries(filters as Record<string, unknown>)) {
+    if (value !== undefined && value !== null && value !== '') {
+      params = params.set(key, String(value));
+    }
+  }
+  return params;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AssignmentAdminService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/admin/assignments`;
 
-  list(filters: AssignmentListFilters = {}) {
-    let params = new HttpParams();
-    for (const [key, value] of Object.entries(filters)) {
-      if (value !== undefined && value !== null && value !== '') {
-        params = params.set(key, String(value));
-      }
-    }
-    return this.http.get<PageResponse<AssignmentAdminView>>(this.base, { params });
+  /** Cartera — doc 68, sección 4.1. */
+  portfolio(filters: PortfolioFilters = {}) {
+    return this.http.get<PageResponse<PortfolioCustomerRow>>(`${this.base}/portfolio`, {
+      params: paramsFrom(filters),
+    });
   }
 
+  /** Contadores de las tarjetas de Cartera — doc 68, sección 4.2. Siempre a hoy, sin filtros. */
+  portfolioSummary() {
+    return this.http.get<PortfolioSummary>(`${this.base}/portfolio/summary`);
+  }
+
+  /** Asignación en lote — doc 68, sección 6.3. */
+  bulkAssign(cmd: BulkAssignCommand) {
+    return this.http.post<BulkAssignResult>(`${this.base}/bulk`, cmd);
+  }
+
+  /** Solo la usa el mapa de Asignaciones (vista general), que no cambia en el doc 68. */
   orphans() {
     return this.http.get<OrphanCustomerView[]>(`${this.base}/orphans`);
   }
@@ -95,22 +113,5 @@ export class AssignmentAdminService {
       }
     }
     return this.http.get<PageResponse<CoverageAdminView>>(`${this.base}/coverage`, { params });
-  }
-
-  autoAssign() {
-    return this.http.post<AutoAssignmentResult>(`${this.base}/auto-assign`, {});
-  }
-
-  /** Pagina sin total: es una cola de trabajo que se encoge mientras se resuelve. */
-  pendingSchedule(filters: PendingScheduleFilters = {}) {
-    let params = new HttpParams();
-    for (const [key, value] of Object.entries(filters)) {
-      if (value !== undefined && value !== null && value !== '') {
-        params = params.set(key, String(value));
-      }
-    }
-    return this.http.get<SliceResponse<IncompleteScheduleView>>(`${this.base}/pending-schedule`, {
-      params,
-    });
   }
 }

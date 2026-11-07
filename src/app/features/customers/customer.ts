@@ -61,4 +61,14 @@ export class CustomerService {
   rate(customerId: number, cmd: RateCustomerCommand) {
     return this.http.patch<CustomerDetail>(`${this.adminBase}/${customerId}/rating`, cmd);
   }
+
+  /** customer.status.manage — doc 68, sección 8.2: deja la asignación en pausa, sin borrarla. */
+  deactivate(customerId: number) {
+    return this.http.post<CustomerDetail>(`${this.adminBase}/${customerId}/deactivate`, {});
+  }
+
+  /** customer.status.manage — doc 68, sección 8.3: vuelve con el mismo vendedor y horario. */
+  activate(customerId: number) {
+    return this.http.post<CustomerDetail>(`${this.adminBase}/${customerId}/activate`, {});
+  }
 }

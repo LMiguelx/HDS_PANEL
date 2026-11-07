@@ -5,6 +5,7 @@ import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { AuthService } from '../../core/auth/auth';
+import { ToastService } from '../../core/ui/toast';
 import { formatSoles } from '../../shared/pipes/money';
 import { CustomerService } from './customer';
 import { CustomerDetail } from '../../shared/models/customer.models';
@@ -12,6 +13,10 @@ import { initials, ratingText } from './customer-format';
 import { RatingDialog, RatingDialogData } from './ui/rating-dialog';
 import { CreateAssignmentDialog } from '../assignments/ui/create-assignment-dialog';
 import { ScheduleDialog } from '../assignments/ui/schedule-dialog';
+import {
+  DeactivateCustomerDialog,
+  DeactivateCustomerDialogData,
+} from './ui/deactivate-customer-dialog';
 import {
   dateText,
   dateTimeText,
@@ -84,6 +89,17 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
             >
               Ver mapa
             </button>
+            @if (canManageStatus()) {
+              @if (c.isActive) {
+                <button uiButton variant="secondary" class="cd-danger-btn" (click)="deactivate(c)">
+                  Desactivar
+                </button>
+              } @else {
+                <button uiButton variant="secondary" [loading]="activating()" (click)="activate(c)">
+                  Activar
+                </button>
+              }
+            }
           </div>
         </div>
 
@@ -179,10 +195,16 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
           </div>
 
           <div class="cd-right">
-            <div class="cd-vendor-card">
+            <div class="cd-vendor-card" [class.cd-vendor-card-paused]="!c.isActive">
+              @if (!c.isActive) {
+                <div class="cd-pause-banner">
+                  En pausa: el cliente está inactivo. Al activarlo vuelve con este vendedor y
+                  horario.
+                </div>
+              }
               <div class="cd-vendor-head">
                 <span class="cd-vendor-title">Vendedor asignado</span>
-                @if (canAssign() && c.salesAssignment) {
+                @if (c.isActive && canAssign() && c.salesAssignment) {
                   <button type="button" class="cd-vendor-link" (click)="changeVendor(c)">
                     Cambiar
                   </button>
@@ -225,7 +247,7 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
                     <p class="cd-schedule-summary">
                       {{ scheduleSummaryText(sa.weekdays, sa.weeksOfCycle) }}
                     </p>
-                    @if (canAssign()) {
+                    @if (c.isActive && canAssign()) {
                       <button
                         type="button"
                         class="cd-vendor-link cd-vendor-link-block"
@@ -241,7 +263,7 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
                     <p class="cd-muted">
                       {{ weekdaysText(sa.weekdays) }} · {{ weeksOfCycleText(sa.weeksOfCycle) }}
                     </p>
-                    @if (canAssign()) {
+                    @if (c.isActive && canAssign()) {
                       <button uiButton variant="secondary" (click)="editSchedule(c)">
                         Completar horario
                       </button>
@@ -250,7 +272,7 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
                 </div>
               } @else {
                 <p class="cd-muted">Este cliente no tiene vendedor asignado.</p>
-                @if (canAssign()) {
+                @if (c.isActive && canAssign()) {
                   <button uiButton variant="primary" (click)="changeVendor(c)">
                     Asignar vendedor
                   </button>
@@ -336,6 +358,13 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
       .cd-rating {
         font-size: 14px;
         color: var(--ink);
+      }
+      .cd-danger-btn {
+        border-color: var(--status-danger) !important;
+        color: var(--status-danger) !important;
+      }
+      .cd-danger-btn:hover {
+        background: color-mix(in srgb, var(--status-danger) 10%, transparent) !important;
       }
       .cd-body {
         display: grid;
@@ -445,6 +474,18 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
       .cd-vendor-card {
         border: 2px solid var(--divider);
         padding: 18px;
+      }
+      .cd-vendor-card-paused {
+        opacity: 0.85;
+      }
+      .cd-pause-banner {
+        margin: -18px -18px 14px;
+        padding: 10px 18px;
+        background: var(--faint);
+        color: var(--ink-muted);
+        font-size: 12px;
+        font-weight: 600;
+        border-bottom: var(--border-hair);
       }
       .cd-vendor-head {
         display: flex;
@@ -565,6 +606,7 @@ export class CustomerDetailPage {
   private orderSvc = inject(OrderAdminService);
   private dialog = inject(UiDialogService);
   private auth = inject(AuthService);
+  private toast = inject(ToastService);
 
   id = input('');
 
@@ -597,8 +639,10 @@ export class CustomerDetailPage {
 
   protected canViewOrders = computed(() => this.auth.hasAny('order.create', 'order.view_all'));
   protected canAssign = computed(() => this.auth.hasAny('customer.assign'));
+  protected canManageStatus = computed(() => this.auth.hasAny('customer.status.manage'));
   protected orders = signal<OrderSummary[]>([]);
   protected ordersLoading = signal(true);
+  protected activating = signal(false);
 
   private loadEffect = effect(() => {
     const id = this.id();
@@ -658,6 +702,37 @@ export class CustomerDetailPage {
       })
       .afterClosed()
       .subscribe((saved) => saved && this.load());
+  }
+
+  protected deactivate(c: CustomerDetail) {
+    this.dialog
+      .open<DeactivateCustomerDialog, DeactivateCustomerDialogData, CustomerDetail | null>(
+        DeactivateCustomerDialog,
+        {
+          data: { customerId: c.customerId, businessName: c.businessName },
+          width: '460px',
+        },
+      )
+      .afterClosed()
+      .subscribe((updated) => {
+        if (updated) this.customer.set(updated);
+      });
+  }
+
+  protected activate(c: CustomerDetail) {
+    this.activating.set(true);
+    this.customerSvc.activate(c.customerId).subscribe({
+      next: (detail) => {
+        this.activating.set(false);
+        this.customer.set(detail);
+        this.toast.success(
+          detail.salesAssignment
+            ? `Cliente activado. Vuelve con ${detail.salesAssignment.salespersonName} y su horario.`
+            : 'Cliente activado',
+        );
+      },
+      error: () => this.activating.set(false),
+    });
   }
 
   protected editSchedule(c: CustomerDetail) {

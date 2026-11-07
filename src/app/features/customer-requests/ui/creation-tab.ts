@@ -131,7 +131,6 @@ export class CreationTab {
     if (!d) return '';
     if (!d.erpRegistered) return 'Disponible cuando el ERP registre al cliente.';
     if (this.weekdaysValue().length === 0) return 'Elige al menos un día de visita.';
-    if (this.weeksValue().length === 0) return 'Elige al menos una semana del ciclo.';
     return '';
   });
   protected canApprove = computed(() => !this.acting() && this.approveReason() === '');
@@ -167,7 +166,8 @@ export class CreationTab {
           this.detail.set(d);
           this.vendor.set({ id: d.requestedBy, name: d.requestedByName });
           this.weekdaysValue.set([]);
-          this.weeksValue.set([]);
+          // Marcadas con las 4 por defecto — doc 68, sección 7.3.
+          this.weeksValue.set([1, 2, 3, 4]);
           this.actionError.set('');
         }
       });
@@ -248,7 +248,7 @@ export class CreationTab {
         const cmd: ApproveCreationCommand = {
           userId: this.vendor()?.id !== d.requestedBy ? (this.vendor()?.id ?? null) : null,
           weekdays: this.weekdaysValue(),
-          weeksOfCycle: this.weeksValue(),
+          weeksOfCycle: this.weeksValue().length > 0 ? this.weeksValue() : null,
         };
         this.svc.approveCreation(d.requestId, cmd).subscribe({
           next: (result) => {

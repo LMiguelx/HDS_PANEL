@@ -93,7 +93,10 @@ export class ScheduleDialog {
   private assignmentSvc = inject(AssignmentAdminService);
 
   protected weekdays = signal<number[]>([...this.data.weekdays]);
-  protected weeksOfCycle = signal<number[]>([...this.data.weeksOfCycle]);
+  // Al completar un horario sin semanas, llegan marcadas con las 4 — doc 68, sección 7.2.
+  protected weeksOfCycle = signal<number[]>(
+    this.data.weeksOfCycle.length > 0 ? [...this.data.weeksOfCycle] : [1, 2, 3, 4],
+  );
   protected saving = signal(false);
   protected error = signal('');
   protected weekdaysError = signal('');

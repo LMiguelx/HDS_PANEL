@@ -5,15 +5,7 @@ import { Routes } from '@angular/router';
 // falta repetir permissionGuard por pantalla (mismo criterio que Promociones
 // usa para sus rutas sin permiso más estricto que el del módulo).
 export const ASSIGNMENT_ROUTES: Routes = [
-  { path: '', loadComponent: () => import('./assignment-home').then((m) => m.AssignmentHomePage) },
-  {
-    path: 'listado',
-    loadComponent: () => import('./assignment-list').then((m) => m.AssignmentListPage),
-  },
-  {
-    path: 'huerfanos',
-    loadComponent: () => import('./assignment-orphans').then((m) => m.AssignmentOrphansPage),
-  },
+  { path: '', loadComponent: () => import('./portfolio').then((m) => m.PortfolioPage) },
   {
     path: 'ausencias',
     loadComponent: () => import('./assignment-absences').then((m) => m.AssignmentAbsencesPage),
@@ -27,9 +19,20 @@ export const ASSIGNMENT_ROUTES: Routes = [
     loadComponent: () =>
       import('./assignment-coverage-list').then((m) => m.AssignmentCoverageListPage),
   },
+  // Pestañas eliminadas (doc 68, sección 3): Cartera con su filtro de horario.
+  {
+    path: 'listado',
+    loadComponent: () => import('./assignments-redirect').then((m) => m.AssignmentsRedirectPage),
+    data: { schedule: 'ALL' },
+  },
+  {
+    path: 'huerfanos',
+    loadComponent: () => import('./assignments-redirect').then((m) => m.AssignmentsRedirectPage),
+    data: { schedule: 'NO_SELLER' },
+  },
   {
     path: 'pendientes',
-    loadComponent: () =>
-      import('./assignment-pending-schedule').then((m) => m.AssignmentPendingSchedulePage),
+    loadComponent: () => import('./assignments-redirect').then((m) => m.AssignmentsRedirectPage),
+    data: { schedule: 'INCOMPLETE' },
   },
 ];

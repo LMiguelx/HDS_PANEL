@@ -96,7 +96,6 @@ type AssignCase = 'assign' | 'replace' | 'same';
           [(weekdaysValue)]="weekdays"
           [(weeksOfCycleValue)]="weeksOfCycle"
           [weekdaysError]="weekdaysError()"
-          [weeksError]="weeksError()"
         />
 
         @if (assignCase() === 'replace' && currentAssignment(); as ca) {
@@ -213,11 +212,11 @@ export class CreateAssignmentDialog {
   protected customer = signal<UiLookupItem | null>(null);
   protected vendor = signal<UiLookupItem | null>(null);
   protected weekdays = signal<number[]>([]);
-  protected weeksOfCycle = signal<number[]>([]);
+  /** Marcadas con las 4 por defecto (doc 68, sección 7.1); `loadSituation` las reemplaza si el cliente ya tenía otras. */
+  protected weeksOfCycle = signal<number[]>([1, 2, 3, 4]);
   protected saving = signal(false);
   protected error = signal('');
   protected weekdaysError = signal('');
-  protected weeksError = signal('');
 
   protected currentAssignment = signal<CustomerSalesAssignment | null>(null);
   protected situationLoading = signal(false);
@@ -254,8 +253,7 @@ export class CreateAssignmentDialog {
       !this.saving() &&
       !!this.effectiveCustomerId() &&
       !!this.vendor() &&
-      this.weekdays().length > 0 &&
-      this.weeksOfCycle().length > 0,
+      this.weekdays().length > 0,
   );
 
   private loadSituationEffect = effect(() => {
@@ -284,17 +282,7 @@ export class CreateAssignmentDialog {
     const customerId = this.effectiveCustomerId();
     const userId = this.vendor()?.id;
     this.weekdaysError.set(this.weekdays().length === 0 ? 'Elige al menos un día de visita' : '');
-    this.weeksError.set(
-      this.weeksOfCycle().length === 0 ? 'Elige al menos una semana del ciclo' : '',
-    );
-    if (
-      !customerId ||
-      !userId ||
-      this.weekdays().length === 0 ||
-      this.weeksOfCycle().length === 0
-    ) {
-      return;
-    }
+    if (!customerId || !userId || this.weekdays().length === 0) return;
     const assignCase = this.assignCase();
     const vendorName = this.vendor()?.name ?? '';
     const previousName = this.currentAssignment()?.salespersonName ?? '';
@@ -305,7 +293,7 @@ export class CreateAssignmentDialog {
         customerId,
         userId,
         weekdays: this.weekdays(),
-        weeksOfCycle: this.weeksOfCycle(),
+        weeksOfCycle: this.weeksOfCycle().length > 0 ? this.weeksOfCycle() : null,
       })
       .subscribe({
         next: () => {
@@ -323,7 +311,6 @@ export class CreateAssignmentDialog {
           this.saving.set(false);
           const fieldErrors = err?.error?.errors;
           if (fieldErrors?.weekdays) this.weekdaysError.set(fieldErrors.weekdays);
-          if (fieldErrors?.weeksOfCycle) this.weeksError.set(fieldErrors.weeksOfCycle);
           const detalle = err?.error?.detail ?? err?.error?.message;
           this.error.set(detalle || 'No pudimos guardar la asignación.');
         },

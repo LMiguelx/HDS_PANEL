@@ -16,22 +16,6 @@ export interface AssignmentView {
   weeksOfCycle: number[]; // 1..4, puede venir incompleto (ver hasGap)
 }
 
-/** Fila del listado (GET /) — mismos campos de AssignmentView + nombres. */
-export interface AssignmentAdminView extends AssignmentView {
-  customerCode: string;
-  customerName: string;
-  userName: string; // vendedor
-}
-
-export interface AssignmentListFilters {
-  userId?: number;
-  customerId?: number;
-  hasGap?: boolean;
-  page?: number;
-  size?: number;
-  sort?: string;
-}
-
 export interface OrphanCustomerView {
   customerId: number;
   code: string;
@@ -54,14 +38,14 @@ export interface VendorOnRouteView {
 
 /**
  * Nace siempre hoy: no se envía effectiveFrom (doc 33, sección 6.4).
- * weekdays/weeksOfCycle son obligatorios desde doc 33 — al menos un valor
- * cada uno; una asignación manual ya no puede nacer con horario incompleto.
+ * `weekdays` sigue obligatorio, al menos un valor. `weeksOfCycle` ya no lo
+ * es (doc 68, sección 7.1): `undefined`/`null`/`[]` = las 4 semanas.
  */
 export interface CreateAssignmentCommand {
   customerId: number;
   userId: number;
   weekdays: number[];
-  weeksOfCycle: number[];
+  weeksOfCycle?: number[] | null;
 }
 
 export interface UpdateScheduleCommand {
@@ -151,30 +135,73 @@ export interface ImportCoverageResult {
   invalidSample: string[];
 }
 
-/**
- * Shape no detallado por el backend a la fecha de este documento (ver
- * 12-endpoints-admin-panel-asignaciones.md, sección `/auto-assign`). Se
- * define de forma defensiva (todo opcional) para no romper la UI si el DTO
- * real trae más o menos campos — ajustar cuando se confirme el controller.
- */
-export interface AutoAssignmentResult {
-  assignedCount?: number;
-  skippedCount?: number;
-  details?: unknown;
+// ───────────────── Cartera (doc 68) ─────────────────
+// Reemplaza la pantalla "Inicio" + "Listado" + "Huérfanos" + "Horario
+// incompleto" del módulo: una sola vista, filtrada en el servidor, de toda
+// la cartera (activos, inactivos, sin vendedor, horario incompleto,
+// completos). GET /api/admin/assignments, /pending-schedule y /orphans
+// quedan obsoletos para estas pantallas — el panel deja de usarlos acá
+// (orphans() sigue viva para el mapa, que no cambia).
+
+export type PortfolioStatusFilter = 'ACTIVE' | 'INACTIVE' | 'ALL';
+export type PortfolioScheduleFilter = 'ALL' | 'NO_SELLER' | 'INCOMPLETE' | 'COMPLETE';
+export type PortfolioScheduleStatus = 'NO_SELLER' | 'INCOMPLETE' | 'COMPLETE';
+
+export interface PortfolioCustomerRow {
+  customerId: number; // NO mostrar
+  code: string;
+  businessName: string;
+  documentNumber: string | null;
+  address: string | null;
+  active: boolean;
+  assignmentId: number | null; // NO mostrar; null = sin vendedor
+  salespersonId: number | null; // NO mostrar
+  salespersonCode: string | null;
+  salespersonName: string | null; // null = "Sin vendedor"
+  weekdays: number[];
+  weeksOfCycle: number[];
+  scheduleStatus: PortfolioScheduleStatus;
+  assignedSince: string | null; // yyyy-MM-dd
 }
 
-export interface IncompleteScheduleView {
-  assignmentId: number;
-  customerId: number;
-  customerCode: string;
-  customerName: string;
-  userId: number;
-  userName: string;
-  hasWeekdays: boolean;
-  hasWeeksOfCycle: boolean;
-}
-
-export interface PendingScheduleFilters {
+export interface PortfolioFilters {
+  q?: string;
+  status?: PortfolioStatusFilter;
+  schedule?: PortfolioScheduleFilter;
+  userId?: number;
   page?: number;
   size?: number;
+}
+
+export interface PortfolioSummary {
+  active: number;
+  inactive: number;
+  noSeller: number;
+  incomplete: number;
+  complete: number;
+}
+
+export type BulkAssignSkipReason = 'NOT_FOUND' | 'INACTIVE';
+
+export interface BulkAssignSkip {
+  customerId: number; // NO mostrar
+  code: string | null;
+  businessName: string | null;
+  reason: BulkAssignSkipReason; // NO mostrar: usar message
+  message: string;
+}
+
+export interface BulkAssignCommand {
+  customerIds: number[]; // 1 a 200
+  userId: number;
+  weekdays: number[];
+  weeksOfCycle: number[] | null; // null o [] = las 4
+}
+
+export interface BulkAssignResult {
+  requested: number;
+  assigned: number;
+  replaced: number;
+  scheduleUpdated: number;
+  skipped: BulkAssignSkip[];
 }

@@ -1282,7 +1282,7 @@ export class DashboardPage {
     // doc 66, sección 3.2: en 0 la tarjeta nunca es clicable, tenga o no permiso.
     const routeIf = (value: number, allowed: boolean, route: string[]) =>
       value > 0 && allowed ? route : null;
-    return [
+    const cards: PendingCardVM[] = [
       {
         key: 'creation',
         label: 'Creación de clientes',
@@ -1316,7 +1316,8 @@ export class DashboardPage {
         value: p.incompleteSchedules,
         detail: 'asignaciones sin días o semanas',
         tone: 'warn',
-        route: routeIf(p.incompleteSchedules, assign, ['/asignaciones/pendientes']),
+        route: routeIf(p.incompleteSchedules, assign, ['/asignaciones']),
+        queryParams: { schedule: 'INCOMPLETE' },
       },
       {
         key: 'orphan-customers',
@@ -1324,7 +1325,8 @@ export class DashboardPage {
         value: p.orphanCustomers,
         detail: 'clientes activos',
         tone: 'warn',
-        route: routeIf(p.orphanCustomers, assign, ['/asignaciones/huerfanos']),
+        route: routeIf(p.orphanCustomers, assign, ['/asignaciones']),
+        queryParams: { schedule: 'NO_SELLER' },
       },
       {
         key: 'pending-stock-bonus',
@@ -1343,6 +1345,7 @@ export class DashboardPage {
         route: routeIf(p.negativeStockProducts, billing, ['/validacion-facturacion']),
       },
     ];
+    return cards;
   });
 
   // — tarjeta "Mejores ventas del día" —

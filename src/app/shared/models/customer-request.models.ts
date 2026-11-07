@@ -64,13 +64,14 @@ export interface CreationRequestDetail {
 
 /**
  * El código de cliente no se escribe acá: lo asigna el ERP y se lee de
- * CreationRequestDetail.customerCode. Días y semanas son obligatorios desde
- * doc 39 (antes los días eran opcionales y las semanas no existían).
+ * CreationRequestDetail.customerCode. Días son obligatorios desde doc 39.
+ * `weeksOfCycle` ya no lo es (doc 68, sección 7.3): `undefined`/`null`/`[]`
+ * = las 4 semanas.
  */
 export interface ApproveCreationCommand {
   userId: number | null; // null = el vendedor que hizo la solicitud
   weekdays: number[]; // OBLIGATORIO, al menos uno, valores 1 a 7, sin repetir
-  weeksOfCycle: number[]; // OBLIGATORIO, al menos uno, valores 1 a 4, sin repetir
+  weeksOfCycle?: number[] | null; // opcional; sin repetir, valores 1 a 4
 }
 
 /** Un campo dentro de un grupo de cambio — doc 39, sección 6.2. */
