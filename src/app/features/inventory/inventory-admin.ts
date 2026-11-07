@@ -11,10 +11,12 @@ import {
   ErpSyncListFilters,
   ErpSyncView,
   KardexResponse,
+  PreviewStockAdvancesCommand,
   ProcessUploadsResult,
   ReconciliationRow,
   ReleaseStockAdvanceCommand,
   StockAdvanceListFilters,
+  StockAdvancePreviewResult,
   StockAdvanceView,
   StockReconciliationDetail,
   StockReconciliationListFilters,
@@ -64,6 +66,14 @@ export class InventoryAdminService {
   /** config.edit — sirve tanto para 1 línea como para carga masiva. */
   bulkStockAdjustment(cmd: BulkStockAdjustmentCommand) {
     return this.http.post<BulkStockAdjustmentResult>(`${this.base}/stock-adjustments`, cmd);
+  }
+
+  /**
+   * stock.advance — doc 69, sección 5.1: revisa las líneas y devuelve avisos
+   * del ERP, sin crear nada. Se llama siempre antes de adelantar.
+   */
+  previewStockAdvances(cmd: PreviewStockAdvancesCommand) {
+    return this.http.post<StockAdvancePreviewResult>(`${this.base}/stock-advances/preview`, cmd);
   }
 
   /** stock.advance */

@@ -5,6 +5,7 @@ import {
   ReconciliationReason,
   ReconciliationResultFilter,
   StockAdvanceStatusCode,
+  StockAdvanceWarningCode,
   StockReconciliationView,
   SyncProductResultFilter,
 } from '../../shared/models/inventory.models';
@@ -197,6 +198,172 @@ export function downloadCsvTemplate() {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'plantilla-stock.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ───────────────── Avisos de un adelanto — doc 69, secciones 2 y 5.2 ─────────────────
+
+const WARNING_ICON: Record<StockAdvanceWarningCode, string> = {
+  RECENT_ERP_INCREASE: '⚠',
+  ERP_UPLOAD_PENDING: '⏳',
+};
+const WARNING_TONE_VAR: Record<StockAdvanceWarningCode, string> = {
+  RECENT_ERP_INCREASE: '--status-warn',
+  ERP_UPLOAD_PENDING: '--accent',
+};
+
+export function advanceWarningIcon(code: StockAdvanceWarningCode): string {
+  return WARNING_ICON[code] ?? '⚠';
+}
+
+export function advanceWarningToneVar(code: StockAdvanceWarningCode): string {
+  return WARNING_TONE_VAR[code] ?? '--status-warn';
+}
+
+// ───────────────── CSV de Adelantos (mejorado) — doc 69, sección 6 ─────────────────
+// Formato propio, separado de parseStockCsv/downloadCsvTemplate (que siguen
+// siendo los de Ajuste de stock, sin cambios en este doc): una columna de
+// código y una de cantidad — el almacén se elige en el formulario, no en el
+// archivo — con compatibilidad hacia el formato viejo de 3 columnas.
+
+export interface AdvanceCsvRow {
+  rowNumber: number; // número de fila del archivo (cuenta el encabezado si lo hay)
+  productCode: string;
+  warehouseId: number | null; // solo si el archivo trae el formato antiguo con esa columna
+  quantity: number | null; // null si no se pudo leer
+  formatError: string | null; // motivo si la fila no se puede usar (código vacío, cantidad inválida)
+}
+
+export interface ParseAdvancesCsvResult {
+  rows: AdvanceCsvRow[]; // una por producto — las filas repetidas ya se sumaron
+  mergedCount: number; // cuántas filas de más se sumaron a otra por código repetido
+  totalFileRows: number; // filas de datos leídas (antes de sumar repetidos)
+  error: string | null; // archivo vacío, sin encabezado reconocible o más de 500 filas
+}
+
+const MAX_ADVANCE_CSV_ROWS = 500;
+const ADVANCE_CSV_CODE_HEADERS = ['codigo', 'código', 'productcode'];
+const ADVANCE_CSV_QTY_HEADERS = ['cantidad', 'quantity'];
+const ADVANCE_CSV_WAREHOUSE_HEADERS = ['warehouseid', 'almacenid', 'almacénid'];
+
+function normalizeCsvHeader(h: string): string {
+  return h.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/** Acepta "10", "10.5" y "10,5"; > 0 y hasta 2 decimales. */
+function parseAdvanceQuantity(raw: string): number | null {
+  const normalized = raw.trim().replace(',', '.');
+  if (!normalized) return null;
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (Math.round(n * 100) / 100 !== n) return null;
+  return n;
+}
+
+/** Excel suele borrar los ceros a la izquierda: "21502" → "0000021502". */
+function padAdvanceCode(code: string): string {
+  const trimmed = code.trim();
+  return /^\d+$/.test(trimmed) && trimmed.length < 10 ? trimmed.padStart(10, '0') : trimmed;
+}
+
+export function parseAdvancesCsv(text: string): ParseAdvancesCsvResult {
+  const allLines = text.split(/\r?\n/).filter((r) => r.trim().length > 0);
+  if (allLines.length === 0) {
+    return { rows: [], mergedCount: 0, totalFileRows: 0, error: 'El archivo no tiene filas.' };
+  }
+
+  const separator = allLines[0].includes(';') ? ';' : ',';
+  const firstCols = allLines[0].split(separator).map(normalizeCsvHeader);
+
+  let codeIdx = firstCols.findIndex((c) => ADVANCE_CSV_CODE_HEADERS.includes(c));
+  let qtyIdx = firstCols.findIndex((c) => ADVANCE_CSV_QTY_HEADERS.includes(c));
+  let whIdx = firstCols.findIndex((c) => ADVANCE_CSV_WAREHOUSE_HEADERS.includes(c));
+  const hasHeader = codeIdx >= 0 || qtyIdx >= 0;
+
+  let dataLines: string[];
+  if (hasHeader) {
+    dataLines = allLines.slice(1);
+    if (codeIdx < 0) codeIdx = 0;
+    if (qtyIdx < 0) qtyIdx = 1;
+  } else if (firstCols.length >= 3) {
+    // Formato antiguo sin encabezado: productCode,warehouseId,quantity.
+    codeIdx = 0;
+    whIdx = 1;
+    qtyIdx = 2;
+    dataLines = allLines;
+  } else if (firstCols.length === 2) {
+    codeIdx = 0;
+    qtyIdx = 1;
+    dataLines = allLines;
+  } else {
+    return {
+      rows: [],
+      mergedCount: 0,
+      totalFileRows: 0,
+      error: 'No se reconocen las columnas. Usa la plantilla: codigo;cantidad.',
+    };
+  }
+
+  if (dataLines.length > MAX_ADVANCE_CSV_ROWS) {
+    return {
+      rows: [],
+      mergedCount: 0,
+      totalFileRows: dataLines.length,
+      error: `El archivo tiene ${dataLines.length} filas; el máximo es ${MAX_ADVANCE_CSV_ROWS}. Divídalo en varios archivos.`,
+    };
+  }
+
+  const parsedRows: AdvanceCsvRow[] = dataLines.map((line, i) => {
+    const cols = line.split(separator).map((c) => c.trim());
+    const codeRaw = cols[codeIdx] ?? '';
+    const qtyRaw = cols[qtyIdx] ?? '';
+    const whRaw = whIdx >= 0 ? (cols[whIdx] ?? '') : '';
+    const productCode = padAdvanceCode(codeRaw);
+    const quantity = parseAdvanceQuantity(qtyRaw);
+    const warehouseId = whRaw && Number(whRaw) > 0 ? Number(whRaw) : null;
+    let formatError: string | null = null;
+    if (!productCode) formatError = 'Código vacío';
+    else if (quantity == null) formatError = 'Cantidad inválida (mayor a 0, hasta 2 decimales)';
+    return {
+      rowNumber: i + 1 + (hasHeader ? 1 : 0),
+      productCode,
+      warehouseId,
+      quantity,
+      formatError,
+    };
+  });
+
+  // Filas con el mismo código: se suman en una sola línea.
+  const rows: AdvanceCsvRow[] = [];
+  const byCode = new Map<string, AdvanceCsvRow>();
+  let mergedCount = 0;
+  for (const row of parsedRows) {
+    if (row.formatError || row.quantity == null) {
+      rows.push(row);
+      continue;
+    }
+    const existing = byCode.get(row.productCode);
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 0) + row.quantity;
+      mergedCount++;
+    } else {
+      const copy = { ...row };
+      byCode.set(row.productCode, copy);
+      rows.push(copy);
+    }
+  }
+
+  return { rows, mergedCount, totalFileRows: dataLines.length, error: null };
+}
+
+export function downloadAdvancesCsvTemplate() {
+  const csv = 'codigo;cantidad;nota_fila\n0000021502;10;\n0000023158;5;\n';
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'plantilla-adelantos.csv';
   a.click();
   URL.revokeObjectURL(url);
 }

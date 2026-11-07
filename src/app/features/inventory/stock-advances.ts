@@ -10,6 +10,12 @@ import { UiInfoTip } from '../../shared/ui/info-tip/info-tip';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { InventoryModuleTabs } from './ui/module-tabs';
 import { ReleaseAdvanceDialog, ReleaseAdvanceDialogData } from './ui/release-advance-dialog';
+import { ReviewAdvancesDialog, ReviewAdvancesDialogData } from './ui/review-advances-dialog';
+import {
+  ImportAdvancesCsvDialog,
+  ImportAdvancesCsvDialogData,
+  ImportAdvancesCsvDialogResult,
+} from './ui/import-advances-dialog';
 import { InventoryAdminService } from './inventory-admin';
 import { ProductAdminService } from '../catalog/product-admin';
 import { ToastService } from '../../core/ui/toast';
@@ -25,12 +31,16 @@ import {
   BADGE_TONE_VAR,
   advanceStatusLabel,
   advanceStatusTone,
-  parseStockCsv,
+  advanceWarningIcon,
+  advanceWarningToneVar,
+  downloadAdvancesCsvTemplate,
+  parseAdvancesCsv,
   toProductLookup,
 } from './inventory-format';
 
 interface DraftLine extends StockAdvanceLine {
   productName: string;
+  stock: number;
   pendingBefore: number;
 }
 
@@ -56,7 +66,7 @@ const SHOW_OPTIONS: UiFieldOption[] = [
         <p class="sadv-sub">
           Habilita stock que todavía no llegó para que se pueda vender desde ahora.
           <span
-            uiInfoTip="La mercadería que adelantas sube el stock de inmediato. Cuando el ERP informe que llegó, el adelanto se cubre solo."
+            uiInfoTip="Si el ERP ya registró la mercadería, no la adelantes: quedaría de más y nunca se cubre."
           ></span>
         </p>
       </div>
@@ -102,21 +112,42 @@ const SHOW_OPTIONS: UiFieldOption[] = [
             }
 
             @if (lines().length > 0) {
+              <div class="sadv-lines-head">
+                <span class="sadv-lines-count"
+                  >{{ lines().length }} producto{{ lines().length === 1 ? '' : 's' }} por
+                  adelantar</span
+                >
+                <button type="button" class="sadv-clear-link" (click)="clearLines()">
+                  Limpiar
+                </button>
+              </div>
               <table class="ui-table-grid sadv-lines-table">
                 <thead>
                   <tr>
-                    <th>Código</th>
                     <th>Producto</th>
-                    <th>Cant.</th>
+                    <th>Stock actual</th>
+                    <th>Adelantar</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (line of lines(); track line.productCode) {
                     <tr>
-                      <td class="sadv-muted">{{ line.productCode }}</td>
-                      <td>{{ line.productName }}</td>
-                      <td class="sadv-qty">{{ line.quantity }}</td>
+                      <td>
+                        {{ line.productName }}
+                        <div class="sadv-muted">{{ line.productCode }}</div>
+                      </td>
+                      <td class="sadv-num">{{ line.stock }}</td>
+                      <td class="sadv-num">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          class="sadv-qty-input"
+                          [value]="line.quantity"
+                          (change)="updateLineQuantity(line.productCode, $event)"
+                        />
+                      </td>
                       <td class="sadv-row-action">
                         <button
                           uiButton
@@ -140,10 +171,39 @@ const SHOW_OPTIONS: UiFieldOption[] = [
               </table>
             }
 
-            <label class="sadv-csv-label">
-              Importar desde CSV (productCode,warehouseId,quantity)
-              <input type="file" accept=".csv,text/csv" (change)="onFileSelected($event)" />
-            </label>
+            <div class="sadv-import-block">
+              <div
+                class="sadv-dropzone"
+                [class.drag]="dragging()"
+                [class.disabled]="!formWarehouseId()"
+                (dragover)="onDragOver($event)"
+                (dragleave)="dragging.set(false)"
+                (drop)="onDrop($event)"
+                (click)="formWarehouseId() && csvFileInput.click()"
+              >
+                <input
+                  #csvFileInput
+                  type="file"
+                  accept=".csv,text/csv"
+                  class="sadv-dropzone-input"
+                  [disabled]="!formWarehouseId()"
+                  (change)="onFileInputChange($event)"
+                />
+                <span class="material-icons sadv-dropzone-icon" aria-hidden="true"
+                  >upload_file</span
+                >
+                <span>Arrastra el archivo aquí o <strong>elige un archivo</strong> (.csv)</span>
+              </div>
+              <button type="button" class="sadv-template-link" (click)="downloadTemplate()">
+                Descargar plantilla
+              </button>
+              <p class="sadv-import-help">
+                Una fila por producto: código y cantidad. El almacén y la nota se eligen arriba.
+              </p>
+              @if (csvError()) {
+                <div class="sadv-error">{{ csvError() }}</div>
+              }
+            </div>
 
             @if (formError()) {
               <div class="sadv-error">{{ formError() }}</div>
@@ -152,32 +212,52 @@ const SHOW_OPTIONS: UiFieldOption[] = [
             <div class="sadv-submit">
               <button
                 uiButton
-                variant="secondary"
-                [disabled]="lines().length === 0"
-                (click)="clearLines()"
-              >
-                Limpiar
-              </button>
-              <button
-                uiButton
                 variant="primary"
-                [loading]="submitting()"
+                [loading]="previewing() || submitting()"
                 [disabled]="lines().length === 0"
                 (click)="confirmSubmit()"
               >
-                Adelantar {{ lines().length }} producto{{ lines().length === 1 ? '' : 's' }}
+                {{
+                  previewing()
+                    ? 'Revisando…'
+                    : submitting()
+                      ? 'Adelantando…'
+                      : 'Adelantar ' +
+                        lines().length +
+                        ' producto' +
+                        (lines().length === 1 ? '' : 's')
+                }}
               </button>
             </div>
 
             @if (lastResult(); as r) {
               <div class="sadv-result">
                 <p class="sadv-result-title">
-                  {{ r.appliedCount }} de {{ r.totalLines }} líneas aplicadas
+                  {{ r.appliedCount }} de {{ r.totalLines }} adelantados
                 </p>
                 @for (fail of failedLines(); track fail.productCode) {
                   <div class="sadv-fail-row">
                     <span class="sadv-cell-strong">{{ fail.productCode }}</span>
                     <span class="sadv-muted">{{ fail.errorReason }}</span>
+                  </div>
+                }
+                @if (appliedWithWarnings().length > 0) {
+                  <div class="sadv-warned">
+                    <p class="sadv-warned-title">
+                      Adelantados con aviso ({{ appliedWithWarnings().length }})
+                    </p>
+                    @for (w of appliedWithWarnings(); track w.productCode) {
+                      <div class="sadv-warned-row">
+                        <span class="sadv-cell-strong">{{ w.productCode }}</span>
+                        @for (warn of w.warnings; track warn.code) {
+                          <span
+                            class="sadv-warned-msg"
+                            [style.color]="'var(' + tone(warn.code) + ')'"
+                            >{{ icon(warn.code) }} {{ warn.message }}</span
+                          >
+                        }
+                      </div>
+                    }
                   </div>
                 }
               </div>
@@ -371,8 +451,44 @@ const SHOW_OPTIONS: UiFieldOption[] = [
         gap: 10px;
         align-items: end;
       }
+      .sadv-lines-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .sadv-lines-count {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .sadv-clear-link {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--accent-ink);
+      }
       .sadv-lines-table {
         width: 100%;
+      }
+      .sadv-num {
+        font-variant-numeric: var(--tnum);
+        text-align: right;
+      }
+      .sadv-qty-input {
+        width: 72px;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        text-align: right;
+        color: var(--ink);
+        background: var(--surface-sunk);
+        border: 1px solid var(--divider);
+        padding: 4px 6px;
       }
       .sadv-pending-note-row td {
         padding: 0 0 8px;
@@ -382,14 +498,58 @@ const SHOW_OPTIONS: UiFieldOption[] = [
         font-size: 12px;
         color: var(--st-in-route);
       }
-      .sadv-csv-label {
+      .sadv-import-block {
         display: grid;
         gap: 6px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ink);
         border-top: var(--border-hair);
         padding-top: 14px;
+      }
+      .sadv-dropzone {
+        position: relative;
+        border: 2px dashed var(--divider);
+        padding: 20px 14px;
+        text-align: center;
+        font-size: 12px;
+        color: var(--ink-muted);
+        cursor: pointer;
+        display: grid;
+        gap: 6px;
+        justify-items: center;
+      }
+      .sadv-dropzone.drag {
+        border-color: var(--accent);
+        background: var(--faint);
+      }
+      .sadv-dropzone.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .sadv-dropzone-icon {
+        font-size: 22px;
+        color: var(--ink-muted);
+      }
+      .sadv-dropzone-input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+      .sadv-template-link {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--accent-ink);
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: underline;
+        cursor: pointer;
+        justify-self: start;
+      }
+      .sadv-import-help {
+        margin: 0;
+        font-size: 11px;
+        color: var(--ink-muted);
       }
       .sadv-submit {
         display: flex;
@@ -404,6 +564,27 @@ const SHOW_OPTIONS: UiFieldOption[] = [
         font-weight: 800;
         margin: 0 0 8px;
         color: var(--ink);
+      }
+      .sadv-warned {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: var(--border-hair);
+      }
+      .sadv-warned-title {
+        font-weight: 800;
+        font-size: 13px;
+        margin: 0 0 8px;
+        color: var(--ink);
+      }
+      .sadv-warned-row {
+        display: grid;
+        gap: 2px;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+      .sadv-warned-msg {
+        display: block;
+        font-size: 12px;
       }
       .sadv-fail-row {
         display: flex;
@@ -544,6 +725,8 @@ export class StockAdvancesPage {
   protected statusLabel = (a: StockAdvanceView) => advanceStatusLabel(a.statusCode);
   protected toneVar = (a: StockAdvanceView) =>
     `var(${BADGE_TONE_VAR[advanceStatusTone(a.statusCode)]})`;
+  protected icon = advanceWarningIcon;
+  protected tone = advanceWarningToneVar;
 
   protected canManage = computed(() => this.auth.hasAny('stock.advance'));
 
@@ -561,8 +744,11 @@ export class StockAdvancesPage {
   protected addLineError = signal('');
   protected formError = signal('');
   protected submitted = signal(false);
+  protected previewing = signal(false);
   protected submitting = signal(false);
   protected lastResult = signal<CreateStockAdvancesResult | null>(null);
+  protected dragging = signal(false);
+  protected csvError = signal('');
 
   // Listado
   protected showMode = signal('true');
@@ -664,6 +850,7 @@ export class StockAdvancesPage {
     this.lines.update((rows) => {
       const existing = rows.find((l) => l.productCode === code && l.warehouseId === warehouseId);
       if (existing) {
+        this.toast.info('Se sumó a la línea existente');
         return rows.map((l) => (l === existing ? { ...l, quantity: l.quantity + quantity } : l));
       }
       return [
@@ -671,6 +858,7 @@ export class StockAdvancesPage {
         {
           productCode: code,
           productName: product.name,
+          stock: this.pickedStock(),
           warehouseId,
           quantity,
           pendingBefore: this.pickedPending(),
@@ -683,6 +871,14 @@ export class StockAdvancesPage {
     this.draftQuantity.set('');
   }
 
+  protected updateLineQuantity(productCode: string, ev: Event) {
+    const value = Number((ev.target as HTMLInputElement).value);
+    if (!Number.isFinite(value) || value <= 0) return;
+    this.lines.update((rows) =>
+      rows.map((l) => (l.productCode === productCode ? { ...l, quantity: value } : l)),
+    );
+  }
+
   protected removeLine(productCode: string) {
     this.lines.update((rows) => rows.filter((l) => l.productCode !== productCode));
   }
@@ -692,27 +888,94 @@ export class StockAdvancesPage {
     this.lastResult.set(null);
   }
 
-  protected onFileSelected(ev: Event) {
+  protected downloadTemplate() {
+    downloadAdvancesCsvTemplate();
+  }
+
+  protected onDragOver(ev: DragEvent) {
+    if (!this.formWarehouseId()) return;
+    ev.preventDefault();
+    this.dragging.set(true);
+  }
+
+  protected onDrop(ev: DragEvent) {
+    ev.preventDefault();
+    this.dragging.set(false);
+    if (!this.formWarehouseId()) return;
+    const f = ev.dataTransfer?.files?.[0];
+    if (f) this.handleCsvFile(f);
+  }
+
+  protected onFileInputChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+    const f = input.files?.[0];
+    if (f) this.handleCsvFile(f);
+    input.value = '';
+  }
+
+  private handleCsvFile(file: File) {
+    this.csvError.set('');
+    const warehouseId = Number(this.formWarehouseId());
+    const warehouseName = this.warehouses().find((w) => w.warehouseId === warehouseId)?.name ?? '';
+    if (!warehouseId) return;
     file.text().then((text) => {
-      const { lines: parsed, invalidRows } = parseStockCsv(text);
-      if (parsed.length === 0) {
-        this.formError.set('No pudimos leer líneas válidas del CSV.');
+      const parsed = parseAdvancesCsv(text);
+      if (parsed.error) {
+        this.csvError.set(parsed.error);
         return;
       }
-      this.formError.set(
-        invalidRows > 0
-          ? `${invalidRows} fila(s) del archivo no se pudieron leer y se omitieron.`
-          : '',
-      );
-      this.lines.update((rows) => [
-        ...rows,
-        ...parsed.map((l) => ({ ...l, productName: l.productCode, pendingBefore: 0 })),
-      ]);
-      input.value = '';
+      this.dialog
+        .open<
+          ImportAdvancesCsvDialog,
+          ImportAdvancesCsvDialogData,
+          ImportAdvancesCsvDialogResult | null
+        >(ImportAdvancesCsvDialog, {
+          data: { warehouseId, warehouseName, fileName: file.name, parsed },
+          width: '860px',
+        })
+        .afterClosed()
+        .subscribe((result) => {
+          if (result) this.mergeImportedLines(result.lines, warehouseId);
+        });
     });
+  }
+
+  private mergeImportedLines(
+    imported: {
+      productCode: string;
+      productName: string;
+      quantity: number;
+      pendingBefore: number;
+    }[],
+    warehouseId: number,
+  ) {
+    if (imported.length === 0) return;
+    let merged = 0;
+    this.lines.update((rows) => {
+      let next = [...rows];
+      for (const line of imported) {
+        const existingIndex = next.findIndex(
+          (l) => l.productCode === line.productCode && l.warehouseId === warehouseId,
+        );
+        if (existingIndex >= 0) {
+          next = next.map((l, i) =>
+            i === existingIndex ? { ...l, quantity: l.quantity + line.quantity } : l,
+          );
+          merged++;
+        } else {
+          next.push({
+            productCode: line.productCode,
+            productName: line.productName,
+            stock: 0,
+            warehouseId,
+            quantity: line.quantity,
+            pendingBefore: line.pendingBefore,
+          });
+        }
+      }
+      return next;
+    });
+    if (merged > 0) this.toast.info('Se sumó a la línea existente');
   }
 
   protected failedLines() {
@@ -723,65 +986,88 @@ export class StockAdvancesPage {
       .map((l) => ({ productCode: l.productCode, errorReason: l.errorReason }));
   }
 
+  protected appliedWithWarnings() {
+    const result = this.lastResult();
+    if (!result) return [];
+    return result.lines.filter((l) => l.applied && l.warnings.length > 0);
+  }
+
+  /**
+   * Siempre revisa antes de crear (doc 69, sección 5.1): sin avisos ni
+   * filas inválidas se crea directo; si hay algo que revisar, se abre el
+   * modal "Revisar antes de adelantar" y ahí decide qué sigue.
+   */
   protected confirmSubmit() {
     this.submitted.set(true);
     if (!this.note().trim() || this.lines().length === 0) {
       this.formError.set('La nota y al menos una línea son obligatorias.');
       return;
     }
-    const warehouseName =
-      this.warehouses().find((w) => String(w.warehouseId) === this.formWarehouseId())?.name ?? '';
-    const n = this.lines().length;
-    this.dialog
-      .confirm({
-        title: 'Confirmar adelanto',
-        message: `Se adelantarán ${n} producto${n === 1 ? '' : 's'} en ${warehouseName}. El stock subirá de inmediato y quedará disponible para la venta. ¿Adelantar?`,
-        confirmLabel: 'Adelantar',
-      })
-      .subscribe((confirmed) => {
-        if (confirmed) this.submit();
-      });
+    this.formError.set('');
+    const draftLines = this.lines();
+    const cmdLines: StockAdvanceLine[] = draftLines.map((l) => ({
+      productCode: l.productCode,
+      warehouseId: l.warehouseId,
+      quantity: l.quantity,
+    }));
+
+    this.previewing.set(true);
+    this.inventorySvc.previewStockAdvances({ lines: cmdLines }).subscribe({
+      next: (preview) => {
+        this.previewing.set(false);
+        if (preview.linesWithWarnings === 0 && preview.invalidLines === 0) {
+          this.submit(cmdLines);
+          return;
+        }
+        this.dialog
+          .open<ReviewAdvancesDialog, ReviewAdvancesDialogData, StockAdvanceLine[] | null>(
+            ReviewAdvancesDialog,
+            {
+              data: {
+                lines: draftLines.map((l) => ({
+                  productCode: l.productCode,
+                  productName: l.productName,
+                  warehouseId: l.warehouseId,
+                  quantity: l.quantity,
+                })),
+                preview,
+              },
+              width: '640px',
+            },
+          )
+          .afterClosed()
+          .subscribe((finalLines) => {
+            if (finalLines && finalLines.length > 0) this.submit(finalLines);
+          });
+      },
+      error: () => {
+        this.previewing.set(false);
+        this.toast.error('No se pudo revisar el adelanto. Inténtalo de nuevo.');
+      },
+    });
   }
 
-  private submit() {
+  private submit(cmdLines: StockAdvanceLine[]) {
     this.submitting.set(true);
     this.formError.set('');
-    const byCode = new Map(this.lines().map((l) => [l.productCode, l]));
-    this.inventorySvc
-      .createStockAdvances({
-        note: this.note().trim(),
-        lines: this.lines().map((l) => ({
-          productCode: l.productCode,
-          warehouseId: l.warehouseId,
-          quantity: l.quantity,
-        })),
-      })
-      .subscribe({
-        next: (result) => {
-          this.submitting.set(false);
-          this.lastResult.set(result);
-          this.toast.success(`${result.appliedCount} de ${result.totalLines} líneas aplicadas`);
-          const appliedCodes = new Set(
-            result.lines.filter((l) => l.applied).map((l) => l.productCode),
-          );
-          this.lines.update((rows) => rows.filter((l) => !appliedCodes.has(l.productCode)));
-          for (const l of result.lines) {
-            if (l.applied && (l.pendingBefore ?? 0) > 0) {
-              const draft = byCode.get(l.productCode);
-              this.toast.info(
-                `${draft?.productName ?? l.productCode} ya tenía ${l.pendingBefore} adelantados sin cubrir`,
-              );
-            }
-          }
-          if (this.lines().length === 0) this.note.set('');
-          this.load();
-        },
-        error: (err) => {
-          this.submitting.set(false);
-          const detalle = err?.error?.detail ?? err?.error?.message;
-          this.formError.set(detalle || 'No pudimos crear el adelanto.');
-        },
-      });
+    this.inventorySvc.createStockAdvances({ note: this.note().trim(), lines: cmdLines }).subscribe({
+      next: (result) => {
+        this.submitting.set(false);
+        this.lastResult.set(result);
+        this.toast.success(`${result.appliedCount} productos adelantados`);
+        const appliedCodes = new Set(
+          result.lines.filter((l) => l.applied).map((l) => l.productCode),
+        );
+        this.lines.update((rows) => rows.filter((l) => !appliedCodes.has(l.productCode)));
+        if (this.lines().length === 0) this.note.set('');
+        this.load();
+      },
+      error: (err) => {
+        this.submitting.set(false);
+        const detalle = err?.error?.detail ?? err?.error?.message;
+        this.formError.set(detalle || 'No pudimos crear el adelanto.');
+      },
+    });
   }
 
   protected reduce(a: StockAdvanceView) {

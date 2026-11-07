@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiEmpty } from '../../shared/ui/empty/empty';
@@ -34,10 +34,17 @@ import {
 
       @if (loading()) {
         <div class="erd-skeleton" role="status" aria-label="Cargando"></div>
-      } @else if (error()) {
+      } @else if (notFound()) {
         <ui-empty
           variant="error"
           title="No se encontró ese cuadre"
+          actionLabel="Volver"
+          (action)="goBack()"
+        />
+      } @else if (error()) {
+        <ui-empty
+          variant="error"
+          title="No se pudo cargar el cuadre"
           actionLabel="Reintentar"
           (action)="load()"
         />
@@ -466,28 +473,38 @@ export class StockReconciliationDetailPage {
   protected detail = signal<StockReconciliationDetail | null>(null);
   protected loading = signal(true);
   protected error = signal(false);
+  protected notFound = signal(false);
   protected retrying = signal(false);
   protected showMovements = signal(false);
 
-  constructor() {
-    this.load();
-  }
+  // No leer input.required() en el constructor (NG0950): el router todavía
+  // no lo asignó ahí — doc 69, sección 3.2.
+  private loadEffect = effect(() => {
+    this.uploadId();
+    untracked(() => this.load());
+  });
 
   load() {
     const id = Number(this.uploadId());
     if (!id) return;
     this.loading.set(true);
     this.error.set(false);
+    this.notFound.set(false);
     this.inventorySvc.reconciliationDetail(id).subscribe({
       next: (d) => {
         this.detail.set(d);
         this.loading.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.error.set(true);
+        if (err?.status === 404) this.notFound.set(true);
+        else this.error.set(true);
       },
     });
+  }
+
+  protected goBack() {
+    this.router.navigate(['/inventario/cuadre']);
   }
 
   protected goToProductHistory(row: StockReconciliationView) {

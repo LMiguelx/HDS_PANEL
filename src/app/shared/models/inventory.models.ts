@@ -133,12 +133,47 @@ export interface StockAdvanceLineResult {
   quantity: number | null;
   pendingBefore: number | null; // lo que ya estaba adelantado y sin cubrir de ese producto
   errorReason: string | null;
+  warnings: StockAdvanceWarning[]; // NUEVO — doc 69, sección 4.3: los mismos de la revisión, calculados al crear
 }
 
 export interface CreateStockAdvancesResult {
   totalLines: number;
   appliedCount: number;
   lines: StockAdvanceLineResult[];
+}
+
+// ───────────────── Adelantar con revisión previa — doc 69 ─────────────────
+
+/** `code` NO se muestra: define ícono y tono. `message` llega listo para mostrar. */
+export type StockAdvanceWarningCode = 'ERP_UPLOAD_PENDING' | 'RECENT_ERP_INCREASE';
+
+export interface StockAdvanceWarning {
+  code: StockAdvanceWarningCode;
+  message: string;
+  pendingUploads: number | null; // solo ERP_UPLOAD_PENDING
+  erpIncrease: number | null; // solo RECENT_ERP_INCREASE
+  erpIncreaseAt: string | null; // solo RECENT_ERP_INCREASE
+}
+
+export interface PreviewStockAdvancesCommand {
+  lines: StockAdvanceLine[];
+}
+
+export interface StockAdvancePreviewLine {
+  lineIndex: number; // posición en el arreglo enviado — para cruzar con la fila
+  productCode: string;
+  warehouseId: number; // NO mostrar
+  valid: boolean; // false = producto o almacén no existen
+  pendingBefore: number | null; // null si no es válida
+  errorReason: string | null;
+  warnings: StockAdvanceWarning[]; // [] si no hay avisos
+}
+
+export interface StockAdvancePreviewResult {
+  totalLines: number;
+  linesWithWarnings: number; // > 0 → mostrar el modal de revisión
+  invalidLines: number; // > 0 → hay filas que no se pueden adelantar
+  lines: StockAdvancePreviewLine[];
 }
 
 export interface StockAdvanceView {
