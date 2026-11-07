@@ -11,13 +11,11 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
         routerLink="/asignaciones"
         routerLinkActive="active"
         [routerLinkActiveOptions]="{ exact: true }"
-        >Inicio</a
+        >Cartera</a
       >
-      <a routerLink="/asignaciones/listado" routerLinkActive="active">Listado</a>
-      <a routerLink="/asignaciones/huerfanos" routerLinkActive="active">Huérfanos</a>
       <a routerLink="/asignaciones/ausencias" routerLinkActive="active">Ausencias</a>
       <a routerLink="/asignaciones/mapa" routerLinkActive="active">Mapa</a>
-      <a routerLink="/asignaciones/pendientes" routerLinkActive="active">Horario incompleto</a>
+      <a routerLink="/asignaciones/coberturas" routerLinkActive="active">Coberturas</a>
     </nav>
   `,
   styles: [

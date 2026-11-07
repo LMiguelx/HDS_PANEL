@@ -3,26 +3,35 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission';
 
 /**
- * Pestañas del módulo (Listado · Premios pendientes · Dotaciones) — el
- * mockup las muestra como tabs a la altura del contenido, no como ítems de
- * menú aparte.
+ * Pestañas del módulo (Listado · Premios pendientes · Dotaciones · Alcance)
+ * — el mockup las muestra como tabs a la altura del contenido, no como
+ * ítems de menú aparte.
  */
 @Component({
   selector: 'app-promo-module-tabs',
   imports: [RouterLink, RouterLinkActive, HasPermissionDirective],
   template: `
     <nav class="promo-tabs">
-      <a routerLink="/promociones" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
+      <a
+        routerLink="/promociones"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
         >Promociones</a
       >
       <a
         routerLink="/promociones/pendientes"
         routerLinkActive="active"
-        *hasPermission="['promo.create', 'promo.approve', 'promo.allocate']"
+        *hasPermission="'promo.resolve_choice'"
         >Premios pendientes</a
       >
-      <a routerLink="/promociones/dotaciones" routerLinkActive="active" *hasPermission="'promo.allocate'"
+      <a
+        routerLink="/promociones/dotaciones"
+        routerLinkActive="active"
+        *hasPermission="'promo.allocate'"
         >Dotaciones</a
+      >
+      <a routerLink="/promociones/alcance" routerLinkActive="active" *hasPermission="'promo.create'"
+        >Alcance</a
       >
     </nav>
   `,

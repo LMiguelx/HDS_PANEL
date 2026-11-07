@@ -1,0 +1,151 @@
+<app-sales-report-module-tabs />
+<section class="sst-page">
+  <div class="sst-toolbar">
+    <ui-field label="Desde" type="date" [(value)]="from" />
+    <ui-field label="Hasta" type="date" [(value)]="to" hint='Máximo 31 días desde "Desde"' />
+    <ui-field label="Origen" type="select" [(value)]="originFilter" [options]="originOptions" />
+    <ui-typeahead
+      label="Vendedor"
+      placeholder="Todos los vendedores"
+      [clearOnPick]="false"
+      [search]="searchSalespeople"
+      [(selected)]="salespersonFilter"
+      class="sst-toolbar-ta"
+    />
+    <div class="sst-groupby">
+      <span class="sst-groupby-label">Ver por</span>
+      <div class="sst-groupby-options">
+        <ui-option-card [selected]="groupBy() === 'DAY'" (pick)="groupBy.set('DAY')">
+          Día
+        </ui-option-card>
+        <ui-option-card
+          [selected]="groupBy() === 'SALESPERSON'"
+          (pick)="groupBy.set('SALESPERSON')"
+        >
+          Vendedor
+        </ui-option-card>
+      </div>
+    </div>
+    <ui-export-menu
+      class="sst-export"
+      [disabled]="!canExport()"
+      [busy]="exporting()"
+      [progressText]="exportProgressText()"
+      (export)="onExport($event)"
+    />
+  </div>
+
+  @if (loading()) {
+    <div class="sst-skeleton" role="status" aria-label="Cargando"></div>
+  } @else if (error()) {
+    <ui-empty
+      variant="error"
+      title="No pudimos cargar la liquidación"
+      body="{{ error() }}"
+      actionLabel="Reintentar"
+      (action)="load()"
+    />
+  } @else if (report(); as r) {
+    <h2 class="sst-title">
+      Liquidación de
+      @if (r.salespersonName) {
+        <strong>{{ r.salespersonName }}</strong>
+      } @else {
+        vendedores
+      }
+      · {{ periodText() }}
+    </h2>
+
+    @if (r.rows.length === 0) {
+      <ui-empty
+        title="No hay pedidos para los filtros elegidos"
+        actionLabel="Limpiar filtros"
+        (action)="clearFilters()"
+      />
+    } @else {
+      @if (showChart()) {
+        <div class="sst-bar-chart">
+          @for (row of rowsForChart(); track row.salespersonId) {
+            <div class="sst-bar-row">
+              <span class="sst-bar-label">{{ row.salespersonName }}</span>
+              <div class="sst-bar-track">
+                @if (row.fieldNetAmount > 0) {
+                  <div
+                    class="sst-bar-fill sst-bar-fill-field"
+                    [style.width.%]="barPct(row.fieldNetAmount)"
+                  ></div>
+                }
+                @if (row.telesalesNetAmount > 0) {
+                  <div
+                    class="sst-bar-fill sst-bar-fill-telesales"
+                    [style.width.%]="barPct(row.telesalesNetAmount)"
+                  ></div>
+                }
+                @if (row.counterNetAmount > 0) {
+                  <div
+                    class="sst-bar-fill sst-bar-fill-counter"
+                    [style.width.%]="barPct(row.counterNetAmount)"
+                  ></div>
+                }
+              </div>
+              <span class="sst-bar-value">{{ formatSoles(row.netAmount) }}</span>
+            </div>
+          }
+          <div class="sst-bar-legend">
+            <span><span class="sst-legend-dot sst-legend-field"></span> Campo</span>
+            <span><span class="sst-legend-dot sst-legend-telesales"></span> Televentas</span>
+            <span><span class="sst-legend-dot sst-legend-counter"></span> Mostrador</span>
+          </div>
+        </div>
+      }
+
+      <div class="sst-table-wrap">
+        <table class="ui-table-grid sst-table">
+          <thead>
+            <tr>
+              @for (col of columns(); track col.key) {
+                <th [class.sst-col-right]="col.type !== 'text' && col.type !== 'code'">
+                  {{ col.header }}
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.rows; track row.salespersonId + '-' + (row.date ?? ''); let i = $index) {
+              <tr class="sst-row" (click)="openOrders(row)">
+                @for (col of columns(); track col.key) {
+                  <td
+                    [class.sst-col-right]="col.type !== 'text' && col.type !== 'code'"
+                    [class.sst-cell-strong]="col.bold"
+                    [class.sst-muted]="!col.bold"
+                  >
+                    {{ columnScreenText(col, row, i) }}
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr>
+              @for (col of columns(); track col.key) {
+                <td
+                  class="sst-cell-strong"
+                  [class.sst-col-right]="col.type !== 'text' && col.type !== 'code'"
+                >
+                  {{ col.key === 'item' ? 'Sumas' : footerText(col) }}
+                </td>
+              }
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      @if (r.lastOrderAt) {
+        <p class="sst-footer-note">
+          Último pedido registrado a las {{ timeText(r.lastOrderAt) }} del
+          {{ dateText(r.lastOrderAt) }}
+        </p>
+      }
+    }
+  }
+</section>

@@ -45,9 +45,13 @@ let nextId = 0;
     <div class="ui-field">
       <label [for]="id">{{ label() }}</label>
       <div class="ui-ta-wrap" #origin>
+        @if (icon()) {
+          <span class="material-icons ui-ta-icon" aria-hidden="true">{{ icon() }}</span>
+        }
         <input
           [id]="id"
           class="ui-input"
+          [class.ui-input-icon]="!!icon()"
           type="text"
           [placeholder]="placeholder()"
           [disabled]="disabled()"
@@ -88,7 +92,12 @@ let nextId = 0;
           <div class="ui-ta-msg">No encontramos ese nombre.</div>
         } @else {
           @for (item of results(); track item.id) {
-            <button type="button" class="ui-ta-option" (mousedown)="$event.preventDefault()" (click)="pick(item)">
+            <button
+              type="button"
+              class="ui-ta-option"
+              (mousedown)="$event.preventDefault()"
+              (click)="pick(item)"
+            >
               <span class="ui-ta-option-name">{{ item.name }}</span>
               @if (item.extraInfo) {
                 <span class="ui-ta-option-extra">{{ item.extraInfo }}</span>
@@ -114,17 +123,32 @@ let nextId = 0;
       .ui-ta-wrap {
         position: relative;
       }
+      .ui-ta-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 20px;
+        color: var(--ink-muted);
+        pointer-events: none;
+      }
       .ui-input {
         font-family: var(--font-sans);
         font-size: 15px;
         color: var(--ink);
         background: var(--surface-sunk);
         border: 1px solid var(--divider);
-        border-radius: 0;
+        border-radius: var(--radius-control, 0);
         min-height: var(--touch-min);
         padding: 0 40px 0 12px;
         width: 100%;
         box-sizing: border-box;
+      }
+      /* Después de .ui-input a propósito: su padding en bloque (arriba) deja
+         el izquierdo en 12px: esta regla necesita ganar el empate de
+         especificidad para separar el texto del ícono. */
+      .ui-input-icon {
+        padding-left: 40px;
       }
       .ui-input:hover:not(:disabled) {
         border-color: var(--ink-muted);
@@ -158,7 +182,7 @@ let nextId = 0;
         color: var(--ink-muted);
       }
       .ui-field-error-text {
-        color: var(--accent-ink);
+        color: var(--status-danger);
       }
 
       .ui-ta-panel {
@@ -174,7 +198,7 @@ let nextId = 0;
         color: var(--ink-muted);
       }
       .ui-ta-error {
-        color: var(--accent-ink);
+        color: var(--status-danger);
       }
       .ui-ta-option {
         display: flex;
@@ -211,6 +235,8 @@ let nextId = 0;
 export class UiTypeahead {
   label = input.required<string>();
   placeholder = input('Escribe el nombre');
+  /** Ícono (ligadura de Material Icons) a la izquierda del input. Opcional. */
+  icon = input('');
   hint = input('');
   error = input('');
   disabled = input(false);
