@@ -17,6 +17,7 @@ import {
   DeactivateCustomerDialog,
   DeactivateCustomerDialogData,
 } from './ui/deactivate-customer-dialog';
+import { EditCustomerDialog, EditCustomerDialogData } from './ui/edit-customer-dialog';
 import {
   dateText,
   dateTimeText,
@@ -89,6 +90,12 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
             >
               Ver mapa
             </button>
+            @if (canEdit()) {
+              <button uiButton variant="secondary" (click)="editCustomer(c)">
+                <span class="material-icons" aria-hidden="true">edit</span>
+                Editar datos
+              </button>
+            }
             @if (canManageStatus()) {
               @if (c.isActive) {
                 <button uiButton variant="secondary" class="cd-danger-btn" (click)="deactivate(c)">
@@ -640,6 +647,7 @@ export class CustomerDetailPage {
   protected canViewOrders = computed(() => this.auth.hasAny('order.create', 'order.view_all'));
   protected canAssign = computed(() => this.auth.hasAny('customer.assign'));
   protected canManageStatus = computed(() => this.auth.hasAny('customer.status.manage'));
+  protected canEdit = computed(() => this.auth.hasAny('customer.edit'));
   protected orders = signal<OrderSummary[]>([]);
   protected ordersLoading = signal(true);
   protected activating = signal(false);
@@ -702,6 +710,19 @@ export class CustomerDetailPage {
       })
       .afterClosed()
       .subscribe((saved) => saved && this.load());
+  }
+
+  protected editCustomer(c: CustomerDetail) {
+    this.dialog
+      .open<EditCustomerDialog, EditCustomerDialogData, CustomerDetail | null>(EditCustomerDialog, {
+        data: { customer: c },
+        width: '560px',
+        disableClose: true,
+      })
+      .afterClosed()
+      .subscribe((updated) => {
+        if (updated) this.customer.set(updated);
+      });
   }
 
   protected deactivate(c: CustomerDetail) {

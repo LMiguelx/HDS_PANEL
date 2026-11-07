@@ -1,6 +1,10 @@
-import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { Subject, forkJoin, fromEvent, interval, merge, of } from 'rxjs';
+import { catchError, filter, map, skip, switchMap, tap } from 'rxjs/operators';
 import { AuthService } from '../../core/auth/auth';
+import { ToastService } from '../../core/ui/toast';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiButton } from '../../shared/ui/button/button';
@@ -23,8 +27,6 @@ const TOP_LIMIT_OPTIONS: UiFieldOption[] = [
   { value: '5', label: 'Top 5' },
   { value: '7', label: 'Top 7' },
 ];
-
-const PENDING_POLL_MS = 5 * 60_000;
 
 function todayIso(): string {
   const d = new Date();
@@ -76,6 +78,36 @@ interface PendingCardVM {
         @if (showDashboard()) {
           <div class="home-toolbar">
             <ui-field label="Fecha" type="date" [(value)]="date" />
+            <div class="home-status-row">
+              @if (isToday()) {
+                <span class="home-status-flag">A hoy</span>
+              } @else {
+                <span class="home-status-flag home-status-flag-muted">Histórico</span>
+              }
+              @if (updateError()) {
+                <button type="button" class="home-update-error" (click)="refreshNow()">
+                  No se pudo actualizar · reintentar
+                </button>
+              } @else if (updatedAt(); as u) {
+                <span class="home-status-updated"
+                  >Actualizado
+                  {{ u.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) }}
+                  @if (isToday()) {
+                    · se actualiza cada 2 min
+                  }
+                </span>
+              }
+              <button
+                uiButton
+                variant="ghost"
+                size="sm"
+                [loading]="refreshing()"
+                (click)="refreshNow()"
+              >
+                <span class="material-icons" aria-hidden="true">refresh</span>
+                Actualizar
+              </button>
+            </div>
             @if (canGoToReparto()) {
               <button
                 uiButton
@@ -91,30 +123,13 @@ interface PendingCardVM {
       </div>
 
       @if (showDashboard()) {
+        @if (refreshing() && (data() || pendingData())) {
+          <div class="home-refresh-bar" role="progressbar" aria-label="Actualizando"></div>
+        }
+
         <!-- Pendientes de gestión -->
         <div class="home-block">
-          <div class="home-block-head">
-            <h2 class="home-block-title">Pendientes de gestión</h2>
-            <div class="home-pending-toolbar">
-              <span class="home-pending-flag">a hoy</span>
-              @if (pendingUpdatedAt(); as u) {
-                <span class="home-pending-updated"
-                  >Actualizado
-                  {{ u.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) }}</span
-                >
-              }
-              <button
-                uiButton
-                variant="ghost"
-                size="sm"
-                [loading]="pendingLoading()"
-                (click)="loadPending()"
-              >
-                <span class="material-icons" aria-hidden="true">refresh</span>
-                Actualizar
-              </button>
-            </div>
-          </div>
+          <h2 class="home-block-title">Pendientes de gestión</h2>
 
           @if (pendingLoading() && !pendingData()) {
             <div class="home-pending-skeleton" role="status" aria-label="Cargando"></div>
@@ -123,7 +138,7 @@ interface PendingCardVM {
               variant="error"
               title="No pudimos cargar los pendientes de gestión"
               actionLabel="Reintentar"
-              (action)="loadPending()"
+              (action)="refreshNow()"
             />
           } @else {
             <div class="home-pending-grid">
@@ -149,15 +164,15 @@ interface PendingCardVM {
           }
         </div>
 
-        @if (loading()) {
+        @if (loading() && !data()) {
           <div class="home-dash-skeleton" role="status" aria-label="Cargando"></div>
-        } @else if (error()) {
+        } @else if (error() && !data()) {
           <ui-empty
             variant="error"
             title="No pudimos cargar el resumen del día"
             body="Intenta de nuevo en unos segundos."
             actionLabel="Reintentar"
-            (action)="load()"
+            (action)="refreshNow()"
           />
         } @else if (data(); as d) {
           <!-- Pedidos del día -->
@@ -545,6 +560,58 @@ interface PendingCardVM {
       .home-reparto-link {
         white-space: nowrap;
       }
+      .home-status-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding-bottom: 2px;
+      }
+      .home-status-flag {
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+        border: 1px solid var(--accent-ink);
+        padding: 3px 8px;
+      }
+      .home-status-flag-muted {
+        color: var(--ink-muted);
+        border-color: var(--hairline);
+      }
+      .home-status-updated {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+      .home-update-error {
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--status-warn);
+      }
+      .home-update-error:hover {
+        text-decoration: underline;
+      }
+      .home-refresh-bar {
+        height: 2px;
+        margin-top: 18px;
+        background: linear-gradient(90deg, transparent, var(--accent) 50%, transparent);
+        background-size: 200% 100%;
+        animation: home-refresh-sweep 1.1s ease-in-out infinite;
+      }
+      @keyframes home-refresh-sweep {
+        0% {
+          background-position: 200% 0;
+        }
+        100% {
+          background-position: -200% 0;
+        }
+      }
       .home-dash-skeleton {
         height: 320px;
         background: var(--faint);
@@ -617,24 +684,6 @@ interface PendingCardVM {
       }
 
       /* — Pendientes de gestión — */
-      .home-pending-toolbar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-      .home-pending-flag {
-        font-size: var(--fs-label, 11px);
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--ink-muted);
-        border: 1px solid var(--hairline);
-        padding: 3px 8px;
-      }
-      .home-pending-updated {
-        font-size: 12px;
-        color: var(--ink-muted);
-      }
       .home-pending-skeleton {
         height: 160px;
         background: var(--faint);
@@ -1245,6 +1294,7 @@ export class DashboardPage {
   private auth = inject(AuthService);
   private dashboardSvc = inject(DashboardAdminService);
   private lookupSvc = inject(LookupService);
+  private toast = inject(ToastService);
 
   readonly user = this.auth.currentUser;
 
@@ -1270,7 +1320,15 @@ export class DashboardPage {
   protected pendingData = signal<DashboardPendingView | null>(null);
   protected pendingLoading = signal(true);
   protected pendingError = signal(false);
-  protected pendingUpdatedAt = signal<Date | null>(null);
+
+  // — Refresco único de toda la pantalla — doc 70, sección 3 —
+  protected refreshing = signal(false);
+  protected updatedAt = signal<Date | null>(null);
+  protected isToday = computed(() => this.date() === todayIso());
+  protected updateError = computed(() => this.error() || this.pendingError());
+  private manualRefresh$ = new Subject<boolean>();
+  /** Se instancia junto con la navegación de entrada: empieza en esta ruta. */
+  private onDashboardRoute = true;
 
   protected pendingCards = computed<PendingCardVM[]>(() => {
     const p = this.pendingData();
@@ -1367,13 +1425,6 @@ export class DashboardPage {
 
   protected dayParams = computed(() => ({ from: this.date(), to: this.date() }));
 
-  private loadEffect = effect(() => {
-    this.date();
-    untracked(() => {
-      if (this.showDashboard()) this.load();
-    });
-  });
-
   /**
    * Solo se dispara al cambiar el selector de cantidad o canal — nunca
    * recarga /today. Si vuelve a los valores por defecto (Top 5, Todos) usa
@@ -1400,46 +1451,109 @@ export class DashboardPage {
       ]);
     });
 
-    if (this.showDashboard()) {
-      this.loadPending();
-      const handle = setInterval(() => this.loadPending(), PENDING_POLL_MS);
-      inject(DestroyRef).onDestroy(() => clearInterval(handle));
-    }
+    if (!this.showDashboard()) return;
+
+    const router = inject(Router);
+
+    /**
+     * Un solo flujo de recarga alimenta las dos cards — doc 70, sección 3.2.
+     * Fuentes: entrada a la ruta (NavigationEnd, cubre también el caso en
+     * que Angular reutiliza la instancia cacheada del Inicio y el
+     * constructor no vuelve a correr), fecha cambiada, botón Actualizar,
+     * temporizador de 2 min y regreso de visibilidad; `switchMap` cancela
+     * la petición anterior si llega un disparador nuevo.
+     *
+     * `onDashboardRoute` también gobierna `shouldAutoRefresh()`: el Inicio
+     * queda cacheado (no destruido) al navegar a otra pantalla — doc 70 pide
+     * refrescar "mientras el Inicio está abierto", no en segundo plano
+     * mientras se trabaja en otra pantalla con la pestaña del navegador
+     * igual de visible.
+     */
+    const routeEntered$ = router.events.pipe(
+      tap((ev) => {
+        if (ev instanceof NavigationEnd) {
+          this.onDashboardRoute = ev.urlAfterRedirects.split('?')[0].endsWith('/dashboard');
+        }
+      }),
+      filter((ev) => ev instanceof NavigationEnd && this.onDashboardRoute),
+      map(() => false),
+    );
+    const dateChanged$ = toObservable(this.date).pipe(
+      skip(1),
+      map(() => false),
+    );
+    const heartbeat$ = interval(120_000).pipe(
+      filter(() => this.shouldAutoRefresh()),
+      map(() => false),
+    );
+    const visibilityRegained$ = fromEvent(document, 'visibilitychange').pipe(
+      filter(() => document.visibilityState === 'visible' && this.shouldAutoRefresh()),
+      map(() => false),
+    );
+
+    merge(this.manualRefresh$, routeEntered$, dateChanged$, heartbeat$, visibilityRegained$)
+      .pipe(
+        switchMap((manual) => this.performRefresh(manual)),
+        takeUntilDestroyed(),
+      )
+      .subscribe();
+
+    this.performRefresh(false).subscribe();
   }
 
-  load() {
-    this.loading.set(true);
-    this.error.set(false);
-    this.dashboardSvc.today(this.date()).subscribe({
-      next: (result) => {
+  /** Puerta compartida por el temporizador y el regreso de visibilidad — doc 70, sección 3.1, puntos 2 y 3. */
+  private shouldAutoRefresh(): boolean {
+    if (!this.onDashboardRoute || !this.isToday() || this.refreshing()) return false;
+    const last = this.updatedAt();
+    return !last || Date.now() - last.getTime() >= 120_000;
+  }
+
+  protected refreshNow() {
+    if (this.refreshing()) return;
+    this.manualRefresh$.next(true);
+  }
+
+  /** Todas las consultas de una actualización salen juntas; la hora "Actualizado" se marca cuando terminan — doc 70, sección 3.2. */
+  private performRefresh(manual: boolean) {
+    this.refreshing.set(true);
+    if (!this.data()) this.loading.set(true);
+    if (!this.pendingData()) this.pendingLoading.set(true);
+
+    const today$ = this.dashboardSvc.today(this.date()).pipe(
+      tap((result) => {
         this.data.set(result);
         this.topLimitStr.set('5');
         this.topChannelIdStr.set('');
         this.topSalespeopleOverride.set(null);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.loading.set(false);
+        this.error.set(false);
+      }),
+      catchError(() => {
         this.error.set(true);
-      },
-    });
-  }
-
-  /** Independiente de `/today`: si falla, no rompe el resto del Inicio — doc 66, sección 3.2. */
-  loadPending() {
-    this.pendingLoading.set(true);
-    this.pendingError.set(false);
-    this.dashboardSvc.pending().subscribe({
-      next: (result) => {
+        return of(null);
+      }),
+    );
+    const pending$ = this.dashboardSvc.pending().pipe(
+      tap((result) => {
         this.pendingData.set(result);
-        this.pendingLoading.set(false);
-        this.pendingUpdatedAt.set(new Date());
-      },
-      error: () => {
-        this.pendingLoading.set(false);
+        this.pendingError.set(false);
+      }),
+      catchError(() => {
         this.pendingError.set(true);
-      },
-    });
+        return of(null);
+      }),
+    );
+
+    return forkJoin([today$, pending$]).pipe(
+      tap(() => {
+        this.loading.set(false);
+        this.pendingLoading.set(false);
+        this.refreshing.set(false);
+        if (!this.error() && !this.pendingError()) this.updatedAt.set(new Date());
+        if (manual && (this.error() || this.pendingError())) {
+          this.toast.error('No pudimos actualizar. Intenta de nuevo.');
+        }
+      }),
+    );
   }
 
   private loadTopSalespeople(limit: number, salesChannelId?: number) {

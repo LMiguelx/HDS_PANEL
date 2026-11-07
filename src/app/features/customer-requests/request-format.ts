@@ -79,6 +79,9 @@ const FIELD_LABELS: Record<string, string> = {
   DOCUMENT_NUMBER: 'Número de documento',
   LATITUDE: 'Latitud',
   LONGITUDE: 'Longitud',
+  /** Doc 70, sección 1.5 — también los deja "Editar datos del cliente" (edición directa). */
+  DOCUMENT_TYPE: 'Tipo de documento',
+  CUSTOMER_TYPE: 'Tipo de cliente',
 };
 
 export function fieldNameLabel(code: string): string {

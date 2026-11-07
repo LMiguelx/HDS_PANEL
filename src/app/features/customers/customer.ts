@@ -1,13 +1,17 @@
 ﻿import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { shareReplay } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { PageResponse } from '../../shared/models/api.models';
 import {
   AdminCustomerFilters,
   AdminCustomerSummary,
   CustomerDetail,
+  CustomerEditOptions,
   CustomerInvoiceSummary,
   CustomerSummary,
+  EditCustomerCommand,
   RateCustomerCommand,
 } from '../../shared/models/customer.models';
 
@@ -70,5 +74,22 @@ export class CustomerService {
   /** customer.status.manage — doc 68, sección 8.3: vuelve con el mismo vendedor y horario. */
   activate(customerId: number) {
     return this.http.post<CustomerDetail>(`${this.adminBase}/${customerId}/activate`, {});
+  }
+
+  private editOptions$?: Observable<CustomerEditOptions>;
+
+  /** customer.edit — doc 70, sección 1.1. Catálogos casi fijos: se cachea en memoria durante la sesión. */
+  editOptions() {
+    if (!this.editOptions$) {
+      this.editOptions$ = this.http
+        .get<CustomerEditOptions>(`${this.adminBase}/edit-options`)
+        .pipe(shareReplay(1));
+    }
+    return this.editOptions$;
+  }
+
+  /** customer.edit — doc 70, sección 1.1: edición directa desde el panel, no se envía al ERP. */
+  update(customerId: number, cmd: EditCustomerCommand) {
+    return this.http.patch<CustomerDetail>(`${this.adminBase}/${customerId}`, cmd);
   }
 }

@@ -1,4 +1,4 @@
-import { Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
@@ -31,6 +31,20 @@ const ORIGIN_FILTER_OPTIONS: UiFieldOption[] = [
   { value: '', label: 'Todos los orígenes' },
   ...ORDER_ORIGIN_OPTIONS.map((o) => ({ value: o.code, label: o.name })),
 ];
+
+interface FilterOverride {
+  customerId?: number | null;
+  customerName?: string | null;
+  salespersonId?: number | null;
+  salespersonName?: string | null;
+  statusCode?: string;
+  originCode?: string;
+  from?: string;
+  to?: string;
+  month?: string;
+  page?: number;
+  size?: number;
+}
 
 function todayIso(): string {
   const d = new Date();
@@ -87,16 +101,30 @@ function lastDayOfMonth(month: string): string {
           label="Cliente"
           [clearOnPick]="false"
           [search]="customerSearch"
-          [(selected)]="customerFilter"
+          [selected]="customerFilter()"
+          (selectedChange)="onCustomerChange($event)"
         />
         <ui-typeahead
           label="Vendedor"
           [clearOnPick]="false"
           [search]="userSearch"
-          [(selected)]="salespersonFilter"
+          [selected]="salespersonFilter()"
+          (selectedChange)="onSalespersonChange($event)"
         />
-        <ui-field label="Estado" type="select" [(value)]="statusFilter" [options]="statusOptions" />
-        <ui-field label="Origen" type="select" [(value)]="originFilter" [options]="originOptions" />
+        <ui-field
+          label="Estado"
+          type="select"
+          [value]="statusFilter()"
+          (valueChange)="onStatusChange($event)"
+          [options]="statusOptions"
+        />
+        <ui-field
+          label="Origen"
+          type="select"
+          [value]="originFilter()"
+          (valueChange)="onOriginChange($event)"
+          [options]="originOptions"
+        />
         <ui-field
           label="Día"
           type="date"
@@ -114,6 +142,12 @@ function lastDayOfMonth(month: string): string {
           />
         </div>
       </div>
+
+      @if (hasActiveFilters()) {
+        <button type="button" class="ord-clear-link" (click)="clearFilters()">
+          Limpiar filtros
+        </button>
+      }
 
       @if (seededRangeTo()) {
         <p class="ord-range-note">
@@ -317,6 +351,22 @@ function lastDayOfMonth(month: string): string {
         font-size: var(--fs-meta);
         color: var(--ink-muted);
       }
+      .ord-clear-link {
+        display: inline-block;
+        margin: 10px 0 0;
+        appearance: none;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--accent-ink);
+      }
+      .ord-clear-link:hover {
+        text-decoration: underline;
+      }
       .ord-cell-strong {
         font-weight: 800;
       }
@@ -405,8 +455,14 @@ function lastDayOfMonth(month: string): string {
 export class OrderListPage {
   private orderSvc = inject(OrderAdminService);
   private lookupSvc = inject(LookupService);
+  private router = inject(Router);
 
-  /** Query params opcionales para llegar con filtros ya aplicados (desde Reportes de ventas, Aprobaciones). */
+  /**
+   * La URL es la fuente de verdad (doc 70, sección 2): estos mismos nombres
+   * ya los usaban Reportes de ventas/Aprobaciones para "sembrar" filtros al
+   * entrar; ahora también se escriben de vuelta en cada cambio, así Ver
+   * detalle → Atrás conserva filtros, página y orden.
+   */
   salespersonIdParam = input('', { alias: 'salespersonId' });
   salespersonNameParam = input('', { alias: 'salespersonName' });
   customerIdParam = input('', { alias: 'customerId' });
@@ -414,8 +470,12 @@ export class OrderListPage {
   fromParam = input('', { alias: 'from' });
   /** Rango real (no un solo día): doc 43, sección 5.6 — "por vendedor" llega con from≠to. */
   toParam = input('', { alias: 'to' });
+  /** yyyy-MM — solo presente cuando el filtro activo es "Mes" (doc 70, sección 2.2). */
+  monthParam = input('', { alias: 'mes' });
   statusCodeParam = input('', { alias: 'statusCode' });
   originCodeParam = input('', { alias: 'originCode' });
+  pageParam = input('', { alias: 'page' });
+  sizeParam = input('', { alias: 'size' });
 
   protected dateTimeText = dateTimeText;
   protected dateText = dateText;
@@ -448,54 +508,102 @@ export class OrderListPage {
   protected userSearch = (q: string) =>
     this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
 
-  private serverFiltersEffect = effect(() => {
-    this.customerFilter();
-    this.salespersonFilter();
-    this.statusFilter();
-    this.originFilter();
-    this.dayFilter();
-    this.monthFilter();
+  protected hasActiveFilters = computed(
+    () =>
+      !!this.customerIdParam() ||
+      !!this.salespersonIdParam() ||
+      !!this.statusCodeParam() ||
+      !!this.originCodeParam(),
+  );
+
+  /**
+   * La URL es la única fuente de verdad: cada navegación (propia o del
+   * botón Atrás) actualiza el estado local y vuelve a pedir la página —
+   * doc 70, sección 2.3, punto 1.
+   */
+  private urlFiltersEffect = effect(() => {
+    const salespersonId = this.salespersonIdParam() ?? '';
+    const salespersonName = this.salespersonNameParam() ?? '';
+    const customerId = this.customerIdParam() ?? '';
+    const customerName = this.customerNameParam() ?? '';
+    const from = this.fromParam() ?? '';
+    const to = this.toParam() ?? '';
+    const month = this.monthParam() ?? '';
+    const statusCode = this.statusCodeParam() ?? '';
+    const originCode = this.originCodeParam() ?? '';
+    const page = this.pageParam() ?? '';
+    const size = this.sizeParam() ?? '';
     untracked(() => {
-      this.page.set(0);
+      this.salespersonFilter.set(
+        salespersonId && salespersonName
+          ? { id: Number(salespersonId), name: salespersonName }
+          : null,
+      );
+      this.customerFilter.set(
+        customerId && customerName ? { id: Number(customerId), name: customerName } : null,
+      );
+      this.statusFilter.set(statusCode);
+      this.originFilter.set(originCode);
+      this.page.set(page ? Number(page) : 0);
+      this.size.set(size && Number(size) > 0 ? Number(size) : 20);
+
+      if (month) {
+        this.monthFilter.set(month);
+        this.dayFilter.set(todayIso());
+        this.seededRangeTo.set('');
+      } else if (from) {
+        this.monthFilter.set('');
+        this.dayFilter.set(from);
+        this.seededRangeTo.set(to && to !== from ? to : '');
+      } else {
+        // Primera visita sin fecha en la URL: hoy por defecto, escrito en la
+        // URL (replaceUrl) para que quede explícito — doc 70, sección 2.3, punto 7.
+        this.monthFilter.set('');
+        this.dayFilter.set(todayIso());
+        this.seededRangeTo.set('');
+        this.navigateWithFilters({ from: todayIso(), to: todayIso() });
+        return;
+      }
       this.load();
     });
   });
 
-  private seedQueryParamsEffect = effect(() => {
-    const salespersonId = this.salespersonIdParam();
-    const salespersonName = this.salespersonNameParam();
-    const customerId = this.customerIdParam();
-    const customerName = this.customerNameParam();
-    const from = this.fromParam();
-    const to = this.toParam();
-    const statusCode = this.statusCodeParam();
-    const originCode = this.originCodeParam();
-    untracked(() => {
-      if (salespersonId && salespersonName) {
-        this.salespersonFilter.set({ id: Number(salespersonId), name: salespersonName });
-      }
-      if (customerId && customerName) {
-        this.customerFilter.set({ id: Number(customerId), name: customerName });
-      }
-      if (from) {
-        this.monthFilter.set('');
-        this.dayFilter.set(from);
-        this.seededRangeTo.set(to && to !== from ? to : '');
-      }
-      if (statusCode) this.statusFilter.set(statusCode);
-      if (originCode) this.originFilter.set(originCode);
-    });
-  });
-
-  /** Tocar el día a mano abandona el rango sembrado: vuelve a ser un filtro de un solo día. */
+  /** Tocar el día a mano abandona el mes/rango sembrado: vuelve a ser un filtro de un solo día. */
   protected setDayFilter(value: string) {
-    this.seededRangeTo.set('');
-    this.dayFilter.set(value);
+    this.navigateWithFilters({ from: value, to: value, month: '', page: 0 });
   }
 
   protected setMonthFilter(value: string) {
-    this.seededRangeTo.set('');
-    this.monthFilter.set(value);
+    this.navigateWithFilters({
+      from: `${value}-01`,
+      to: lastDayOfMonth(value),
+      month: value,
+      page: 0,
+    });
+  }
+
+  protected onCustomerChange(item: UiLookupItem | null) {
+    this.navigateWithFilters({
+      customerId: item?.id ?? null,
+      customerName: item?.name ?? null,
+      page: 0,
+    });
+  }
+
+  protected onSalespersonChange(item: UiLookupItem | null) {
+    this.navigateWithFilters({
+      salespersonId: item?.id ?? null,
+      salespersonName: item?.name ?? null,
+      page: 0,
+    });
+  }
+
+  protected onStatusChange(value: string) {
+    this.navigateWithFilters({ statusCode: value, page: 0 });
+  }
+
+  protected onOriginChange(value: string) {
+    this.navigateWithFilters({ originCode: value, page: 0 });
   }
 
   protected countText(): string {
@@ -504,24 +612,27 @@ export class OrderListPage {
   }
 
   protected clearFilters() {
-    this.customerFilter.set(null);
-    this.salespersonFilter.set(null);
-    this.statusFilter.set('');
-    this.originFilter.set('');
-    this.monthFilter.set('');
-    this.seededRangeTo.set('');
-    this.dayFilter.set(todayIso());
+    this.navigateWithFilters({
+      customerId: null,
+      customerName: null,
+      salespersonId: null,
+      salespersonName: null,
+      statusCode: '',
+      originCode: '',
+      from: todayIso(),
+      to: todayIso(),
+      month: '',
+      page: 0,
+    });
   }
 
   protected prevPage() {
     if (this.page() === 0) return;
-    this.page.update((p) => p - 1);
-    this.load();
+    this.navigateWithFilters({ page: this.page() - 1 });
   }
   protected nextPage() {
     if (this.page() + 1 >= this.totalPages()) return;
-    this.page.update((p) => p + 1);
-    this.load();
+    this.navigateWithFilters({ page: this.page() + 1 });
   }
 
   private dateRange(): { from: string; to: string } {
@@ -558,5 +669,65 @@ export class OrderListPage {
           this.error.set(true);
         },
       });
+  }
+
+  private currentDateParams(): { from: string; to: string; month: string } {
+    const seededTo = this.seededRangeTo();
+    if (seededTo) return { from: this.dayFilter(), to: seededTo, month: '' };
+    const month = this.monthFilter();
+    if (month) return { from: `${month}-01`, to: lastDayOfMonth(month), month };
+    const day = this.dayFilter();
+    return { from: day, to: day, month: '' };
+  }
+
+  /**
+   * Única puerta de escritura a la URL — doc 70, sección 2.3, punto 2.
+   * `replaceUrl: true` porque cada letra/clic de filtro no debe llenar el
+   * historial: Atrás desde el detalle vuelve con el último filtro, no
+   * recorre cada cambio intermedio.
+   */
+  private navigateWithFilters(override: FilterOverride) {
+    const current = this.currentDateParams();
+    const next = {
+      customerId:
+        override.customerId !== undefined
+          ? override.customerId
+          : (this.customerFilter()?.id ?? null),
+      customerName:
+        override.customerName !== undefined
+          ? override.customerName
+          : (this.customerFilter()?.name ?? null),
+      salespersonId:
+        override.salespersonId !== undefined
+          ? override.salespersonId
+          : (this.salespersonFilter()?.id ?? null),
+      salespersonName:
+        override.salespersonName !== undefined
+          ? override.salespersonName
+          : (this.salespersonFilter()?.name ?? null),
+      statusCode: override.statusCode ?? this.statusFilter(),
+      originCode: override.originCode ?? this.originFilter(),
+      from: override.from ?? current.from,
+      to: override.to ?? current.to,
+      month: override.month ?? current.month,
+      page: override.page ?? this.page(),
+      size: override.size ?? this.size(),
+    };
+    this.router.navigate([], {
+      queryParams: {
+        customerId: next.customerId || null,
+        customerName: next.customerName || null,
+        salespersonId: next.salespersonId || null,
+        salespersonName: next.salespersonName || null,
+        statusCode: next.statusCode || null,
+        originCode: next.originCode || null,
+        from: next.from || null,
+        to: next.to && next.to !== next.from ? next.to : null,
+        mes: next.month || null,
+        page: next.page || null,
+        size: next.size !== 20 ? next.size : null,
+      },
+      replaceUrl: true,
+    });
   }
 }

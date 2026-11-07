@@ -56,6 +56,8 @@ export interface CustomerDetail {
   customerId: number;
   code: string;
   businessName: string;
+  /** NUEVO (doc 70) — preselecciona el select del modal "Editar datos". */
+  documentTypeId: number | null;
   documentTypeName: string | null;
   documentNumber: string;
   customerTypeId: number | null;
@@ -112,4 +114,31 @@ export interface AdminCustomerFilters {
 
 export interface RateCustomerCommand {
   rating: number; // obligatorio, 1-5
+}
+
+/** GET /admin/customers/edit-options (doc 70, sección 1.1) — catálogos del modal "Editar datos". */
+export interface EditCustomerDocumentTypeOption {
+  documentTypeId: number;
+  code: string;
+  name: string;
+  validationPattern: string | null;
+}
+
+export interface EditCustomerCustomerTypeOption {
+  customerTypeId: number;
+  code: string;
+  name: string;
+}
+
+export interface CustomerEditOptions {
+  documentTypes: EditCustomerDocumentTypeOption[];
+  customerTypes: EditCustomerCustomerTypeOption[];
+}
+
+/** PATCH /admin/customers/{id} (doc 70, sección 1.1) — solo se envían los campos que cambiaron. */
+export interface EditCustomerCommand {
+  businessName?: string;
+  documentTypeId?: number;
+  documentNumber?: string;
+  customerTypeId?: number;
 }
