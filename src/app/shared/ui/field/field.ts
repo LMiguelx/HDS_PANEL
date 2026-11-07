@@ -160,6 +160,14 @@ let nextId = 0;
       .ui-input:read-only {
         background: transparent;
       }
+      /* El navegador dibuja flechas arriba/abajo pegadas al borde de los
+         campos de fecha/hora al enfocarlos — no combinan con el resto del
+         diseño del sistema, así que se ocultan (el selector de calendario
+         sigue mostrándose). */
+      input[type='date']::-webkit-inner-spin-button,
+      input[type='time']::-webkit-inner-spin-button {
+        display: none;
+      }
       /* El popup nativo del <select> no siempre hereda color-scheme del
          documento (varía por navegador); sin esto el texto queda claro
          sobre fondo claro del sistema al usar el tema oscuro de la app. */

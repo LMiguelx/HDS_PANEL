@@ -203,7 +203,9 @@ const DEFAULT_STATUS_PRIORITY: Record<string, number> = {
                   }
                 </td>
                 <td>
-                  <span class="promo-channel-pill">{{ p.salesChannelName }}</span>
+                  <span class="promo-channel-pill">{{
+                    p.salesChannelName || 'Mostrar todos'
+                  }}</span>
                 </td>
                 <td><ui-status [label]="p.statusLabel || ''" /></td>
                 <td class="promo-row-actions">
@@ -557,7 +559,8 @@ export class PromoListPage implements OnInit, OnDestroy {
   protected nameQuery = signal('');
   protected brandId = signal('');
   protected channelId = signal('');
-  protected statusChip = signal('');
+  // Al entrar interesan las vigentes de hoy, no el histórico completo — doc feedback.
+  protected statusChip = signal('Vigente');
   protected sortKey = signal<SortKey>('vigencia');
 
   protected brandOptions = signal<{ value: string; label: string }[]>([
@@ -638,14 +641,21 @@ export class PromoListPage implements OnInit, OnDestroy {
   }
 
   protected hasActiveFilters(): boolean {
-    return !!(this.nameQuery() || this.brandId() || this.channelId() || this.statusChip());
+    // "Vigente" es el filtro por defecto al entrar: no cuenta como filtro activo.
+    const chip = this.statusChip();
+    return !!(
+      this.nameQuery() ||
+      this.brandId() ||
+      this.channelId() ||
+      (chip && chip !== 'Vigente')
+    );
   }
 
   protected clearFilters() {
     this.nameQuery.set('');
     this.brandId.set('');
     this.channelId.set('');
-    this.statusChip.set('');
+    this.statusChip.set('Vigente');
   }
 
   /** No hay fecha de creación en el DTO: `promoId` es autoincremental, así que sirve de referencia. */

@@ -187,8 +187,13 @@ function todayMinus(days: number): string {
       .oi-history-head {
         display: flex;
         align-items: flex-end;
-        justify-content: space-between;
+        justify-content: flex-start;
         gap: 16px;
+        /* La tarjeta ocupa todo el ancho de la grilla (es la única que lo
+           hace); sin este tope el filtro "Desde" quedaba empujado al borde
+           derecho, lejísimos del título "Historial", con un hueco enorme
+           en medio — doc feedback. */
+        max-width: 420px;
       }
       .oi-history-title {
         font-size: var(--fs-label, 11px);

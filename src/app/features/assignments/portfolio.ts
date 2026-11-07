@@ -285,7 +285,7 @@ const MAX_BULK = 200;
             <tr>
               <th class="pf-th-check">
                 <ui-checkbox
-                  label="Seleccionar la página"
+                  label="Seleccionar todos los de esta página"
                   [checked]="pageAllSelected()"
                   [indeterminate]="pageIndeterminate()"
                   (checkedChange)="toggleSelectPage()"
@@ -571,12 +571,16 @@ const MAX_BULK = 200;
         width: 100%;
       }
       .pf-th-check {
-        width: 40px;
+        width: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
       }
       .pf-td-check {
         width: 56px;
         display: flex;
         align-items: center;
+        justify-content: flex-end;
         gap: 6px;
       }
       .pf-row-num {
@@ -586,8 +590,13 @@ const MAX_BULK = 200;
         min-width: 16px;
         text-align: right;
       }
-      /* La fila ya muestra el nombre en la columna Cliente: el texto del
-         checkbox queda solo para lectores de pantalla, no se repite en pantalla. */
+      /* La fila ya muestra el nombre en la columna Cliente, y la cabecera de
+         la tabla ya dice "Cliente": el texto de los checkboxes se repetía
+         en pantalla (partido en dos líneas en la cabecera), así que queda
+         solo para lectores de pantalla. Los recuadros se achican un poco y
+         se alinean al borde derecho de la columna, en vez de estirarse con
+         el alto de toque táctil — se ven rectos y parejos entre filas. */
+      .pf-th-check ::ng-deep .ui-checkbox-label,
       .pf-td-check ::ng-deep .ui-checkbox-label {
         position: absolute;
         width: 1px;
@@ -598,6 +607,16 @@ const MAX_BULK = 200;
         clip: rect(0, 0, 0, 0);
         white-space: nowrap;
         border: 0;
+      }
+      .pf-th-check ::ng-deep .ui-checkbox-row,
+      .pf-td-check ::ng-deep .ui-checkbox-row {
+        min-height: 0;
+        gap: 0;
+      }
+      .pf-th-check ::ng-deep .ui-checkbox-input,
+      .pf-td-check ::ng-deep .ui-checkbox-input {
+        width: 16px;
+        height: 16px;
       }
       .pf-row {
         cursor: pointer;
