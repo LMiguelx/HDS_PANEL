@@ -29,6 +29,15 @@ const SORT_OPTIONS = [
 /** Orden en que aparecen los chips cuando hay filas con ese estado. */
 const STATUS_CHIP_ORDER = ['Vigente', 'Borrador', 'Programada', 'Vencida', 'Apagada'];
 
+/** Con qué filas se arma la vista "Todas": vigentes primero, vencidas al final siempre. */
+const DEFAULT_STATUS_PRIORITY: Record<string, number> = {
+  Vigente: 0,
+  Programada: 1,
+  Borrador: 2,
+  Apagada: 3,
+  Vencida: 4,
+};
+
 @Component({
   selector: 'app-promo-list',
   imports: [
@@ -639,19 +648,29 @@ export class PromoListPage implements OnInit, OnDestroy {
     this.statusChip.set('');
   }
 
+  /** No hay fecha de creación en el DTO: `promoId` es autoincremental, así que sirve de referencia. */
+  private byMostRecent(a: PromoSummary, b: PromoSummary): number {
+    return (b.promoId ?? 0) - (a.promoId ?? 0);
+  }
+
   private comparator(key: SortKey): (a: PromoSummary, b: PromoSummary) => number {
     if (key === 'name') {
-      return (a, b) => (a.name ?? '').localeCompare(b.name ?? '');
+      return (a, b) => (a.name ?? '').localeCompare(b.name ?? '') || this.byMostRecent(a, b);
     }
     if (key === 'recent') {
-      return (a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? '');
+      return (a, b) => this.byMostRecent(a, b);
     }
-    // Vigencia más próxima: sin fecha de fin al final.
+    // Vigencia más próxima: primero las vigentes/por venir, las vencidas siempre al final,
+    // y dentro de cada grupo, la más reciente primero (nunca una fecha vencida arriba).
     return (a, b) => {
-      if (!a.endDate && !b.endDate) return 0;
+      const priorityA = DEFAULT_STATUS_PRIORITY[a.statusLabel ?? ''] ?? 5;
+      const priorityB = DEFAULT_STATUS_PRIORITY[b.statusLabel ?? ''] ?? 5;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      if (!a.endDate && !b.endDate) return this.byMostRecent(a, b);
       if (!a.endDate) return 1;
       if (!b.endDate) return -1;
-      return a.endDate.localeCompare(b.endDate);
+      const byEndDate = a.endDate.localeCompare(b.endDate);
+      return byEndDate !== 0 ? byEndDate : this.byMostRecent(a, b);
     };
   }
 

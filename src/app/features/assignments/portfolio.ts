@@ -304,6 +304,7 @@ const MAX_BULK = 200;
             @for (row of rows(); track row.customerId) {
               <tr class="pf-row" [class.pf-row-inactive]="!row.active" (click)="openCustomer(row)">
                 <td class="pf-td-check" (click)="$event.stopPropagation()">
+                  <span class="pf-row-num">{{ pageFrom() + $index }}</span>
                   <ui-checkbox
                     [label]="'Seleccionar ' + row.businessName"
                     [checked]="isSelected(row.customerId)"
@@ -569,9 +570,34 @@ const MAX_BULK = 200;
       .pf-table {
         width: 100%;
       }
-      .pf-th-check,
-      .pf-td-check {
+      .pf-th-check {
         width: 40px;
+      }
+      .pf-td-check {
+        width: 56px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pf-row-num {
+        font-size: 11px;
+        color: var(--ink-muted);
+        font-variant-numeric: var(--tnum);
+        min-width: 16px;
+        text-align: right;
+      }
+      /* La fila ya muestra el nombre en la columna Cliente: el texto del
+         checkbox queda solo para lectores de pantalla, no se repite en pantalla. */
+      .pf-td-check ::ng-deep .ui-checkbox-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
       .pf-row {
         cursor: pointer;

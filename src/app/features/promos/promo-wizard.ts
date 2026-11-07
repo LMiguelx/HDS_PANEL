@@ -1,8 +1,8 @@
 ﻿import { Component, computed, effect, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, forkJoin, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { Observable, forkJoin, of, throwError } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiToggle } from '../../shared/ui/toggle/toggle';
@@ -1833,6 +1833,8 @@ export class PromoWizardPage {
   protected savingDraft = signal(false);
   protected activating = signal(false);
   protected saveError = signal('');
+  /** Nombre repetido con otra promoción — se revisa contra el servidor antes de guardar. */
+  protected nameError = signal('');
 
   protected editingId = signal<number | null>(null);
 
@@ -1857,6 +1859,11 @@ export class PromoWizardPage {
           .filter((i) => i.id !== 0)
           .map((i) => ({ value: String(i.id), label: i.name ?? '' })),
       ]);
+    });
+
+    effect(() => {
+      this.name();
+      this.nameError.set('');
     });
 
     effect(() => {
@@ -2592,8 +2599,11 @@ export class PromoWizardPage {
 
   protected fieldError(field: string): string {
     if (this.step() !== 0) return '';
-    if (field === 'name' && this.errorSteps().includes(0) && !this.name().trim()) {
-      return 'Escribe un nombre para la promoción.';
+    if (field === 'name') {
+      if (this.nameError()) return this.nameError();
+      if (this.errorSteps().includes(0) && !this.name().trim()) {
+        return 'Escribe un nombre para la promoción.';
+      }
     }
     return '';
   }
@@ -3055,6 +3065,10 @@ export class PromoWizardPage {
       if (/ya existe una promoci[oó]n con ese c[oó]digo/i.test(detail) || /code/i.test(detail)) {
         return { message: 'Ya existe una promoción con ese código.', step: 0 };
       }
+      if (/ya existe una promoci[oó]n con (ese|este) nombre/i.test(detail)) {
+        this.nameError.set('Ya existe una promoción con este nombre.');
+        return { message: 'Ya existe una promoción con este nombre.', step: 0 };
+      }
       return { message: detail || 'No se pudo completar la operación. Intenta de nuevo.', step: 2 };
     }
     if (err?.status === 400) {
@@ -3099,14 +3113,38 @@ export class PromoWizardPage {
     return { message: 'No se pudo completar la operación. Intenta de nuevo.', step: this.step() };
   }
 
+  /** Dos promociones no pueden llamarse igual — el backend no lo valida, así que se revisa acá antes de guardar. */
+  private checkNameTaken(excludeId: number | null): Observable<boolean> {
+    const name = this.name().trim().toLowerCase();
+    if (!name) return of(false);
+    return this.promoSvc.list({ name: this.name().trim(), size: 50 }).pipe(
+      map((page) =>
+        (page.content ?? []).some(
+          (p) => p.promoId !== excludeId && (p.name ?? '').trim().toLowerCase() === name,
+        ),
+      ),
+      catchError(() => of(false)), // si la verificación falla, no bloquear el guardado por eso
+    );
+  }
+
   private ensureSaved(): Observable<number> {
     this.savingDraft.set(true);
     this.saveError.set('');
+    this.nameError.set('');
     const id = this.draftId() ?? this.editingId();
-    const obs = id
-      ? this.promoSvc.update(id, this.buildUpdateCommand()).pipe(map((p) => p.promoId!))
-      : this.promoSvc.create(this.buildCreateCommand()).pipe(map((p) => p.promoId!));
-    return obs.pipe(
+    return this.checkNameTaken(id).pipe(
+      switchMap((taken) => {
+        if (taken) {
+          this.savingDraft.set(false);
+          this.nameError.set('Ya existe una promoción con este nombre.');
+          this.errorSteps.update((s) => Array.from(new Set([...s, 0])));
+          this.step.set(0);
+          return throwError(() => new Error('DUPLICATE_NAME'));
+        }
+        return id
+          ? this.promoSvc.update(id, this.buildUpdateCommand()).pipe(map((p) => p.promoId!))
+          : this.promoSvc.create(this.buildCreateCommand()).pipe(map((p) => p.promoId!));
+      }),
       map((savedId) => {
         this.draftId.set(savedId);
         this.savedAt.set(new Date());
@@ -3115,6 +3153,7 @@ export class PromoWizardPage {
       }),
       catchError((err) => {
         this.savingDraft.set(false);
+        if (err instanceof Error && err.message === 'DUPLICATE_NAME') throw err;
         const { message, step } = this.saveErrorMessage(err);
         this.saveError.set(message);
         this.errorSteps.update((s) => Array.from(new Set([...s, step])));
@@ -3133,13 +3172,13 @@ export class PromoWizardPage {
     const id = this.draftId();
     if (id) {
       this.toast.success('Promoción guardada apagada');
-      this.router.navigate(['/promociones', id]);
+      this.router.navigate(['/promociones']);
       return;
     }
     this.ensureSaved().subscribe({
-      next: (savedId) => {
+      next: () => {
         this.toast.success('Promoción guardada apagada');
-        this.router.navigate(['/promociones', savedId]);
+        this.router.navigate(['/promociones']);
       },
     });
   }
@@ -3160,7 +3199,7 @@ export class PromoWizardPage {
               next: () => {
                 this.activating.set(false);
                 this.toast.success('Promoción activada');
-                this.router.navigate(['/promociones', id]);
+                this.router.navigate(['/promociones']);
               },
               error: () => this.activating.set(false),
             });
