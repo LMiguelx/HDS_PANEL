@@ -1,5 +1,5 @@
-import { Component, OnInit, inject, input, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { UiButton } from '../../../../shared/ui/button/button';
 import { UiField } from '../../../../shared/ui/field/field';
 import { UiCheckbox } from '../../../../shared/ui/checkbox/checkbox';
@@ -14,12 +14,14 @@ import {
   BrandProductView,
   BrandReceiptConfigRow,
   EquivalenceView,
+  SeriesView,
 } from '../../domain/goods-receipt.models';
 import { dateTimeText } from '../../../assignments/assignment-format';
 import { AddEquivalenceDialog } from '../../dialogs/add-equivalence.dialog';
 import { ChangeEquivalenceDialog } from '../../dialogs/change-equivalence.dialog';
+import { SeriesDialog, SeriesDialogData } from '../../dialogs/series.dialog';
 
-type Tab = 'perfil' | 'equivalencias';
+type Tab = 'perfil' | 'equivalencias' | 'series';
 
 /**
  * Marca → Perfil · Equivalencias — doc 58, secciones 8.2 y 8.3. Pestañas por
@@ -28,7 +30,7 @@ type Tab = 'perfil' | 'equivalencias';
  */
 @Component({
   selector: 'app-brand-config',
-  imports: [UiButton, UiField, UiCheckbox, UiEmpty, UiInfoTip],
+  imports: [RouterLink, UiButton, UiField, UiCheckbox, UiEmpty, UiInfoTip],
   template: `
     <section class="bc-page">
       <button type="button" class="bc-back" (click)="goBack()">← Configuración por marca</button>
@@ -63,6 +65,14 @@ type Tab = 'perfil' | 'equivalencias';
             (click)="setTab('equivalencias')"
           >
             Equivalencias ({{ row()!.activeEquivalences }})
+          </button>
+          <button
+            type="button"
+            class="bc-tab"
+            [class.active]="tab() === 'series'"
+            (click)="setTab('series')"
+          >
+            Series ({{ activeSeriesCount() }})
           </button>
         </nav>
 
@@ -162,7 +172,7 @@ type Tab = 'perfil' | 'equivalencias';
               }
             </div>
           </div>
-        } @else {
+        } @else if (tab() === 'equivalencias') {
           <div class="bc-equiv">
             <h2>Equivalencias</h2>
             <p class="bc-sub">
@@ -223,6 +233,98 @@ type Tab = 'perfil' | 'equivalencias';
                             Cambiar producto
                           </button>
                           <button uiButton variant="ghost" size="sm" (click)="deactivate(e)">
+                            Desactivar
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </div>
+        } @else {
+          <div class="bc-series">
+            <h2>Series de documento</h2>
+            <p class="bc-sub">
+              Las series con las que esta marca emite sus documentos. Ayudan a leer bien el número y
+              a reconocer una factura repetida. Se agregan solas al confirmar entregas; aquí se
+              corrigen.
+            </p>
+
+            <div class="bc-series-toolbar">
+              <ui-checkbox
+                label="Ver desactivadas"
+                [(checked)]="viewDeactivatedSeries"
+                (checkedChange)="loadSeries()"
+              />
+              @if (canConfig()) {
+                <button uiButton variant="secondary" (click)="openAddSeries()">
+                  + Agregar serie
+                </button>
+              }
+            </div>
+
+            @if (loadingSeries()) {
+              <div class="bc-skeleton" role="status" aria-label="Cargando"></div>
+            } @else if (series().length === 0) {
+              <ui-empty
+                title="Esta marca todavía no tiene series."
+                body="Se agregarán solas al confirmar su primera entrega, o puede registrar una ahora para que la primera lectura acierte."
+                actionLabel="Agregar serie"
+                (action)="openAddSeries()"
+              />
+            } @else {
+              <table class="ui-table-grid bc-series-table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Serie</th>
+                    <th>Origen</th>
+                    <th>Registrada por</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (s of series(); track s.seriesId) {
+                    <tr [class.bc-row-inactive]="!s.active">
+                      <td>{{ s.documentTypeName }}</td>
+                      <td class="bc-series-code">{{ s.series }}</td>
+                      <td class="bc-muted">
+                        @if (s.origin === 'MANUAL') {
+                          Registrada
+                        } @else {
+                          Aprendida
+                          @if (s.learnedReceiptId) {
+                            ·
+                            <a
+                              class="bc-series-link"
+                              [routerLink]="['/recepcion-mercaderia/entregas', s.learnedReceiptId]"
+                              >{{ s.learnedDocumentNumber || 'entrega ' + s.learnedReceiptId }} ↗</a
+                            >
+                          }
+                        }
+                      </td>
+                      <td class="bc-muted">{{ s.createdByName }} · {{ shortDate(s.createdAt) }}</td>
+                      <td class="bc-equiv-actions">
+                        @if (!s.active) {
+                          @if (canConfig()) {
+                            <button
+                              uiButton
+                              variant="ghost"
+                              size="sm"
+                              (click)="reactivateSeries(s)"
+                            >
+                              Reactivar
+                            </button>
+                          } @else {
+                            <span class="bc-badge-inactive">Desactivada</span>
+                          }
+                        } @else if (canConfig()) {
+                          <button uiButton variant="ghost" size="sm" (click)="openChangeSeries(s)">
+                            Corregir
+                          </button>
+                          <button uiButton variant="ghost" size="sm" (click)="deactivateSeries(s)">
                             Desactivar
                           </button>
                         }
@@ -406,12 +508,35 @@ type Tab = 'perfil' | 'equivalencias';
         letter-spacing: var(--ls-label);
         color: var(--st-closed);
       }
+      .bc-series-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .bc-series-table {
+        width: 100%;
+      }
+      .bc-series-code {
+        font-weight: 800;
+        font-variant-numeric: var(--tnum);
+      }
+      .bc-series-link {
+        color: var(--accent-ink);
+        text-decoration: none;
+      }
+      .bc-series-link:hover {
+        text-decoration: underline;
+      }
 
       @media (max-width: 767px) {
         .bc-page {
           padding: var(--sp-4);
         }
-        .bc-equiv-table {
+        .bc-equiv-table,
+        .bc-series-table {
           display: block;
           overflow-x: auto;
         }
@@ -454,6 +579,11 @@ export class BrandConfigPage implements OnInit {
   protected viewDeactivated = signal(false);
   protected brandProducts = signal<BrandProductView[]>([]);
 
+  protected series = signal<SeriesView[]>([]);
+  protected loadingSeries = signal(false);
+  protected viewDeactivatedSeries = signal(false);
+  protected activeSeriesCount = computed(() => this.series().filter((s) => s.active).length);
+
   protected filteredEquivalences(): EquivalenceView[] {
     const q = this.equivSearch().trim().toLowerCase();
     if (!q) return this.equivalences();
@@ -492,6 +622,9 @@ export class BrandConfigPage implements OnInit {
           this.usesProductCodes.set(r.usesProductCodes ?? false);
         }
         if (this.tab() === 'equivalencias') this.loadEquivalences();
+        // Se carga siempre (no solo al entrar a la pestaña) para que el
+        // contador "Series (N)" sea correcto desde el primer render.
+        this.loadSeries();
       },
       error: () => {
         this.loading.set(false);
@@ -568,6 +701,77 @@ export class BrandConfigPage implements OnInit {
         this.loadingEquiv.set(false);
       },
       error: () => this.loadingEquiv.set(false),
+    });
+  }
+
+  protected loadSeries() {
+    this.loadingSeries.set(true);
+    this.api.series(Number(this.brandId()), !this.viewDeactivatedSeries()).subscribe({
+      next: (list) => {
+        this.series.set(list);
+        this.loadingSeries.set(false);
+      },
+      error: () => this.loadingSeries.set(false),
+    });
+  }
+
+  protected openAddSeries() {
+    this.dialog
+      .open<SeriesDialog, SeriesDialogData, SeriesView | null>(SeriesDialog, {
+        data: { brandId: Number(this.brandId()), mode: 'add' },
+        width: '420px',
+      })
+      .afterClosed()
+      .subscribe((result) => {
+        if (result) {
+          this.toast.success('Serie agregada');
+          this.loadSeries();
+        }
+      });
+  }
+
+  protected openChangeSeries(s: SeriesView) {
+    this.dialog
+      .open<SeriesDialog, SeriesDialogData, SeriesView | null>(SeriesDialog, {
+        data: { brandId: Number(this.brandId()), mode: 'change', series: s },
+        width: '420px',
+      })
+      .afterClosed()
+      .subscribe((result) => {
+        if (result) {
+          this.toast.success('Serie corregida');
+          this.loadSeries();
+        }
+      });
+  }
+
+  protected deactivateSeries(s: SeriesView) {
+    this.dialog
+      .confirm({
+        title: `¿Desactivar la serie ${s.series}?`,
+        message: 'Dejará de usarse para leer y corregir números de esta marca.',
+        confirmLabel: 'Desactivar',
+        destructive: true,
+      })
+      .subscribe((ok) => {
+        if (!ok) return;
+        this.api.deactivateSeries(s.seriesId).subscribe({
+          next: () => {
+            this.toast.success('Serie desactivada');
+            this.loadSeries();
+          },
+          error: () => this.toast.error('No pudimos desactivar la serie.'),
+        });
+      });
+  }
+
+  protected reactivateSeries(s: SeriesView) {
+    this.api.activateSeries(s.seriesId).subscribe({
+      next: () => {
+        this.toast.success('Serie reactivada');
+        this.loadSeries();
+      },
+      error: () => this.toast.error('No pudimos reactivar la serie.'),
     });
   }
 

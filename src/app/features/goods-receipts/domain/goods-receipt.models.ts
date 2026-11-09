@@ -204,6 +204,30 @@ export interface UpsertProfileCommand {
   usesProductCodes: boolean;
 }
 
+/** Serie de documento de la marca — doc 72, sección 2.2. */
+export interface SeriesView {
+  seriesId: number; // NO mostrar
+  documentTypeCode: string; // INVOICE | DELIVERY_NOTE | CREDIT_NOTE | ENTRY_NOTE
+  documentTypeName: string; // mostrar: Factura, Guía de remisión, Nota de crédito, Nota de ingreso
+  series: string; // FO01
+  origin: 'MANUAL' | 'LEARNED';
+  learnedReceiptId: number | null; // la entrega de la que se aprendió
+  learnedDocumentNumber: string | null; // su número, por ejemplo FO01-00116580
+  active: boolean;
+  createdByName: string;
+  createdAt: string; // ISO
+  updatedAt: string | null;
+}
+
+export interface CreateSeriesCommand {
+  documentTypeCode: string; // obligatorio
+  series: string; // obligatorio: 4 letras o números (se guarda en mayúsculas)
+}
+
+export interface ChangeSeriesCommand {
+  series: string;
+}
+
 /** Equivalencia proveedor → producto — doc 58, sección 8.3. */
 export interface EquivalenceView {
   equivalenceId: number; // NO mostrar
