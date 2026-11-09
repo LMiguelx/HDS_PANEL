@@ -252,7 +252,14 @@
     <div class="grd-lines-head" id="grd-field-lines">
       <h2>Líneas ({{ lines().length }})</h2>
       @if (canEdit()) {
-        <button uiButton variant="ghost" size="sm" (click)="addLine()">+ Agregar línea</button>
+        <div class="grd-lines-head-actions">
+          @if (pendingSuggestionsCount() > 0) {
+            <button uiButton variant="secondary" size="sm" (click)="acceptAllSuggestions()">
+              Aceptar sugerencias ({{ pendingSuggestionsCount() }})
+            </button>
+          }
+          <button uiButton variant="ghost" size="sm" (click)="addLine()">+ Agregar línea</button>
+        </div>
       }
     </div>
 
@@ -274,7 +281,18 @@
                 [uiInfoTip]="'El valor unitario del documento. Se compara con el costo de compra que registró el ERP.'"
               ></span>
             </th>
+            <th>Descuento</th>
             <th>Subtotal</th>
+            <th>
+              Neto
+              <span
+                [uiInfoTip]="
+                  'Costo real por ' +
+                  (unitType() === 'PACKAGE' ? 'caja' : 'unidad') +
+                  ', después del descuento (subtotal ÷ cantidad).'
+                "
+              ></span>
+            </th>
             <th>Bonif.</th>
             <th>Origen</th>
             @if (canEdit()) {
@@ -314,6 +332,18 @@
                 }
               </td>
               <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'productCode') === 'BLOCKING'">
+                @if (lineProductState(l) === 'suggested') {
+                  <div class="grd-suggest-row">
+                    <span class="grd-suggest-badge" [uiInfoTip]="confidenceTip(l)">Sugerido</span>
+                    @if (canEdit()) {
+                      <button type="button" class="grd-accept-link" (click)="acceptSuggestion(l)">
+                        ✓ Aceptar
+                      </button>
+                    }
+                  </div>
+                } @else if (lineProductState(l) === 'accepted') {
+                  <span class="grd-accepted-badge">Aceptado</span>
+                }
                 @if (canEdit()) {
                   <div class="grd-cell-field">
                     <ui-typeahead
@@ -329,6 +359,9 @@
                   {{ l.productCode }} {{ l.productName }}
                 } @else {
                   <span class="grd-no-product">Elegir producto…</span>
+                }
+                @if (suggestionChangedText(l)) {
+                  <div class="grd-muted grd-suggest-changed">{{ suggestionChangedText(l) }}</div>
                 }
               </td>
               <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'quantity') === 'BLOCKING'">
@@ -366,6 +399,21 @@
                 }
                 <span [uiInfoTip]="purchaseCostTooltip(l)"></span>
               </td>
+              <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'discountAmount') === 'BLOCKING'">
+                @if (canEdit()) {
+                  <div class="grd-cell-field grd-cell-field-num">
+                    <ui-field
+                      label="Descuento"
+                      type="number"
+                      placeholder="0"
+                      [value]="l.discountAmount"
+                      (valueChange)="setLineNumberField(l, 'discountAmount', $event)"
+                    />
+                  </div>
+                } @else {
+                  {{ numVal(l.discountAmount) ? formatSoles(numVal(l.discountAmount)) : '—' }}
+                }
+              </td>
               <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'subtotal') === 'BLOCKING'">
                 @if (canEdit()) {
                   <div class="grd-cell-field grd-cell-field-num">
@@ -380,6 +428,7 @@
                   {{ l.subtotal ? formatSoles(numVal(l.subtotal)) : '—' }}
                 }
               </td>
+              <td class="grd-muted grd-net-cell">{{ unitCostText(l.netUnitCost) }}</td>
               <td class="grd-bonif-cell">
                 @if (canEdit()) {
                   <input
@@ -414,7 +463,7 @@
             </tr>
             @if (issuesForLine(l.lineNumber).length > 0) {
               <tr class="grd-issue-sub-row">
-                <td [attr.colspan]="canEdit() ? 9 : 8">
+                <td [attr.colspan]="canEdit() ? 11 : 10">
                   @for (issue of issuesForLine(l.lineNumber); track $index) {
                     <div [style.color]="'var(' + toneVar(issue.severity) + ')'">
                       ■ {{ issue.message }}

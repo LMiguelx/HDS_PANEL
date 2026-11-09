@@ -40,6 +40,11 @@ type Tab = 'perfil' | 'equivalencias';
       } @else if (row()) {
         <div class="bc-title-row">
           <h1>{{ row()!.brandName }} · {{ row()!.brandCode }}</h1>
+          @if (row()!.configured) {
+            <span class="bc-status-badge bc-status-configured">● Configurada</span>
+          } @else {
+            <span class="bc-status-badge bc-status-unconfigured">● Sin configurar</span>
+          }
         </div>
 
         <nav class="bc-tabs">
@@ -107,17 +112,30 @@ type Tab = 'perfil' | 'equivalencias';
                 Paquetes
               </label>
             </div>
+            <p class="bc-hint">
+              Paquetes si la cantidad es por caja (unidad de medida CJ, PAQ; descripción con 12/1,
+              18/1…).
+            </p>
 
-            <ui-checkbox
-              label="Precios · incluyen IGV"
-              [(checked)]="pricesIncludeTax"
-              [disabled]="!canConfig()"
-            />
-            <ui-checkbox
-              label="Códigos de producto · la marca imprime el código en cada línea"
-              [(checked)]="usesProductCodes"
-              [disabled]="!canConfig()"
-            />
+            <div>
+              <ui-checkbox
+                label="Precios · incluyen IGV"
+                [(checked)]="pricesIncludeTax"
+                [disabled]="!canConfig()"
+              />
+              <p class="bc-hint">Si el valor unitario impreso ya trae IGV.</p>
+            </div>
+            <div>
+              <ui-checkbox
+                label="Códigos de producto · la marca imprime el código en cada línea"
+                [(checked)]="usesProductCodes"
+                [disabled]="!canConfig()"
+              />
+              <p class="bc-hint">
+                Solo si la factura imprime un código por línea. Yichang, por ejemplo, no: trae solo
+                descripciones.
+              </p>
+            </div>
 
             @if (profileError()) {
               <div class="bc-error">{{ profileError() }}</div>
@@ -139,7 +157,7 @@ type Tab = 'perfil' | 'equivalencias';
                   [loading]="savingProfile()"
                   (click)="saveProfile()"
                 >
-                  Guardar
+                  {{ row()!.configured ? 'Actualizar perfil' : 'Guardar perfil' }}
                 </button>
               }
             </div>
@@ -250,6 +268,25 @@ type Tab = 'perfil' | 'equivalencias';
         margin: 0;
         color: var(--ink);
       }
+      .bc-title-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .bc-status-badge {
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: var(--ls-label);
+        white-space: nowrap;
+      }
+      .bc-status-configured {
+        color: var(--st-vigente);
+      }
+      .bc-status-unconfigured {
+        color: var(--st-closed);
+      }
       h2 {
         font: var(--fw-h2) var(--fs-h2) / var(--lh-h2) var(--font-sans);
         margin: 0 0 4px;
@@ -317,6 +354,11 @@ type Tab = 'perfil' | 'equivalencias';
       .bc-error {
         color: var(--st-mismatch);
         font-size: 13px;
+      }
+      .bc-hint {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: var(--ink-muted);
       }
       .bc-profile-footer {
         display: flex;

@@ -87,6 +87,9 @@ export interface ReceiptDetail {
   canConfirm: boolean; // true = en revisión y sin observaciones bloqueantes
 }
 
+/** De dónde salió el producto de la línea — doc 71, sección 1.1. */
+export type MatchSource = 'CODE' | 'OWN_CODE' | 'NAME' | 'SUGGESTED' | 'ACCEPTED' | 'MANUAL';
+
 export interface ReceiptLineView {
   lineNumber: number; // mostrar como "#"; GUARDAR para enviarlo al editar
   productCode: string | null; // null = sin emparejar
@@ -103,6 +106,13 @@ export interface ReceiptLineView {
   edited: boolean; // sección 4.5
   purchaseUnitCost: number | null; // costo de compra del ERP, sin IGV (referencia)
   purchasePackageCost: number | null; // costo de compra por paquete, sin IGV (referencia)
+  // — doc 71, sección 1.1 —
+  discountAmount: number; // 0 si la fila no tiene descuento
+  netUnitCost: number | null; // subtotal / cantidad: costo real de la unidad de compra
+  matchSource: MatchSource | null; // de dónde salió el producto; null = sin producto
+  suggestedProductCode: string | null; // lo que sugirió la lectura (se conserva aunque se cambie)
+  suggestedProductName: string | null;
+  suggestionConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
 }
 
 export interface ReceiptIssueView {
@@ -134,8 +144,10 @@ export interface ReceiptLineInput {
   supplierDescription: string | null;
   quantity: number | null;
   unitCost: number | null;
+  discountAmount: number | null; // doc 71, sección 1.2. null = 0. No negativo. Siempre se reenvía.
   subtotal: number | null;
   bonus: boolean;
+  suggestionAccepted: boolean; // doc 71, sección 1.2. true = acepta el producto sugerido de esta línea
 }
 
 /** Perfil de recepción de la marca — doc 58, sección 8.2. */

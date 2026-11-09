@@ -94,6 +94,7 @@ export type IssueField =
   | 'productCode'
   | 'quantity'
   | 'unitCost'
+  | 'discountAmount'
   | 'subtotal'
   | 'totals';
 
@@ -108,8 +109,12 @@ const ISSUE_FIELD: Record<string, IssueField> = {
   PRODUCT_NOT_MATCHED: 'productCode',
   PRODUCT_NOT_IN_BRAND: 'productCode',
   PRODUCT_DUPLICATED: 'productCode',
+  // doc 71, sección 1.3 — sugerencia de producto sin revisar.
+  SUGGESTION_NOT_ACCEPTED: 'productCode',
   QUANTITY_MISSING: 'quantity',
   UNIT_COST_MISSING: 'unitCost',
+  // doc 71, sección 1.3 — el descuento supera cantidad × costo unitario.
+  DISCOUNT_TOO_HIGH: 'discountAmount',
   SUBTOTAL_MISSING: 'subtotal',
   SUBTOTAL_MISMATCH: 'subtotal',
   BONUS_WITH_AMOUNT: 'subtotal',
@@ -142,4 +147,16 @@ export function quantityInUnitsText(value: number | null | undefined): string {
   if (value == null) return '';
   const n = Math.round(value * 1000) / 1000;
   return `= ${n} und.`;
+}
+
+// ─────────────────────────── Producto sugerido — doc 71, sección 1.1/2.2 ───────────────────────────
+
+const CONFIDENCE_LABEL: Record<'HIGH' | 'MEDIUM' | 'LOW', string> = {
+  HIGH: 'confianza alta',
+  MEDIUM: 'confianza media',
+  LOW: 'confianza baja',
+};
+
+export function confidenceLabel(confidence: 'HIGH' | 'MEDIUM' | 'LOW' | null | undefined): string {
+  return confidence ? CONFIDENCE_LABEL[confidence] : '';
 }

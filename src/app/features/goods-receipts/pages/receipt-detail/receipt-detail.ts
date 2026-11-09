@@ -16,6 +16,7 @@ import { CatalogLookupService } from '../../../catalog/catalog-lookup';
 import {
   BrandProductView,
   DocumentTypeCode,
+  MatchSource,
   ReceiptDetail,
   ReceiptIssueView,
   ReceiptLineInput,
@@ -30,6 +31,7 @@ import {
   SEVERITY_TONE,
   STATUS_TONE,
   UNIT_TYPE_OPTIONS,
+  confidenceLabel,
   issueField,
   lineOrigin,
   quantityInUnitsText,
@@ -50,12 +52,21 @@ interface LineDraft {
   supplierDescription: string;
   quantity: string;
   unitCost: string;
+  discountAmount: string;
   subtotal: string;
   bonus: boolean;
   aiRead: boolean;
   edited: boolean;
   purchaseUnitCost: number | null;
   purchasePackageCost: number | null;
+  // — doc 71, sección 1.1 —
+  netUnitCost: number | null;
+  matchSource: MatchSource | null;
+  suggestedProductCode: string | null;
+  suggestedProductName: string | null;
+  suggestionConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  /** Local: el usuario presionó "Aceptar" en esta sesión de edición, antes de guardar. */
+  suggestionAccepted: boolean;
 }
 
 function toDraft(l: ReceiptDetail['lines'][number]): LineDraft {
@@ -69,12 +80,19 @@ function toDraft(l: ReceiptDetail['lines'][number]): LineDraft {
     supplierDescription: l.supplierDescription ?? '',
     quantity: l.quantity != null ? String(l.quantity) : '',
     unitCost: l.unitCost != null ? String(l.unitCost) : '',
+    discountAmount: l.discountAmount ? String(l.discountAmount) : '',
     subtotal: l.subtotal != null ? String(l.subtotal) : '',
     bonus: l.bonus,
     aiRead: l.aiRead,
     edited: l.edited,
     purchaseUnitCost: l.purchaseUnitCost,
     purchasePackageCost: l.purchasePackageCost,
+    netUnitCost: l.netUnitCost,
+    matchSource: l.matchSource,
+    suggestedProductCode: l.suggestedProductCode,
+    suggestedProductName: l.suggestedProductName,
+    suggestionConfidence: l.suggestionConfidence,
+    suggestionAccepted: l.matchSource === 'ACCEPTED',
   };
 }
 
@@ -89,12 +107,19 @@ function emptyDraft(): LineDraft {
     supplierDescription: '',
     quantity: '',
     unitCost: '',
+    discountAmount: '',
     subtotal: '',
     bonus: false,
     aiRead: false,
     edited: false,
     purchaseUnitCost: null,
     purchasePackageCost: null,
+    netUnitCost: null,
+    matchSource: null,
+    suggestedProductCode: null,
+    suggestedProductName: null,
+    suggestionConfidence: null,
+    suggestionAccepted: false,
   };
 }
 
@@ -113,14 +138,7 @@ function numOrNull(raw: string): number | null {
  */
 @Component({
   selector: 'app-receipt-detail',
-  imports: [
-    UiButton,
-    UiField,
-    UiCheckbox,
-    UiTypeahead,
-    UiEmpty,
-    UiInfoTip,
-  ],
+  imports: [UiButton, UiField, UiCheckbox, UiTypeahead, UiEmpty, UiInfoTip],
   templateUrl: './receipt-detail.html',
   styleUrl: './receipt-detail.scss',
 })
@@ -268,7 +286,8 @@ export class ReceiptDetailPage {
     this.api.brandContext(brandId).subscribe({
       next: (ctx) => this.brandProducts.set(ctx.products),
       error: (err) => {
-        const detalle = err?.error?.detail ?? 'No se pudo cargar el catálogo de productos de la marca.';
+        const detalle =
+          err?.error?.detail ?? 'No se pudo cargar el catálogo de productos de la marca.';
         this.contextError.set(detalle);
       },
     });
@@ -343,7 +362,11 @@ export class ReceiptDetailPage {
     this.markDirty();
   }
 
-  protected setLineNumberField(l: LineDraft, field: 'quantity' | 'unitCost' | 'subtotal', v: string) {
+  protected setLineNumberField(
+    l: LineDraft,
+    field: 'quantity' | 'unitCost' | 'discountAmount' | 'subtotal',
+    v: string,
+  ) {
     l[field] = v;
     this.lines.update((list) => [...list]);
     this.markDirty();
@@ -375,6 +398,65 @@ export class ReceiptDetailPage {
   protected removeLine(l: LineDraft) {
     this.lines.update((list) => list.filter((x) => x !== l));
     this.markDirty();
+  }
+
+  // — Producto sugerido — doc 71, sección 1.1/3 —
+
+  /**
+   * Estado efectivo para pintar la insignia: si cambió el producto después
+   * de una sugerencia, ya no cuenta como "aceptada" aunque el flag local
+   * siga en true (el backend lo trataría como Manual de todos modos).
+   */
+  protected lineProductState(l: LineDraft): 'suggested' | 'accepted' | 'none' {
+    if (l.matchSource === 'ACCEPTED') return 'accepted';
+    if (l.matchSource === 'SUGGESTED') {
+      if (l.suggestionAccepted && l.productCode === l.suggestedProductCode) return 'accepted';
+      return 'suggested';
+    }
+    return 'none';
+  }
+
+  protected confidenceTip(l: LineDraft): string {
+    return l.suggestionConfidence
+      ? `Sugerido por la lectura · ${confidenceLabel(l.suggestionConfidence)}`
+      : '';
+  }
+
+  /** Se cambió el producto sugerido por otro — se muestra aunque ya no esté en SUGGESTED/ACCEPTED. */
+  protected suggestionChangedText(l: LineDraft): string {
+    if (!l.suggestedProductCode || l.suggestedProductCode === l.productCode) return '';
+    return `La lectura sugirió: ${l.suggestedProductName}`;
+  }
+
+  protected pendingSuggestionsCount = computed(
+    () => this.lines().filter((l) => this.lineProductState(l) === 'suggested').length,
+  );
+
+  protected acceptSuggestion(l: LineDraft) {
+    l.suggestionAccepted = true;
+    this.lines.update((list) => [...list]);
+    this.markDirty();
+  }
+
+  protected acceptAllSuggestions() {
+    const count = this.pendingSuggestionsCount();
+    if (count === 0) return;
+    this.dialog
+      .confirm({
+        title: `¿Aceptar las ${count} sugerencias?`,
+        message:
+          'Revise que cada producto corresponda a la línea de la factura. Las de confianza baja conviene revisarlas una por una.',
+        confirmLabel: 'Aceptar todas',
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.lines.update((list) =>
+          list.map((l) =>
+            this.lineProductState(l) === 'suggested' ? { ...l, suggestionAccepted: true } : l,
+          ),
+        );
+        this.markDirty();
+      });
   }
 
   // — Observaciones —
@@ -411,7 +493,10 @@ export class ReceiptDetailPage {
   }
 
   protected focusIssue(issue: ReceiptIssueView) {
-    const id = issue.lineNumber != null ? `grd-line-${issue.lineNumber}` : `grd-field-${issueField(issue.code)}`;
+    const id =
+      issue.lineNumber != null
+        ? `grd-line-${issue.lineNumber}`
+        : `grd-field-${issueField(issue.code)}`;
     const el = document.getElementById(id);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
@@ -427,8 +512,10 @@ export class ReceiptDetailPage {
       supplierDescription: l.supplierDescription || null,
       quantity: numOrNull(l.quantity),
       unitCost: numOrNull(l.unitCost),
+      discountAmount: numOrNull(l.discountAmount),
       subtotal: numOrNull(l.subtotal),
       bonus: l.bonus,
+      suggestionAccepted: l.suggestionAccepted,
     }));
     return {
       expectedUpdatedAt: d.updatedAt,
@@ -550,7 +637,9 @@ export class ReceiptDetailPage {
           this.load();
           return;
         }
-        this.toast.error(err?.error?.detail || 'No se pudo completar la operación. Inténtalo de nuevo.');
+        this.toast.error(
+          err?.error?.detail || 'No se pudo completar la operación. Inténtalo de nuevo.',
+        );
       },
     });
   }
@@ -577,7 +666,9 @@ export class ReceiptDetailPage {
           },
           error: (err) => {
             this.cancelling.set(false);
-            this.toast.error(err?.error?.detail || 'No se pudo completar la operación. Inténtalo de nuevo.');
+            this.toast.error(
+              err?.error?.detail || 'No se pudo completar la operación. Inténtalo de nuevo.',
+            );
           },
         });
       });

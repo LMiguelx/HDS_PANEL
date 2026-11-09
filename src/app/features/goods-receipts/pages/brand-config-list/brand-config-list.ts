@@ -20,10 +20,16 @@ import { dateTimeText } from '../../../assignments/assignment-format';
   template: `
     <section class="bcl-page">
       <div class="bcl-head">
-        <h1>Recepción de mercadería · Configuración por marca</h1>
-        <p class="bcl-sub">
-          Cada marca necesita su perfil para que almacén pueda leer sus documentos por foto.
-        </p>
+        <div>
+          <h1>Recepción de mercadería · Configuración por marca</h1>
+          <p class="bcl-sub">
+            Cada marca necesita su perfil para que almacén pueda leer sus documentos por foto.
+          </p>
+        </div>
+        <button uiButton variant="secondary" size="sm" [loading]="loading()" (click)="load()">
+          <span class="material-icons" aria-hidden="true">refresh</span>
+          Actualizar
+        </button>
       </div>
 
       @if (loading()) {
@@ -127,6 +133,13 @@ import { dateTimeText } from '../../../assignments/assignment-format';
         width: 100%;
         box-sizing: border-box;
         padding: var(--sp-8);
+      }
+      .bcl-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
       }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);

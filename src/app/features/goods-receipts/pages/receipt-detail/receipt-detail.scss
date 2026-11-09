@@ -160,6 +160,11 @@ h1 {
   margin: 0;
   color: var(--ink);
 }
+.grd-lines-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .grd-context-error {
   margin: 0 0 12px;
   font-size: 13px;
@@ -172,7 +177,7 @@ h1 {
 }
 .grd-table {
   width: 100%;
-  min-width: 1100px;
+  min-width: 1300px;
 }
 .grd-muted {
   color: var(--ink-muted);
@@ -225,6 +230,54 @@ h1 {
   text-transform: uppercase;
   letter-spacing: var(--ls-label);
   white-space: nowrap;
+}
+.grd-net-cell {
+  font-variant-numeric: var(--tnum);
+  white-space: nowrap;
+}
+.grd-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.grd-suggest-badge {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  color: var(--st-in-route);
+  cursor: help;
+  white-space: nowrap;
+}
+.grd-accepted-badge {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  color: var(--st-vigente);
+  white-space: nowrap;
+}
+.grd-accept-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  white-space: nowrap;
+}
+.grd-accept-link:hover {
+  text-decoration: underline;
+}
+.grd-suggest-changed {
+  margin-top: 4px;
+  max-width: 220px;
 }
 .grd-row-blocking {
   background: color-mix(in srgb, var(--st-mismatch) 7%, transparent);
