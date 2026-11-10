@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
@@ -19,8 +20,14 @@ import {
   CustomerEditOptions,
   EditCustomerDocumentTypeOption,
 } from '../../shared/models/customer.models';
+import { UbigeoView } from '../../shared/models/customer-request.models';
+import { flattenUbigeoTree, ubigeoText } from '../../shared/utils/ubigeo';
 
 const MAX_NAME_LENGTH = 150;
+
+function normalize(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
 
 interface BannerAction {
   label: string;
@@ -412,6 +419,7 @@ export class NewCustomerPage {
   protected longitude = signal<number | null>(null);
   protected address = signal('');
   protected ubigeo = signal<UiLookupItem | null>(null);
+  private ubigeoDistricts = signal<UbigeoView[]>([]);
 
   protected saving = signal(false);
   protected banner = signal('');
@@ -422,16 +430,20 @@ export class NewCustomerPage {
   protected userSearch = (q: string) =>
     this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
 
-  protected ubigeoSearch = (q: string) =>
-    this.catalogSvc.ubigeos(q).pipe(
-      map((list) =>
-        list.map((u, i): UiLookupItem => ({
-          id: i,
-          code: u.ubigeoCode,
-          name: `${u.district} · ${u.province} · ${u.department}`,
-        })),
-      ),
+  /** Filtra en memoria la lista ya aplanada — doc 74, sección 2.3.1: el árbol se pide una sola vez. */
+  protected ubigeoSearch = (q: string) => of(this.filterUbigeos(q));
+
+  private filterUbigeos(q: string): UiLookupItem[] {
+    const needle = normalize(q.trim());
+    const matches = this.ubigeoDistricts().filter((u) =>
+      normalize(`${u.district} ${u.province} ${u.department}`).includes(needle),
     );
+    return matches.slice(0, 20).map((u, i): UiLookupItem => ({
+      id: i,
+      code: u.ubigeoCode,
+      name: ubigeoText(u),
+    }));
+  }
 
   protected docTypeOptions = computed<UiFieldOption[]>(() =>
     (this.options()?.documentTypes ?? []).map((t) => ({
@@ -514,6 +526,10 @@ export class NewCustomerPage {
 
   constructor() {
     this.loadOptions();
+    this.catalogSvc.ubigeoTree().subscribe({
+      next: (tree) => this.ubigeoDistricts.set(flattenUbigeoTree(tree)),
+      error: () => this.ubigeoDistricts.set([]),
+    });
   }
 
   protected loadOptions() {

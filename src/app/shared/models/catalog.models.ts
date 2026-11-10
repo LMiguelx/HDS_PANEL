@@ -29,6 +29,36 @@ export interface CustomerTypeView {
   name: string;
 }
 
+/**
+ * Árbol de ubigeos — GET /catalog/ubigeos (doc 74, sección 2.3.1): no es una
+ * lista plana, es `departamento → provinces → districts`. El backend no
+ * publica un contrato fijo de nombres por nivel, así que cada nodo se lee
+ * con el campo específico del nivel (ej. `districtName`) o, si no viene, el
+ * genérico `name` que usan los demás catálogos (marcas, tipos de cliente).
+ */
+export interface UbigeoTreeDistrictView {
+  ubigeoCode?: string;
+  code?: string;
+  districtName?: string;
+  name?: string;
+}
+
+export interface UbigeoTreeProvinceView {
+  code?: string;
+  provinceCode?: string;
+  provinceName?: string;
+  name?: string;
+  districts: UbigeoTreeDistrictView[];
+}
+
+export interface UbigeoTreeDepartmentView {
+  code?: string;
+  departmentCode?: string;
+  departmentName?: string;
+  name?: string;
+  provinces: UbigeoTreeProvinceView[];
+}
+
 export interface ProductView {
   productId: number;
   code: string;
