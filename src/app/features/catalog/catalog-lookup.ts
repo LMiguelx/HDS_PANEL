@@ -7,7 +7,7 @@ import {
   CustomerTypeView,
   FamilyView,
   PaymentConditionView,
-  UbigeoTreeDepartmentView,
+  UbigeoDepartmentView,
 } from '../../shared/models/catalog.models';
 import { WarehouseView } from '../../shared/models/inventory.models';
 import { cacheForSession } from '../../shared/utils/cache-for-session';
@@ -58,15 +58,12 @@ export class CatalogLookupService {
   }
 
   /**
-   * Árbol de ubigeos para el buscador de distritos de Nuevo cliente — doc 74,
-   * sección 2.3.1. Sin `departmentCode`, el backend devuelve el departamento
-   * de la sede del usuario. Se pide una sola vez por página y se aplana en
-   * el componente (ver `flattenUbigeoTree`); no se filtra por `q` en el
-   * servidor.
+   * Árbol de ubigeos (arreglo de departamentos) para el buscador de
+   * distritos de Nuevo cliente — doc 74, sección 2.3.1. Se pide una sola vez
+   * por página y se aplana en el componente (ver `flattenUbigeoTree`); no
+   * se filtra por texto en el servidor.
    */
-  ubigeoTree(departmentCode?: string) {
-    let params = new HttpParams();
-    if (departmentCode) params = params.set('departmentCode', departmentCode);
-    return this.http.get<UbigeoTreeDepartmentView>(`${this.api}/catalog/ubigeos`, { params });
+  ubigeoTree() {
+    return this.http.get<UbigeoDepartmentView[]>(`${this.api}/catalog/ubigeos`);
   }
 }

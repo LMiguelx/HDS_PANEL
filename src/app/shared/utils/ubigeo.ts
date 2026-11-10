@@ -1,26 +1,18 @@
 import { UbigeoView } from '../models/customer-request.models';
-import { UbigeoTreeDepartmentView } from '../models/catalog.models';
+import { UbigeoDepartmentView } from '../models/catalog.models';
 
-function pick(...values: (string | undefined)[]): string {
-  return values.find((v) => !!v) ?? '';
-}
-
-/** Aplana el árbol department→provinces→districts de GET /catalog/ubigeos — doc 74, sección 2.3.1. */
-export function flattenUbigeoTree(department: UbigeoTreeDepartmentView): UbigeoView[] {
-  const departmentName = pick(department.departmentName, department.name);
-  const districts: UbigeoView[] = [];
-  for (const province of department.provinces ?? []) {
-    const provinceName = pick(province.provinceName, province.name);
-    for (const district of province.districts ?? []) {
-      districts.push({
-        ubigeoCode: pick(district.ubigeoCode, district.code),
-        district: pick(district.districtName, district.name),
-        province: provinceName,
-        department: departmentName,
-      });
-    }
-  }
-  return districts;
+/** Aplana el arreglo departamentos→provincias→distritos de GET /catalog/ubigeos — doc 74, sección 2.3.1. */
+export function flattenUbigeoTree(departments: UbigeoDepartmentView[]): UbigeoView[] {
+  return departments.flatMap((d) =>
+    d.provinces.flatMap((p) =>
+      p.districts.map((x) => ({
+        ubigeoCode: x.ubigeoCode,
+        district: x.district,
+        province: p.province,
+        department: d.department,
+      })),
+    ),
+  );
 }
 
 function titleCase(text: string): string {
