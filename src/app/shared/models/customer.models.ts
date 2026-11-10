@@ -142,3 +142,34 @@ export interface EditCustomerCommand {
   documentNumber?: string;
   customerTypeId?: number;
 }
+
+/** POST /admin/customers (doc 74, sección 2.2) — asignación inicial, opcional. */
+export interface InitialSalesAssignment {
+  userId: number;
+  weekdays: number[]; // 1-7, al menos uno
+  weeksOfCycle: number[] | null; // null o vacío = las 4 semanas
+}
+
+/** POST /admin/customers (doc 74, sección 2.2) — cliente completo, igual que en el ERP. */
+export interface CreateCustomerCommand {
+  customerCode: string;
+  routeSequence: number;
+  businessName: string;
+  documentTypeId: number;
+  documentNumber: string;
+  customerTypeId: number;
+  address: string;
+  businessActivity: string | null;
+  phone: string;
+  latitude: number;
+  longitude: number;
+  ubigeoCode: string;
+  salesAssignment: InitialSalesAssignment | null;
+}
+
+/** Respuesta 201 de POST /admin/customers (doc 74, sección 2.2). */
+export interface CreateCustomerResult {
+  customer: CustomerDetail;
+  approvedRequestId: number | null;
+  approvedRequestRequestedByName: string | null;
+}

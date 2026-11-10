@@ -135,12 +135,7 @@
 
     <div trayFooter>
       @if (selected(); as g) {
-        @if (approveReason(g)) {
-          <p class="fc-footer-reason">
-            <span class="material-icons" aria-hidden="true">info</span>
-            {{ approveReason(g) }}
-          </p>
-        } @else if (rejectDisabled(g)) {
+        @if (rejectDisabled(g)) {
           <p class="fc-footer-reason">
             <span class="material-icons" aria-hidden="true">info</span>
             El ERP ya aplicó parte de los cambios: solo se puede aprobar.
@@ -159,13 +154,7 @@
           >
             Rechazar
           </button>
-          <button
-            uiButton
-            variant="primary"
-            [disabled]="!g.erpRegistered"
-            [loading]="acting()"
-            (click)="approve(g)"
-          >
+          <button uiButton variant="primary" [loading]="acting()" (click)="approve(g)">
             Aprobar cambios
           </button>
         </div>

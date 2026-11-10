@@ -9,6 +9,7 @@ import {
   PaymentConditionView,
 } from '../../shared/models/catalog.models';
 import { WarehouseView } from '../../shared/models/inventory.models';
+import { UbigeoView } from '../../shared/models/customer-request.models';
 import { cacheForSession } from '../../shared/utils/cache-for-session';
 
 /**
@@ -54,5 +55,10 @@ export class CatalogLookupService {
 
   warehouses() {
     return this.http.get<WarehouseView[]>(`${this.api}/inventory/warehouses`);
+  }
+
+  /** Buscador de distritos para el formulario de Nuevo cliente — doc 74, sección 2.2. */
+  ubigeos(q: string) {
+    return this.http.get<UbigeoView[]>(`${this.api}/catalog/ubigeos`, { params: { q } });
   }
 }

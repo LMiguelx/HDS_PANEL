@@ -123,36 +123,40 @@ export class ClosureTab {
   }
 
   protected approve(r: RequestView) {
-    if (!r.erpRegistered || this.acting()) return;
-    this.dialog
-      .confirm({
-        title: 'Cerrar cliente',
-        message: `¿Cerrar a ${r.businessName} (${r.customerCode})? El cliente quedará inactivo.`,
-        confirmLabel: 'Cerrar cliente',
-        destructive: true,
-      })
-      .subscribe((confirmed) => {
-        if (!confirmed) return;
-        this.acting.set(true);
-        this.actionError.set('');
-        this.errorHasOpenOrders.set(false);
-        this.svc.approveClosure(r.requestId).subscribe({
-          next: () => {
-            this.acting.set(false);
-            this.toast.success('Cliente cerrado.');
+    if (this.acting()) return;
+    const dialogOptions = r.erpRegistered
+      ? {
+          title: 'Cerrar cliente',
+          message: `¿Cerrar a ${r.businessName}?`,
+          confirmLabel: 'Cerrar cliente',
+        }
+      : {
+          title: 'Desactivar cliente',
+          message: `¿Desactivar a ${r.businessName}? Dejará de aparecer en ruta, cartera y mapa, y no podrá recibir pedidos.`,
+          confirmLabel: 'Aprobar y desactivar',
+        };
+    this.dialog.confirm({ ...dialogOptions, destructive: true }).subscribe((confirmed) => {
+      if (!confirmed) return;
+      this.acting.set(true);
+      this.actionError.set('');
+      this.errorHasOpenOrders.set(false);
+      this.svc.approveClosure(r.requestId).subscribe({
+        next: () => {
+          this.acting.set(false);
+          this.toast.success(r.erpRegistered ? 'Cliente cerrado.' : 'Cliente desactivado.');
+          this.store.loadAll();
+        },
+        error: (err) => {
+          this.acting.set(false);
+          const detalle = err?.error?.detail ?? err?.error?.message;
+          this.actionError.set(detalle || 'No pudimos aprobar el cierre.');
+          this.errorHasOpenOrders.set(!!detalle?.includes('pedido'));
+          if (detalle?.includes('ya fue resuelta') || detalle?.includes('ya está inactivo')) {
             this.store.loadAll();
-          },
-          error: (err) => {
-            this.acting.set(false);
-            const detalle = err?.error?.detail ?? err?.error?.message;
-            this.actionError.set(detalle || 'No pudimos aprobar el cierre.');
-            this.errorHasOpenOrders.set(!!detalle?.includes('pedido'));
-            if (detalle?.includes('ya fue resuelta') || detalle?.includes('ya está inactivo')) {
-              this.store.loadAll();
-            }
-          },
-        });
+          }
+        },
       });
+    });
   }
 
   protected reject(r: RequestView) {

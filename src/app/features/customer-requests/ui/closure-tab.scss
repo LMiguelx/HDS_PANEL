@@ -112,6 +112,21 @@
   font-style: italic;
 }
 
+.clo-erp-badge {
+  display: inline-block;
+  font-size: var(--fs-label, 11px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  margin-bottom: var(--sp-2);
+}
+.clo-erp-badge-ok {
+  color: var(--status-ok);
+}
+.clo-erp-badge-warn {
+  color: var(--status-warn);
+}
+
 .clo-warning {
   margin-top: var(--sp-6);
   display: flex;

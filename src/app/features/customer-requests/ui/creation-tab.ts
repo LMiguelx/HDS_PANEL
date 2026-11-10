@@ -13,10 +13,12 @@ import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { UiButton } from '../../../shared/ui/button/button';
+import { UiField } from '../../../shared/ui/field/field';
 import { UiEmpty } from '../../../shared/ui/empty/empty';
-import { UiTypeahead, UiLookupItem } from '../../../shared/ui/typeahead/typeahead';
+import { UiLookupItem } from '../../../shared/ui/typeahead/typeahead';
 import { UiApprovalTray } from '../../../shared/ui/approval-tray/approval-tray';
 import { UiStatusSteps, UiStatusStep } from '../../../shared/ui/status-steps/status-steps';
+import { VendorVisits } from '../../../shared/ui/vendor-visits/vendor-visits';
 import { UiDialogService } from '../../../shared/ui/dialog/dialog';
 import { ToastService } from '../../../core/ui/toast';
 import { LookupService, toUiLookup } from '../../promos/lookup';
@@ -25,8 +27,6 @@ import { CustomerRequestAdminService } from '../customer-request-admin';
 import { ErpBadge } from './erp-badge';
 import { ErpFilterCounts, ErpFilterValue, ErpSegmentedFilter } from './segmented-filter';
 import {
-  CYCLE_WEEKS,
-  WEEKDAYS,
   customerTypeName,
   documentTypeName,
   erpStatusLabel,
@@ -46,10 +46,11 @@ import { dateTimeText } from '../../assignments/assignment-format';
   selector: 'app-creation-tab',
   imports: [
     UiButton,
+    UiField,
     UiEmpty,
-    UiTypeahead,
     UiApprovalTray,
     UiStatusSteps,
+    VendorVisits,
     ErpBadge,
     ErpSegmentedFilter,
   ],
@@ -75,8 +76,6 @@ export class CreationTab {
   protected mapsUrl = mapsUrl;
   protected dateTimeText = dateTimeText;
   protected erpStatusLabel = erpStatusLabel;
-  protected weekdays = WEEKDAYS;
-  protected cycleWeeks = CYCLE_WEEKS;
 
   protected userSearch = (q: string) =>
     this.lookupSvc.users(q, { role: 'VENDEDOR' }).pipe(map((items) => toUiLookup(items)));
@@ -108,6 +107,12 @@ export class CreationTab {
   protected acting = signal(false);
   protected actionError = signal('');
 
+  // — Código y secuencia cuando el ERP todavía no registró la solicitud — doc 74, sección 3.1 —
+  protected customerCode = signal('');
+  protected routeSequence = signal('');
+  protected codeFieldError = signal('');
+  protected sequenceFieldError = signal('');
+
   protected visitSummary = computed(() =>
     visitSummaryText(this.weekdaysValue(), this.weeksValue()),
   );
@@ -126,10 +131,18 @@ export class CreationTab {
     ];
   });
 
+  private routeSequenceValid = computed(() => {
+    const v = this.routeSequence().trim();
+    return v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0;
+  });
+
   protected approveReason = computed(() => {
     const d = this.detail();
     if (!d) return '';
-    if (!d.erpRegistered) return 'Disponible cuando el ERP registre al cliente.';
+    if (!d.erpRegistered) {
+      if (!this.customerCode().trim()) return 'Escribe el código del cliente.';
+      if (!this.routeSequenceValid()) return 'Escribe la secuencia de ruta.';
+    }
     if (this.weekdaysValue().length === 0) return 'Elige al menos un día de visita.';
     return '';
   });
@@ -168,6 +181,10 @@ export class CreationTab {
           this.weekdaysValue.set([]);
           // Marcadas con las 4 por defecto — doc 68, sección 7.3.
           this.weeksValue.set([1, 2, 3, 4]);
+          this.customerCode.set('');
+          this.routeSequence.set('');
+          this.codeFieldError.set('');
+          this.sequenceFieldError.set('');
           this.actionError.set('');
         }
       });
@@ -204,7 +221,21 @@ export class CreationTab {
     const req = this.requestKey();
     if (!req || !this.detail()) return;
     this.svc.creationDetail(req.id).subscribe({
-      next: (d) => this.detail.set(d),
+      next: (d) => {
+        const prev = this.detail();
+        // Doc 74, sección 3.1: si mientras tanto el ERP la registró, se
+        // reemplazan los campos propios por los del ERP y se avisa.
+        if (prev && !prev.erpRegistered && d.erpRegistered) {
+          this.toast.info(
+            `El ERP acaba de registrar esta solicitud con el código ${d.customerCode}.`,
+          );
+          this.customerCode.set('');
+          this.routeSequence.set('');
+          this.codeFieldError.set('');
+          this.sequenceFieldError.set('');
+        }
+        this.detail.set(d);
+      },
       error: () => {
         /* se mantiene el último detalle bueno conocido */
       },
@@ -231,16 +262,25 @@ export class CreationTab {
     );
   }
 
+  protected onCustomerCodeChange(v: string) {
+    this.customerCode.set(v.slice(0, 10));
+    this.codeFieldError.set('');
+  }
+
+  protected onRouteSequenceChange(v: string) {
+    this.routeSequence.set(v);
+    this.sequenceFieldError.set('');
+  }
+
   protected approve() {
     const d = this.detail();
     if (!d || !this.canApprove()) return;
     const vendorName = this.vendor()?.name || d.requestedByName;
+    const message = d.erpRegistered
+      ? `¿Crear al cliente ${d.businessName} con el código ${d.customerCode}, asignado a ${vendorName}? ${this.visitSummary()}`
+      : `¿Crear al cliente ${d.businessName}, asignado a ${vendorName}? ${this.visitSummary()} Se creará con el código ${this.customerCode().trim()} y la secuencia ${this.routeSequence().trim()}. Deben coincidir con el ERP.`;
     this.dialog
-      .confirm({
-        title: 'Aprobar y crear cliente',
-        message: `¿Crear al cliente ${d.businessName} con el código ${d.customerCode}, asignado a ${vendorName}? ${this.visitSummary()}`,
-        confirmLabel: 'Aprobar y crear',
-      })
+      .confirm({ title: 'Aprobar y crear cliente', message, confirmLabel: 'Aprobar y crear' })
       .subscribe((confirmed) => {
         if (!confirmed) return;
         this.acting.set(true);
@@ -249,11 +289,14 @@ export class CreationTab {
           userId: this.vendor()?.id !== d.requestedBy ? (this.vendor()?.id ?? null) : null,
           weekdays: this.weekdaysValue(),
           weeksOfCycle: this.weeksValue().length > 0 ? this.weeksValue() : null,
+          customerCode: d.erpRegistered ? null : this.customerCode().trim(),
+          routeSequence: d.erpRegistered ? null : Number(this.routeSequence()),
         };
+        const createdCode = d.erpRegistered ? d.customerCode : this.customerCode().trim();
         this.svc.approveCreation(d.requestId, cmd).subscribe({
           next: (result) => {
             this.acting.set(false);
-            this.toast.success(`Cliente creado con el código ${d.customerCode}.`, {
+            this.toast.success(`Cliente creado con el código ${createdCode}.`, {
               label: 'Ver ficha',
               onClick: () => this.router.navigate(['/clientes', result.customerId]),
             });
@@ -261,9 +304,28 @@ export class CreationTab {
           },
           error: (err) => {
             this.acting.set(false);
-            const detalle = err?.error?.detail ?? err?.error?.message;
+            const detalle: string = err?.error?.detail ?? err?.error?.message ?? '';
+            if (detalle.includes('ya fue resuelta')) {
+              this.actionError.set(detalle);
+              this.store.loadAll();
+              return;
+            }
+            const lower = detalle.toLowerCase();
+            if (lower.includes('ya registró esta solicitud con el código')) {
+              // Doc 74, sección 5.2: el ERP se adelantó — se recarga el detalle.
+              this.actionError.set(detalle);
+              this.silentRefreshDetail();
+              return;
+            }
+            if (lower.includes('secuencia de ruta')) {
+              this.sequenceFieldError.set(detalle);
+              return;
+            }
+            if (lower.includes('código')) {
+              this.codeFieldError.set(detalle);
+              return;
+            }
             this.actionError.set(detalle || 'No pudimos aprobar la solicitud.');
-            if (detalle?.includes('ya fue resuelta')) this.store.loadAll();
           },
         });
       });

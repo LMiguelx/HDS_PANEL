@@ -72,6 +72,10 @@ export interface ApproveCreationCommand {
   userId: number | null; // null = el vendedor que hizo la solicitud
   weekdays: number[]; // OBLIGATORIO, al menos uno, valores 1 a 7, sin repetir
   weeksOfCycle?: number[] | null; // opcional; sin repetir, valores 1 a 4
+  /** NUEVO (doc 74) — obligatorio si `erpRegistered = false`; si no, enviar null. */
+  customerCode?: string | null;
+  /** NUEVO (doc 74) — obligatorio si `erpRegistered = false`; si no, enviar null. */
+  routeSequence?: number | null;
 }
 
 /** Un campo dentro de un grupo de cambio — doc 39, sección 6.2. */

@@ -147,63 +147,42 @@
             </div>
           </div>
         } @else {
-          <p class="ct-muted">
-            El ERP todavía no registra a este cliente. El código y la secuencia de ruta aparecerán
-            aquí.
-          </p>
+          <div class="ct-no-erp">
+            <span class="ct-no-erp-badge">El ERP aún no la registra</span>
+            <p class="ct-muted">
+              Puedes aprobarla ahora. Primero da de alta al cliente en el ERP y escribe aquí el
+              mismo código y secuencia.
+            </p>
+            <div class="ct-kv-grid">
+              <div class="ct-field">
+                <ui-field
+                  label="Código del cliente"
+                  [value]="customerCode()"
+                  (valueChange)="onCustomerCodeChange($event)"
+                  [error]="codeFieldError()"
+                />
+              </div>
+              <div class="ct-field">
+                <ui-field
+                  label="Secuencia de ruta"
+                  type="number"
+                  [value]="routeSequence()"
+                  (valueChange)="onRouteSequenceChange($event)"
+                  [error]="sequenceFieldError()"
+                />
+              </div>
+            </div>
+          </div>
         }
 
         <h3 class="ct-block-title">Asignación</h3>
-        <div class="ct-assign" [class.ct-disabled]="!d.erpRegistered">
-          <ui-typeahead
-            label="Vendedor"
-            [clearOnPick]="false"
-            [disabled]="!d.erpRegistered"
-            [search]="userSearch"
-            [(selected)]="vendor"
-            [hint]="vendor()?.id === d.requestedBy ? 'Quien hizo la solicitud' : ''"
-          />
-          <div class="ct-chip-group">
-            <span class="ct-label">Días de visita *</span>
-            <div class="ct-chips">
-              @for (day of weekdays; track day.value) {
-                <button
-                  type="button"
-                  class="ct-chip"
-                  [class.on]="weekdaysValue().includes(day.value)"
-                  [disabled]="!d.erpRegistered"
-                  (click)="toggleWeekday(day.value)"
-                >
-                  {{ day.label }}
-                </button>
-              }
-            </div>
-          </div>
-          <div class="ct-chip-group">
-            <span class="ct-label">Semanas del ciclo</span>
-            <div class="ct-chips">
-              @for (week of cycleWeeks; track week.value) {
-                <button
-                  type="button"
-                  class="ct-chip"
-                  [class.on]="weeksValue().includes(week.value)"
-                  [disabled]="!d.erpRegistered"
-                  (click)="toggleWeek(week.value)"
-                >
-                  {{ week.label }}
-                </button>
-              }
-            </div>
-          </div>
-          @if (visitSummary()) {
-            <p class="ct-muted">{{ visitSummary() }}</p>
-          }
-          @if (!d.erpRegistered) {
-            <p class="ct-muted">
-              Podrás asignar el vendedor y el horario cuando el ERP registre al cliente.
-            </p>
-          }
-        </div>
+        <app-vendor-visits
+          [search]="userSearch"
+          [(vendor)]="vendor"
+          [(weekdays)]="weekdaysValue"
+          [(weeks)]="weeksValue"
+          [vendorHint]="vendor()?.id === d.requestedBy ? 'Quien hizo la solicitud' : ''"
+        />
       }
     </div>
 

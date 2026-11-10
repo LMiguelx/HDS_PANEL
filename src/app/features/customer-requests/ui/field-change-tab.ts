@@ -150,29 +150,26 @@ export class FieldChangeTab {
     this.select.emit(groupId);
   }
 
-  protected approveReason(g: FieldChangeGroupView): string {
-    if (!g.erpRegistered) {
-      return `Disponible cuando el ERP registre todos los cambios (${g.erpRegisteredCount} de ${g.changes.length}).`;
-    }
-    return '';
-  }
-
   protected rejectDisabled(g: FieldChangeGroupView): boolean {
     return g.erpRegisteredCount > 0;
   }
 
   protected approve(g: FieldChangeGroupView) {
-    if (!g.erpRegistered || this.acting()) return;
+    if (this.acting()) return;
     const lines = g.changes
       .map(
         (c) =>
           `${fieldNameLabel(c.fieldName)}: ${c.previousValue ?? 'sin registro'} → ${c.newValue}`,
       )
       .join(' · ');
+    const pending = g.changes.length - g.erpRegisteredCount;
+    const erpWarning = g.erpRegistered
+      ? ''
+      : ` El ERP aún no registra ${pending} de ${g.changes.length} cambios. Al aprobar, se aplican en el app; corrígelos también en el ERP.`;
     this.dialog
       .confirm({
         title: 'Aprobar cambios',
-        message: `¿Aplicar ${g.changes.length} cambios a ${g.businessName}? ${lines}`,
+        message: `¿Aplicar ${g.changes.length} cambios a ${g.businessName}? ${lines}${erpWarning}`,
         confirmLabel: 'Aprobar cambios',
       })
       .subscribe((confirmed) => {

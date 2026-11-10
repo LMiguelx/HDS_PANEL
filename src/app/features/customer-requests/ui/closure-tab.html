@@ -72,9 +72,13 @@
 
         <h3 class="clo-block-title">Registro en el ERP</h3>
         @if (r.erpRegistered) {
-          <p class="clo-value">Dado de baja en el ERP el {{ dateTimeText(r.erpRegisteredAt) }}</p>
+          <span class="clo-erp-badge clo-erp-badge-ok">Baja registrada en el ERP</span>
+          <p class="clo-value">{{ dateTimeText(r.erpRegisteredAt) }}</p>
         } @else {
-          <p class="clo-muted">El ERP todavía no da de baja a este cliente.</p>
+          <span class="clo-erp-badge clo-erp-badge-warn">El ERP aún no registra la baja</span>
+          <p class="clo-muted">
+            Al aprobar, el cliente se desactiva. Dalo de baja también en el ERP.
+          </p>
         }
 
         <div class="clo-warning">
@@ -90,12 +94,7 @@
 
     <div trayFooter>
       @if (selected(); as r) {
-        @if (!r.erpRegistered) {
-          <p class="clo-footer-reason">
-            <span class="material-icons" aria-hidden="true">info</span>
-            Disponible cuando el ERP dé de baja al cliente.
-          </p>
-        } @else {
+        @if (r.erpRegistered) {
           <p class="clo-footer-reason">
             <span class="material-icons" aria-hidden="true">info</span>
             El ERP ya dio de baja al cliente: solo se puede aprobar.
@@ -131,11 +130,10 @@
             uiButton
             variant="primary"
             class="clo-btn-danger"
-            [disabled]="!r.erpRegistered"
             [loading]="acting()"
             (click)="approve(r)"
           >
-            Aprobar cierre
+            {{ r.erpRegistered ? 'Aprobar cierre' : 'Aprobar y desactivar' }}
           </button>
         </div>
       }

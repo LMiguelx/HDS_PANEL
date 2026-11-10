@@ -9,6 +9,7 @@ export const PERMISSIONS = {
   CUSTOMER_APPROVE: 'customer.approve',
   CUSTOMER_ASSIGN: 'customer.assign',
   CUSTOMER_STATUS_MANAGE: 'customer.status.manage',
+  CUSTOMER_CREATE: 'customer.create',
   ORDER_VIEW_ALL: 'order.view_all',
   ORDER_CREATE: 'order.create',
   ORDER_EDIT: 'order.edit',

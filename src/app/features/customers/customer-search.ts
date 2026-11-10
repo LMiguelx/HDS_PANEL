@@ -7,6 +7,7 @@ import { UiToggle } from '../../shared/ui/toggle/toggle';
 import { UiTable } from '../../shared/ui/table/table';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { CustomerService } from './customer';
 import { AdminCustomerSummary } from '../../shared/models/customer.models';
 import { ratingText } from './customer-format';
@@ -14,7 +15,16 @@ import { ratingText } from './customer-format';
 /** Buscador admin (GET /api/admin/customers) — todos los clientes del tenant. */
 @Component({
   selector: 'app-customer-search',
-  imports: [RouterLink, UiButton, UiField, UiToggle, UiTable, UiStatus, UiEmpty],
+  imports: [
+    RouterLink,
+    UiButton,
+    UiField,
+    UiToggle,
+    UiTable,
+    UiStatus,
+    UiEmpty,
+    HasPermissionDirective,
+  ],
   template: `
     <section class="cs-page">
       <div class="cs-head">
@@ -22,6 +32,14 @@ import { ratingText } from './customer-format';
           <h1>Clientes</h1>
           <p class="cs-sub">{{ countText() }}</p>
         </div>
+        <button
+          uiButton
+          variant="primary"
+          *hasPermission="'customer.create'"
+          routerLink="/clientes/nuevo"
+        >
+          Nuevo cliente
+        </button>
       </div>
 
       <div class="cs-filters">

@@ -1,5 +1,4 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiModal } from '../../../shared/ui/modal/modal';
 import { UiField, UiFieldOption } from '../../../shared/ui/field/field';
@@ -42,11 +41,6 @@ const MAX_NAME_LENGTH = 150;
         @if (banner()) {
           <div class="ecd-error-banner">
             {{ banner() }}
-            @if (showApprovalsLink()) {
-              <button type="button" class="ecd-link" (click)="goToApprovals()">
-                Ir a Aprobaciones
-              </button>
-            }
           </div>
         }
 
@@ -183,22 +177,6 @@ const MAX_NAME_LENGTH = 150;
         color: var(--ink);
         line-height: 1.5;
       }
-      .ecd-link {
-        display: block;
-        margin-top: 6px;
-        appearance: none;
-        background: none;
-        border: 0;
-        padding: 0;
-        cursor: pointer;
-        font-family: var(--font-sans);
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--accent-ink);
-      }
-      .ecd-link:hover {
-        text-decoration: underline;
-      }
       .ecd-skeleton {
         height: 220px;
         background: var(--faint);
@@ -274,7 +252,6 @@ export class EditCustomerDialog {
   protected ref = inject(UiDialogRef<CustomerDetail | null>);
   private customerSvc = inject(CustomerService);
   private toast = inject(ToastService);
-  private router = inject(Router);
   private dialog = inject(UiDialogService);
 
   protected maxNameLength = MAX_NAME_LENGTH;
@@ -289,7 +266,6 @@ export class EditCustomerDialog {
 
   protected saving = signal(false);
   protected banner = signal('');
-  protected showApprovalsLink = signal(false);
   protected nameError = signal('');
   protected docTypeError = signal('');
   protected docNumberApiError = signal('');
@@ -440,14 +416,9 @@ export class EditCustomerDialog {
     return cmd;
   }
 
-  /** Ubica el mensaje del backend bajo el campo correcto — doc 70, sección 1.4. */
+  /** Ubica el mensaje del backend bajo el campo correcto — doc 70, sección 1.4 (doc 74, sección 4: ya no hay 409 de solicitud pendiente). */
   private placeError(message: string) {
     const m = message.toLowerCase();
-    if (m.includes('solicitud de cambio pendiente')) {
-      this.banner.set(message);
-      this.showApprovalsLink.set(true);
-      return;
-    }
     if (m.includes('no existe') || m.includes('no hay cambios')) {
       this.banner.set(message);
       return;
@@ -471,7 +442,6 @@ export class EditCustomerDialog {
     if (!this.canSubmit()) return;
     this.saving.set(true);
     this.banner.set('');
-    this.showApprovalsLink.set(false);
     this.nameError.set('');
     this.docTypeError.set('');
     this.docNumberApiError.set('');
@@ -498,10 +468,5 @@ export class EditCustomerDialog {
         this.placeError(message);
       },
     });
-  }
-
-  protected goToApprovals() {
-    this.router.navigate(['/aprobaciones']);
-    this.ref.close(null);
   }
 }

@@ -7,6 +7,8 @@ import { PageResponse } from '../../shared/models/api.models';
 import {
   AdminCustomerFilters,
   AdminCustomerSummary,
+  CreateCustomerCommand,
+  CreateCustomerResult,
   CustomerDetail,
   CustomerEditOptions,
   CustomerInvoiceSummary,
@@ -91,5 +93,10 @@ export class CustomerService {
   /** customer.edit — doc 70, sección 1.1: edición directa desde el panel, no se envía al ERP. */
   update(customerId: number, cmd: EditCustomerCommand) {
     return this.http.patch<CustomerDetail>(`${this.adminBase}/${customerId}`, cmd);
+  }
+
+  /** customer.create — doc 74, sección 2.2: el supervisor hace de ERP, código y secuencia incluidos. */
+  create(cmd: CreateCustomerCommand) {
+    return this.http.post<CreateCustomerResult>(this.adminBase, cmd);
   }
 }
