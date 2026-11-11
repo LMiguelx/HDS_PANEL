@@ -157,10 +157,22 @@
               <div class="ct-field">
                 <ui-field
                   label="Código del cliente"
+                  placeholder="0000022325"
                   [value]="customerCode()"
                   (valueChange)="onCustomerCodeChange($event)"
-                  [error]="codeFieldError()"
+                  (blur)="onCustomerCodeBlur()"
+                  [hint]="
+                    customerCodeFieldError()
+                      ? ''
+                      : '10 dígitos, con ceros a la izquierda, igual que en el ERP.'
+                  "
+                  [error]="customerCodeFieldError()"
                 />
+                @if (customerCodePadded() && !customerCodeFieldError()) {
+                  <p class="ct-code-note">
+                    Se completó con ceros: verifica que sea el código del ERP.
+                  </p>
+                }
               </div>
               <div class="ct-field">
                 <ui-field
@@ -198,8 +210,14 @@
           <p class="ct-footer-error">{{ actionError() }}</p>
         }
         <div class="ct-footer-actions">
-          <button uiButton variant="secondary" [loading]="acting()" (click)="reject()">
-            Rechazar
+          <button
+            uiButton
+            variant="secondary"
+            [disabled]="acting() || dialogOpen()"
+            [loading]="acting()"
+            (click)="reject()"
+          >
+            {{ acting() ? 'Rechazando…' : 'Rechazar' }}
           </button>
           <button
             uiButton
@@ -208,7 +226,7 @@
             [loading]="acting()"
             (click)="approve()"
           >
-            Aprobar y crear
+            {{ acting() ? 'Aprobando…' : 'Aprobar y crear' }}
           </button>
         </div>
       }

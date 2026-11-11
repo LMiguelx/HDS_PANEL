@@ -22,6 +22,7 @@ import {
 } from '../../shared/models/customer.models';
 import { UbigeoView } from '../../shared/models/customer-request.models';
 import { flattenUbigeoTree, ubigeoText } from '../../shared/utils/ubigeo';
+import { padCustomerCode, sanitizeCustomerCodeInput } from '../../shared/utils/customer-code';
 
 const MAX_NAME_LENGTH = 150;
 
@@ -104,10 +105,22 @@ interface BannerAction {
                 <div class="nc-mono-field">
                   <ui-field
                     label="Código del cliente"
+                    placeholder="0000022325"
                     [value]="customerCode()"
                     (valueChange)="onCustomerCodeChange($event)"
-                    [error]="fieldErrors()['customerCode'] || ''"
+                    (blur)="onCustomerCodeBlur()"
+                    [hint]="
+                      customerCodeFieldError()
+                        ? ''
+                        : '10 dígitos, con ceros a la izquierda, igual que en el ERP.'
+                    "
+                    [error]="customerCodeFieldError()"
                   />
+                  @if (customerCodePadded() && !customerCodeFieldError()) {
+                    <p class="nc-code-note">
+                      Se completó con ceros: verifica que sea el código del ERP.
+                    </p>
+                  }
                 </div>
                 <ui-field
                   label="Secuencia de ruta"
@@ -346,6 +359,11 @@ interface BannerAction {
         font-family: monospace;
         font-weight: 700;
       }
+      .nc-code-note {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: var(--status-warn);
+      }
       .nc-link {
         justify-self: start;
         appearance: none;
@@ -402,6 +420,7 @@ export class NewCustomerPage {
   protected optionsError = signal(false);
 
   protected customerCode = signal('');
+  protected customerCodePadded = signal(false);
   protected routeSequence = signal('');
   protected businessName = signal('');
   protected documentTypeId = signal('');
@@ -489,9 +508,17 @@ export class NewCustomerPage {
     () => this.fieldErrors()['documentNumber'] || this.docNumberLiveError(),
   );
 
+  private customerCodeLiveError = computed(() => {
+    const code = this.customerCode();
+    return code && code.length !== 10 ? 'El código debe tener 10 dígitos.' : '';
+  });
+  protected customerCodeFieldError = computed(
+    () => this.fieldErrors()['customerCode'] || this.customerCodeLiveError(),
+  );
+
   protected canSubmit = computed(() => {
     if (this.saving()) return false;
-    if (!this.customerCode().trim()) return false;
+    if (this.customerCode().length !== 10) return false;
     const seq = this.routeSequence().trim();
     if (seq === '' || Number(seq) < 0 || !Number.isFinite(Number(seq))) return false;
     if (!this.businessName().trim()) return false;
@@ -541,9 +568,19 @@ export class NewCustomerPage {
   }
 
   protected onCustomerCodeChange(v: string) {
-    this.customerCode.set(v.slice(0, 10));
+    this.customerCode.set(sanitizeCustomerCodeInput(v));
+    this.customerCodePadded.set(false);
     this.clearFieldError('customerCode');
     this.codeFieldRequestId.set(null);
+  }
+
+  protected onCustomerCodeBlur() {
+    const code = this.customerCode();
+    const padded = padCustomerCode(code);
+    if (padded !== code) {
+      this.customerCode.set(padded);
+      this.customerCodePadded.set(true);
+    }
   }
 
   protected onNameChange(v: string) {

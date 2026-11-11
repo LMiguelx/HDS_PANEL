@@ -142,20 +142,31 @@
           </p>
         }
         @if (actionError()) {
-          <p class="fc-footer-error">{{ actionError() }}</p>
+          <p class="fc-footer-error">
+            {{ actionError() }}
+            @if (actionErrorCustomerId()) {
+              <a [routerLink]="['/clientes', actionErrorCustomerId()]">Ver ficha ↗</a>
+            }
+          </p>
         }
         <div class="fc-footer-actions">
           <button
             uiButton
             variant="secondary"
-            [disabled]="rejectDisabled(g)"
+            [disabled]="rejectDisabled(g) || acting() || dialogOpen()"
             [loading]="acting()"
             (click)="reject(g)"
           >
-            Rechazar
+            {{ acting() ? 'Rechazando…' : 'Rechazar' }}
           </button>
-          <button uiButton variant="primary" [loading]="acting()" (click)="approve(g)">
-            Aprobar cambios
+          <button
+            uiButton
+            variant="primary"
+            [disabled]="acting() || dialogOpen()"
+            [loading]="acting()"
+            (click)="approve(g)"
+          >
+            {{ acting() ? 'Aprobando…' : 'Aprobar cambios' }}
           </button>
         </div>
       }

@@ -40,6 +40,7 @@ import {
   CreationRequestSummary,
 } from '../../../shared/models/customer-request.models';
 import { dateTimeText } from '../../assignments/assignment-format';
+import { padCustomerCode, sanitizeCustomerCodeInput } from '../../../shared/utils/customer-code';
 
 /** Pestaña Creación de la bandeja de Aprobaciones — doc 39, sección 5. */
 @Component({
@@ -106,9 +107,12 @@ export class CreationTab {
   protected weeksValue = signal<number[]>([]);
   protected acting = signal(false);
   protected actionError = signal('');
+  /** Confirmación pendiente (abierta pero no respondida) — doc 75, sección 2: evita abrir dos a la vez con un clic doble. */
+  protected dialogOpen = signal(false);
 
   // — Código y secuencia cuando el ERP todavía no registró la solicitud — doc 74, sección 3.1 —
   protected customerCode = signal('');
+  protected customerCodePadded = signal(false);
   protected routeSequence = signal('');
   protected codeFieldError = signal('');
   protected sequenceFieldError = signal('');
@@ -136,17 +140,28 @@ export class CreationTab {
     return v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0;
   });
 
+  /** "El código debe tener 10 dígitos." bajo el campo — doc 75, sección 1. */
+  protected customerCodeLiveError = computed(() => {
+    const code = this.customerCode();
+    return code && code.length !== 10 ? 'El código debe tener 10 dígitos.' : '';
+  });
+  protected customerCodeFieldError = computed(
+    () => this.codeFieldError() || this.customerCodeLiveError(),
+  );
+
   protected approveReason = computed(() => {
     const d = this.detail();
     if (!d) return '';
     if (!d.erpRegistered) {
-      if (!this.customerCode().trim()) return 'Escribe el código del cliente.';
+      if (this.customerCode().length !== 10) return 'El código debe tener 10 dígitos.';
       if (!this.routeSequenceValid()) return 'Escribe la secuencia de ruta.';
     }
     if (this.weekdaysValue().length === 0) return 'Elige al menos un día de visita.';
     return '';
   });
-  protected canApprove = computed(() => !this.acting() && this.approveReason() === '');
+  protected canApprove = computed(
+    () => !this.acting() && !this.dialogOpen() && this.approveReason() === '',
+  );
 
   private retryTick = signal(0);
   private requestKey = computed(() => {
@@ -182,6 +197,7 @@ export class CreationTab {
           // Marcadas con las 4 por defecto — doc 68, sección 7.3.
           this.weeksValue.set([1, 2, 3, 4]);
           this.customerCode.set('');
+          this.customerCodePadded.set(false);
           this.routeSequence.set('');
           this.codeFieldError.set('');
           this.sequenceFieldError.set('');
@@ -210,7 +226,8 @@ export class CreationTab {
     }
     const exists = current !== null && rows.some((r) => String(r.requestId) === current);
     if (!exists) {
-      if (current !== null) this.toast.info('Esta solicitud ya fue resuelta por otro usuario.');
+      // Doc 75, sección 3.1: no se inventa un motivo — la fila ya no está y
+      // se pasa a la siguiente en silencio; si hubo un error, lo cuenta el backend.
       this.select.emit(String(rows[0].requestId));
       return false;
     }
@@ -230,6 +247,7 @@ export class CreationTab {
             `El ERP acaba de registrar esta solicitud con el código ${d.customerCode}.`,
           );
           this.customerCode.set('');
+          this.customerCodePadded.set(false);
           this.routeSequence.set('');
           this.codeFieldError.set('');
           this.sequenceFieldError.set('');
@@ -263,8 +281,18 @@ export class CreationTab {
   }
 
   protected onCustomerCodeChange(v: string) {
-    this.customerCode.set(v.slice(0, 10));
+    this.customerCode.set(sanitizeCustomerCodeInput(v));
+    this.customerCodePadded.set(false);
     this.codeFieldError.set('');
+  }
+
+  protected onCustomerCodeBlur() {
+    const code = this.customerCode();
+    const padded = padCustomerCode(code);
+    if (padded !== code) {
+      this.customerCode.set(padded);
+      this.customerCodePadded.set(true);
+    }
   }
 
   protected onRouteSequenceChange(v: string) {
@@ -279,10 +307,12 @@ export class CreationTab {
     const message = d.erpRegistered
       ? `¿Crear al cliente ${d.businessName} con el código ${d.customerCode}, asignado a ${vendorName}? ${this.visitSummary()}`
       : `¿Crear al cliente ${d.businessName}, asignado a ${vendorName}? ${this.visitSummary()} Se creará con el código ${this.customerCode().trim()} y la secuencia ${this.routeSequence().trim()}. Deben coincidir con el ERP.`;
+    this.dialogOpen.set(true);
     this.dialog
       .confirm({ title: 'Aprobar y crear cliente', message, confirmLabel: 'Aprobar y crear' })
       .subscribe((confirmed) => {
-        if (!confirmed) return;
+        this.dialogOpen.set(false);
+        if (!confirmed || this.acting()) return;
         this.acting.set(true);
         this.actionError.set('');
         const cmd: ApproveCreationCommand = {
@@ -296,7 +326,7 @@ export class CreationTab {
         this.svc.approveCreation(d.requestId, cmd).subscribe({
           next: (result) => {
             this.acting.set(false);
-            this.toast.success(`Cliente creado con el código ${createdCode}.`, {
+            this.toast.success(`Cliente ${createdCode} creado y asignado a ${vendorName}.`, {
               label: 'Ver ficha',
               onClick: () => this.router.navigate(['/clientes', result.customerId]),
             });
@@ -333,7 +363,8 @@ export class CreationTab {
 
   protected reject() {
     const d = this.detail();
-    if (!d) return;
+    if (!d || this.acting() || this.dialogOpen()) return;
+    this.dialogOpen.set(true);
     this.dialog
       .confirm({
         title: 'Rechazar solicitud',
@@ -342,12 +373,14 @@ export class CreationTab {
         destructive: true,
       })
       .subscribe((confirmed) => {
-        if (!confirmed) return;
+        this.dialogOpen.set(false);
+        if (!confirmed || this.acting()) return;
         this.acting.set(true);
         this.actionError.set('');
         this.svc.rejectCreation(d.requestId).subscribe({
           next: () => {
             this.acting.set(false);
+            this.toast.success(`Solicitud de creación de ${d.businessName} rechazada.`);
             this.store.loadAll();
           },
           error: (err) => {

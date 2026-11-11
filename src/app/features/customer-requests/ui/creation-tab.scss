@@ -147,6 +147,11 @@
   letter-spacing: var(--ls-label);
   color: var(--status-warn);
 }
+.ct-code-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--status-warn);
+}
 
 // ---- Pie fijo ----
 .ct-footer-reason {

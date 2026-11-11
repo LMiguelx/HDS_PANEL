@@ -122,6 +122,9 @@ export class FieldChangeTab {
 
   protected acting = signal(false);
   protected actionError = signal('');
+  protected actionErrorCustomerId = signal<number | null>(null);
+  /** Confirmación pendiente (abierta pero no respondida) — doc 75, sección 2: evita abrir dos a la vez con un clic doble. */
+  protected dialogOpen = signal(false);
 
   constructor() {
     effect(() => {
@@ -141,7 +144,8 @@ export class FieldChangeTab {
     }
     const exists = current !== null && groups.some((g) => g.groupId === current);
     if (!exists) {
-      if (current !== null) this.toast.info('Esta solicitud ya fue resuelta por otro usuario.');
+      // Doc 75, sección 3.1: no se inventa un motivo — la fila ya no está y
+      // se pasa a la siguiente en silencio; si hubo un error, lo cuenta el backend.
       this.select.emit(groups[0].groupId);
     }
   }
@@ -155,7 +159,7 @@ export class FieldChangeTab {
   }
 
   protected approve(g: FieldChangeGroupView) {
-    if (this.acting()) return;
+    if (this.acting() || this.dialogOpen()) return;
     const lines = g.changes
       .map(
         (c) =>
@@ -166,6 +170,7 @@ export class FieldChangeTab {
     const erpWarning = g.erpRegistered
       ? ''
       : ` El ERP aún no registra ${pending} de ${g.changes.length} cambios. Al aprobar, se aplican en el app; corrígelos también en el ERP.`;
+    this.dialogOpen.set(true);
     this.dialog
       .confirm({
         title: 'Aprobar cambios',
@@ -173,27 +178,32 @@ export class FieldChangeTab {
         confirmLabel: 'Aprobar cambios',
       })
       .subscribe((confirmed) => {
-        if (!confirmed) return;
+        this.dialogOpen.set(false);
+        if (!confirmed || this.acting()) return;
         this.acting.set(true);
         this.actionError.set('');
+        this.actionErrorCustomerId.set(null);
         this.svc.approveFieldChange(g.groupId).subscribe({
           next: () => {
             this.acting.set(false);
-            this.toast.success('Cambios aplicados al cliente.');
+            const corrige = g.erpRegistered ? '' : ' Corrígelos también en el ERP.';
+            this.toast.success(`Cambios aplicados a ${g.businessName}.${corrige}`);
             this.store.loadAll();
           },
           error: (err) => {
             this.acting.set(false);
-            const detalle = err?.error?.detail ?? err?.error?.message;
+            const detalle: string = err?.error?.detail ?? err?.error?.message ?? '';
             this.actionError.set(detalle || 'No pudimos aprobar los cambios.');
-            if (detalle?.includes('ya fue resuelta')) this.store.loadAll();
+            this.actionErrorCustomerId.set(detalle.includes('inactivo') ? g.customerId : null);
+            if (detalle.includes('ya fue resuelta')) this.store.loadAll();
           },
         });
       });
   }
 
   protected reject(g: FieldChangeGroupView) {
-    if (this.rejectDisabled(g) || this.acting()) return;
+    if (this.rejectDisabled(g) || this.acting() || this.dialogOpen()) return;
+    this.dialogOpen.set(true);
     this.dialog
       .confirm({
         title: 'Rechazar cambios',
@@ -202,12 +212,17 @@ export class FieldChangeTab {
         destructive: true,
       })
       .subscribe((confirmed) => {
-        if (!confirmed) return;
+        this.dialogOpen.set(false);
+        if (!confirmed || this.acting()) return;
         this.acting.set(true);
         this.actionError.set('');
+        this.actionErrorCustomerId.set(null);
         this.svc.rejectFieldChange(g.groupId).subscribe({
           next: () => {
             this.acting.set(false);
+            this.toast.success(
+              `Cambios de ${g.businessName} rechazados: el cliente queda con sus datos actuales.`,
+            );
             this.store.loadAll();
           },
           error: (err) => {

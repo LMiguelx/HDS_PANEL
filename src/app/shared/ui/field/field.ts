@@ -1,4 +1,4 @@
-import { Component, model, input } from '@angular/core';
+import { Component, model, input, output } from '@angular/core';
 
 export type UiFieldType = 'text' | 'number' | 'date' | 'time' | 'password' | 'textarea' | 'select';
 
@@ -32,6 +32,7 @@ let nextId = 0;
             [attr.aria-describedby]="hint() || error() ? id + '-hint' : null"
             [value]="value()"
             (input)="onInput($event)"
+            (blur)="blur.emit()"
           ></textarea>
         }
         @case ('select') {
@@ -43,6 +44,7 @@ let nextId = 0;
             [attr.aria-describedby]="hint() || error() ? id + '-hint' : null"
             [value]="value()"
             (change)="onInput($event)"
+            (blur)="blur.emit()"
           >
             <!-- [selected] mantiene lo mostrado en sintonía con el modelo:
                  sin esto el navegador pinta la primera opción aunque el
@@ -74,6 +76,7 @@ let nextId = 0;
               [attr.aria-describedby]="hint() || error() ? id + '-hint' : null"
               [value]="value()"
               (input)="onInput($event)"
+              (blur)="blur.emit()"
             />
             <ng-content select="[fieldSuffix]"></ng-content>
           </div>
@@ -206,6 +209,7 @@ export class UiField {
   hasSuffix = input(false);
 
   value = model<string>('');
+  blur = output<void>();
 
   protected id = `ui-field-${nextId++}`;
 

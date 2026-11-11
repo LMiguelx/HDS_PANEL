@@ -92,6 +92,8 @@ export class ClosureTab {
   protected acting = signal(false);
   protected actionError = signal('');
   protected errorHasOpenOrders = signal(false);
+  /** Confirmación pendiente (abierta pero no respondida) — doc 75, sección 2: evita abrir dos a la vez con un clic doble. */
+  protected dialogOpen = signal(false);
 
   constructor() {
     effect(() => {
@@ -111,7 +113,8 @@ export class ClosureTab {
     }
     const exists = current !== null && rows.some((r) => String(r.requestId) === current);
     if (!exists) {
-      if (current !== null) this.toast.info('Esta solicitud ya fue resuelta por otro usuario.');
+      // Doc 75, sección 3.1: no se inventa un motivo — la fila ya no está y
+      // se pasa a la siguiente en silencio; si hubo un error, lo cuenta el backend.
       this.select.emit(String(rows[0].requestId));
     }
   }
@@ -123,7 +126,7 @@ export class ClosureTab {
   }
 
   protected approve(r: RequestView) {
-    if (this.acting()) return;
+    if (this.acting() || this.dialogOpen()) return;
     const dialogOptions = r.erpRegistered
       ? {
           title: 'Cerrar cliente',
@@ -135,15 +138,21 @@ export class ClosureTab {
           message: `¿Desactivar a ${r.businessName}? Dejará de aparecer en ruta, cartera y mapa, y no podrá recibir pedidos.`,
           confirmLabel: 'Aprobar y desactivar',
         };
+    this.dialogOpen.set(true);
     this.dialog.confirm({ ...dialogOptions, destructive: true }).subscribe((confirmed) => {
-      if (!confirmed) return;
+      this.dialogOpen.set(false);
+      if (!confirmed || this.acting()) return;
       this.acting.set(true);
       this.actionError.set('');
       this.errorHasOpenOrders.set(false);
       this.svc.approveClosure(r.requestId).subscribe({
         next: () => {
           this.acting.set(false);
-          this.toast.success(r.erpRegistered ? 'Cliente cerrado.' : 'Cliente desactivado.');
+          this.toast.success(
+            r.erpRegistered
+              ? `${r.businessName} cerrado.`
+              : `${r.businessName} desactivado. Dalo de baja también en el ERP.`,
+          );
           this.store.loadAll();
         },
         error: (err) => {
@@ -151,16 +160,15 @@ export class ClosureTab {
           const detalle = err?.error?.detail ?? err?.error?.message;
           this.actionError.set(detalle || 'No pudimos aprobar el cierre.');
           this.errorHasOpenOrders.set(!!detalle?.includes('pedido'));
-          if (detalle?.includes('ya fue resuelta') || detalle?.includes('ya está inactivo')) {
-            this.store.loadAll();
-          }
+          if (detalle?.includes('ya fue resuelta')) this.store.loadAll();
         },
       });
     });
   }
 
   protected reject(r: RequestView) {
-    if (r.erpRegistered || this.acting()) return;
+    if (r.erpRegistered || this.acting() || this.dialogOpen()) return;
+    this.dialogOpen.set(true);
     this.dialog
       .confirm({
         title: 'Rechazar cierre',
@@ -168,12 +176,16 @@ export class ClosureTab {
         confirmLabel: 'Rechazar',
       })
       .subscribe((confirmed) => {
-        if (!confirmed) return;
+        this.dialogOpen.set(false);
+        if (!confirmed || this.acting()) return;
         this.acting.set(true);
         this.actionError.set('');
         this.svc.rejectClosure(r.requestId).subscribe({
           next: () => {
             this.acting.set(false);
+            this.toast.success(
+              `Solicitud de cierre de ${r.businessName} rechazada: el cliente sigue activo.`,
+            );
             this.store.loadAll();
           },
           error: (err) => {

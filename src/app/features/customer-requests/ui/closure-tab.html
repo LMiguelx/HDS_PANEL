@@ -120,20 +120,25 @@
           <button
             uiButton
             variant="secondary"
-            [disabled]="r.erpRegistered"
+            [disabled]="r.erpRegistered || acting() || dialogOpen()"
             [loading]="acting()"
             (click)="reject(r)"
           >
-            Rechazar
+            {{ acting() ? 'Rechazando…' : 'Rechazar' }}
           </button>
           <button
             uiButton
             variant="primary"
             class="clo-btn-danger"
+            [disabled]="acting() || dialogOpen()"
             [loading]="acting()"
             (click)="approve(r)"
           >
-            {{ r.erpRegistered ? 'Aprobar cierre' : 'Aprobar y desactivar' }}
+            @if (acting()) {
+              Aprobando…
+            } @else {
+              {{ r.erpRegistered ? 'Aprobar cierre' : 'Aprobar y desactivar' }}
+            }
           </button>
         </div>
       }
