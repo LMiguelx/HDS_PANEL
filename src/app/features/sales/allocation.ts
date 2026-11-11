@@ -13,6 +13,16 @@ export class AllocationService {
     return this.http.get<AllocationView[]>(`${this.base}/my`);
   }
 
+  /**
+   * Dotaciones vigentes del vendedor logueado — GET /api/mobile/allocations/mine,
+   * el mismo endpoint de la app (doc 42, sección 7.5). Lo usa Nuevo pedido por
+   * llamada y Editar pedido cuando el vendedor edita su propio pedido (en vez
+   * de `byUser()`, que es para cuando edita supervisión).
+   */
+  mine() {
+    return this.http.get<AllocationView[]>(`${environment.apiUrl}/mobile/allocations/mine`);
+  }
+
   /** Dotaciones de un vendedor (supervisión). */
   byUser(userId: number) {
     return this.http.get<AllocationView[]>(`${this.base}/by-user/${userId}`);

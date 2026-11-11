@@ -1,0 +1,480 @@
+<section class="grd-page">
+  @if (loading()) {
+    <div class="grd-skeleton" role="status" aria-label="Cargando"></div>
+  } @else if (notFound()) {
+    <ui-empty
+      title="No se encontró la entrega"
+      actionLabel="Volver a Entregas"
+      (action)="goBack()"
+    />
+  } @else if (error()) {
+    <ui-empty
+      variant="error"
+      title="No pudimos cargar la entrega"
+      actionLabel="Reintentar"
+      (action)="load()"
+    />
+  } @else if (detail(); as d) {
+    <button type="button" class="grd-back" (click)="goBack()">← Entregas</button>
+
+    <div class="grd-head">
+      <div>
+        <div class="grd-title-row">
+          <h1>Entrega N.° {{ d.receiptId }} · {{ d.brandName }}</h1>
+          <span class="grd-badge" [style.color]="'var(' + statusToneVar() + ')'">{{
+            d.statusName
+          }}</span>
+          @if (d.statusCode === 'CONFIRMED') {
+            <span class="grd-erp-badge" [class.grd-erp-done]="d.erpTaken">
+              {{
+                d.erpTaken
+                  ? '✓ Tomada por el ERP · ' + dateTimeText(d.erpTakenAt!)
+                  : 'Pendiente del ERP'
+              }}
+            </span>
+          }
+        </div>
+        <p class="grd-meta">
+          Subida por {{ d.createdByName }} el {{ dateTimeText(d.createdAt) }}
+          @if (d.statusCode === 'CONFIRMED') {
+            · Confirmada por {{ d.confirmedByName }} el {{ dateTimeText(d.confirmedAt!) }}
+          }
+          @if (d.statusCode === 'CANCELLED') {
+            · Anulada por {{ d.cancelledByName }} el {{ dateTimeText(d.cancelledAt!) }}
+          }
+          · Almacén {{ d.warehouseName }}
+        </p>
+      </div>
+
+      @if (canEdit()) {
+        <div class="grd-actions">
+          <button
+            uiButton
+            variant="secondary"
+            [loading]="cancelling()"
+            [disabled]="saving() || confirming()"
+            (click)="cancelReceipt()"
+          >
+            Anular
+          </button>
+          <button
+            uiButton
+            variant="secondary"
+            [loading]="saving()"
+            [disabled]="!dirty() || confirming()"
+            (click)="save()"
+          >
+            Guardar
+          </button>
+          <button
+            uiButton
+            variant="primary"
+            [loading]="confirming()"
+            [disabled]="(!d.canConfirm && !dirty()) || saving()"
+            (click)="confirmReceipt()"
+          >
+            Confirmar
+          </button>
+        </div>
+      }
+    </div>
+
+    @if (issues().length > 0) {
+      <div class="grd-issues-banner">
+        <div class="grd-issues-title">
+          {{ blockingCount() }} por corregir · {{ warningCount() }} avisos
+        </div>
+        @for (issue of issues(); track $index) {
+          <button
+            type="button"
+            class="grd-issue-row"
+            [style.color]="'var(' + toneVar(issue.severity) + ')'"
+            (click)="focusIssue(issue)"
+          >
+            ■ {{ issue.lineNumber != null ? 'Línea ' + issue.lineNumber + ' — ' : ''
+            }}{{ issue.message }}
+          </button>
+        }
+      </div>
+    }
+
+    <div class="grd-blocks">
+      <div class="grd-block">
+        <div class="grd-block-title">Documento</div>
+        @if (canEdit()) {
+          <div class="grd-field" id="grd-field-supplierName">
+            <ui-field
+              label="Proveedor"
+              [value]="supplierName()"
+              (valueChange)="onSupplierName($event)"
+              [error]="fieldIssueMessage('supplierName')"
+            />
+          </div>
+          <div class="grd-field" id="grd-field-ruc">
+            <ui-field
+              label="RUC"
+              [value]="ruc()"
+              (valueChange)="onRuc($event)"
+              [error]="rucError()"
+            />
+          </div>
+          <div class="grd-field" id="grd-field-documentTypeCode">
+            <ui-field
+              label="Tipo"
+              type="select"
+              [value]="documentTypeCode()"
+              (valueChange)="onDocumentTypeCode($event)"
+              [options]="documentTypeOptions"
+              [error]="fieldIssueMessage('documentTypeCode')"
+            />
+          </div>
+          <div class="grd-field" id="grd-field-documentNumber">
+            <ui-field
+              label="Número"
+              [value]="documentNumber()"
+              (valueChange)="onDocumentNumber($event)"
+              [error]="fieldIssueMessage('documentNumber')"
+            />
+          </div>
+        } @else {
+          <div class="grd-ro-row">
+            <span>Proveedor</span><strong>{{ d.supplierName || '—' }}</strong>
+          </div>
+          <div class="grd-ro-row">
+            <span>RUC</span><strong>{{ d.ruc || '—' }}</strong>
+          </div>
+          <div class="grd-ro-row">
+            <span>Tipo</span><strong>{{ d.documentTypeName || '—' }}</strong>
+          </div>
+          <div class="grd-ro-row">
+            <span>Número</span><strong>{{ d.documentNumber || '—' }}</strong>
+          </div>
+        }
+      </div>
+
+      <div class="grd-block" id="grd-field-totals">
+        <div class="grd-block-title">Montos</div>
+        <div class="grd-ro-row">
+          <span
+            >Subtotal de líneas
+            <span
+              [uiInfoTip]="'Suma de las líneas sin bonificaciones. Se compara con el importe total del documento.'"
+            ></span
+          ></span>
+          <strong>{{ formatSoles(d.linesSubtotal) }}</strong>
+        </div>
+        @if (canEdit()) {
+          <div class="grd-field">
+            <ui-field
+              label="Importe total"
+              type="number"
+              prefix="S/"
+              [value]="totalAmount()"
+              (valueChange)="onTotalAmount($event)"
+              [error]="fieldIssueMessage('totals')"
+            />
+          </div>
+          <div class="grd-field">
+            <ui-field
+              label="IGV"
+              type="number"
+              prefix="S/"
+              [value]="taxAmount()"
+              (valueChange)="onTaxAmount($event)"
+            />
+          </div>
+        } @else {
+          <div class="grd-ro-row">
+            <span>Importe total</span
+            ><strong>{{ d.totalAmount != null ? formatSoles(d.totalAmount) : '—' }}</strong>
+          </div>
+          <div class="grd-ro-row">
+            <span>IGV</span
+            ><strong>{{ d.taxAmount != null ? formatSoles(d.taxAmount) : '—' }}</strong>
+          </div>
+        }
+      </div>
+
+      <div class="grd-block">
+        <div class="grd-block-title">Entrega</div>
+        @if (canEdit()) {
+          <div class="grd-field">
+            <ui-field
+              label="Almacén"
+              type="select"
+              [value]="warehouseId()"
+              (valueChange)="onWarehouseId($event)"
+              [options]="warehouseOptions()"
+            />
+          </div>
+          <div class="grd-radio-group">
+            <span class="grd-radio-label">Viene en</span>
+            <label class="grd-radio-option">
+              <input
+                type="radio"
+                name="grd-unit-type"
+                [checked]="unitType() === 'UNIT'"
+                (change)="onUnitType('UNIT')"
+              />
+              Unidades
+            </label>
+            <label class="grd-radio-option">
+              <input
+                type="radio"
+                name="grd-unit-type"
+                [checked]="unitType() === 'PACKAGE'"
+                (change)="onUnitType('PACKAGE')"
+              />
+              Paquetes
+            </label>
+          </div>
+          <ui-checkbox
+            label="Precios incluyen IGV"
+            [checked]="pricesIncludeTax()"
+            (checkedChange)="onPricesIncludeTax($event)"
+          />
+        } @else {
+          <div class="grd-ro-row">
+            <span>Almacén</span><strong>{{ d.warehouseName }}</strong>
+          </div>
+          <div class="grd-ro-row">
+            <span>Viene en</span
+            ><strong>{{ d.unitType === 'PACKAGE' ? 'Paquetes' : 'Unidades' }}</strong>
+          </div>
+          <div class="grd-ro-row">
+            <span>Precios</span
+            ><strong>{{ d.pricesIncludeTax ? 'Incluyen IGV' : 'Sin IGV' }}</strong>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="grd-lines-head" id="grd-field-lines">
+      <h2>Líneas ({{ lines().length }})</h2>
+      @if (canEdit()) {
+        <div class="grd-lines-head-actions">
+          @if (pendingSuggestionsCount() > 0) {
+            <button uiButton variant="secondary" size="sm" (click)="acceptAllSuggestions()">
+              Aceptar sugerencias ({{ pendingSuggestionsCount() }})
+            </button>
+          }
+          <button uiButton variant="ghost" size="sm" (click)="addLine()">+ Agregar línea</button>
+        </div>
+      }
+    </div>
+
+    @if (contextError() && canEdit()) {
+      <p class="grd-context-error">{{ contextError() }}</p>
+    }
+
+    <div class="grd-table-wrap">
+      <table class="ui-table-grid grd-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Proveedor (código · descripción)</th>
+            <th>Producto Hispánica</th>
+            <th>Cant.</th>
+            <th>
+              Costo unit.
+              <span
+                [uiInfoTip]="'El valor unitario del documento. Se compara con el costo de compra que registró el ERP.'"
+              ></span>
+            </th>
+            <th>Descuento</th>
+            <th>Subtotal</th>
+            <th>
+              Neto
+              <span
+                [uiInfoTip]="
+                  'Costo real por ' +
+                  (unitType() === 'PACKAGE' ? 'caja' : 'unidad') +
+                  ', después del descuento (subtotal ÷ cantidad).'
+                "
+              ></span>
+            </th>
+            <th>Bonif.</th>
+            <th>Origen</th>
+            @if (canEdit()) {
+              <th></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (l of lines(); track l.key) {
+            <tr
+              [id]="l.lineNumber != null ? 'grd-line-' + l.lineNumber : null"
+              [class.grd-row-blocking]="lineSeverity(l) === 'BLOCKING'"
+              [class.grd-row-warning]="lineSeverity(l) === 'WARNING'"
+            >
+              <td class="grd-muted">{{ l.lineNumber ?? '—' }}</td>
+              <td>
+                @if (canEdit()) {
+                  <div class="grd-cell-field grd-cell-field-sm">
+                    <ui-field
+                      label="Código"
+                      [value]="l.supplierCode"
+                      (valueChange)="setLineField(l, 'supplierCode', $event)"
+                    />
+                  </div>
+                  <div class="grd-cell-field grd-cell-field-sm">
+                    <ui-field
+                      label="Descripción"
+                      [value]="l.supplierDescription"
+                      (valueChange)="setLineField(l, 'supplierDescription', $event)"
+                    />
+                  </div>
+                } @else {
+                  <div class="grd-supplier-code">{{ l.supplierCode || '—' }}</div>
+                  <div class="grd-muted grd-supplier-desc" [title]="l.supplierDescription">
+                    {{ l.supplierDescription || '—' }}
+                  </div>
+                }
+              </td>
+              <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'productCode') === 'BLOCKING'">
+                @if (lineProductState(l) === 'suggested') {
+                  <div class="grd-suggest-row">
+                    <span class="grd-suggest-badge" [uiInfoTip]="confidenceTip(l)">Sugerido</span>
+                    @if (canEdit()) {
+                      <button type="button" class="grd-accept-link" (click)="acceptSuggestion(l)">
+                        ✓ Aceptar
+                      </button>
+                    }
+                  </div>
+                } @else if (lineProductState(l) === 'accepted') {
+                  <span class="grd-accepted-badge">Aceptado</span>
+                }
+                @if (canEdit()) {
+                  <div class="grd-cell-field">
+                    <ui-typeahead
+                      label="Producto"
+                      [placeholder]="'Elegir producto…'"
+                      [clearOnPick]="false"
+                      [search]="productSearch"
+                      [selected]="lineProductSelected(l)"
+                      (picked)="setLineProduct(l, $event)"
+                    />
+                  </div>
+                } @else if (l.productCode) {
+                  {{ l.productCode }} {{ l.productName }}
+                } @else {
+                  <span class="grd-no-product">Elegir producto…</span>
+                }
+                @if (suggestionChangedText(l)) {
+                  <div class="grd-muted grd-suggest-changed">{{ suggestionChangedText(l) }}</div>
+                }
+              </td>
+              <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'quantity') === 'BLOCKING'">
+                @if (canEdit()) {
+                  <div class="grd-cell-field grd-cell-field-num">
+                    <ui-field
+                      label="Cant."
+                      type="number"
+                      [value]="l.quantity"
+                      (valueChange)="setLineNumberField(l, 'quantity', $event)"
+                    />
+                  </div>
+                } @else {
+                  {{ l.quantity || '—' }}
+                }
+                @if (quantityInUnits(l)) {
+                  <div class="grd-muted grd-qty-units">{{ quantityInUnits(l) }}</div>
+                }
+              </td>
+              <td
+                [class.grd-cell-blocking]="cellIssueSeverity(l, 'unitCost') === 'BLOCKING'"
+                [class.grd-cell-warning]="cellIssueSeverity(l, 'unitCost') === 'WARNING'"
+              >
+                @if (canEdit()) {
+                  <div class="grd-cell-field grd-cell-field-num">
+                    <ui-field
+                      label="Costo"
+                      type="number"
+                      [value]="l.unitCost"
+                      (valueChange)="setLineNumberField(l, 'unitCost', $event)"
+                    />
+                  </div>
+                } @else {
+                  {{ unitCostText(numVal(l.unitCost)) }}
+                }
+                <span [uiInfoTip]="purchaseCostTooltip(l)"></span>
+              </td>
+              <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'discountAmount') === 'BLOCKING'">
+                @if (canEdit()) {
+                  <div class="grd-cell-field grd-cell-field-num">
+                    <ui-field
+                      label="Descuento"
+                      type="number"
+                      placeholder="0"
+                      [value]="l.discountAmount"
+                      (valueChange)="setLineNumberField(l, 'discountAmount', $event)"
+                    />
+                  </div>
+                } @else {
+                  {{ numVal(l.discountAmount) ? formatSoles(numVal(l.discountAmount)) : '—' }}
+                }
+              </td>
+              <td [class.grd-cell-blocking]="cellIssueSeverity(l, 'subtotal') === 'BLOCKING'">
+                @if (canEdit()) {
+                  <div class="grd-cell-field grd-cell-field-num">
+                    <ui-field
+                      label="Subtotal"
+                      type="number"
+                      [value]="l.subtotal"
+                      (valueChange)="setLineNumberField(l, 'subtotal', $event)"
+                    />
+                  </div>
+                } @else {
+                  {{ l.subtotal ? formatSoles(numVal(l.subtotal)) : '—' }}
+                }
+              </td>
+              <td class="grd-muted grd-net-cell">{{ unitCostText(l.netUnitCost) }}</td>
+              <td class="grd-bonif-cell">
+                @if (canEdit()) {
+                  <input
+                    type="checkbox"
+                    [checked]="l.bonus"
+                    (change)="setLineBonus(l, $any($event.target).checked)"
+                  />
+                } @else {
+                  {{ l.bonus ? 'Sí' : '—' }}
+                }
+              </td>
+              <td>
+                <span
+                  class="grd-origin-badge"
+                  [style.color]="'var(' + BADGE_TONE_VAR[lineOrigin(l.aiRead, l.edited).tone] + ')'"
+                  >{{ lineOrigin(l.aiRead, l.edited).label }}</span
+                >
+              </td>
+              @if (canEdit()) {
+                <td>
+                  <button
+                    type="button"
+                    uiButton
+                    variant="icon"
+                    title="Quitar"
+                    (click)="removeLine(l)"
+                  >
+                    🗑
+                  </button>
+                </td>
+              }
+            </tr>
+            @if (issuesForLine(l.lineNumber).length > 0) {
+              <tr class="grd-issue-sub-row">
+                <td [attr.colspan]="canEdit() ? 11 : 10">
+                  @for (issue of issuesForLine(l.lineNumber); track $index) {
+                    <div [style.color]="'var(' + toneVar(issue.severity) + ')'">
+                      ■ {{ issue.message }}
+                    </div>
+                  }
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

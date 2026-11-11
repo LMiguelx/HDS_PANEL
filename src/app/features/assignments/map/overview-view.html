@@ -1,0 +1,170 @@
+@if (loading() && !overview()) {
+  <div class="ov-skeleton" role="status" aria-label="Cargando"></div>
+} @else if (error() && !overview()) {
+  <ui-empty
+    variant="error"
+    title="No pudimos cargar el mapa"
+    body="Intenta de nuevo en unos segundos."
+    actionLabel="Reintentar"
+    (action)="retry.emit()"
+  />
+} @else if (overview(); as data) {
+  @if (data.vendors.length === 0) {
+    <ui-empty title="No hay clientes programados para esta fecha" />
+  } @else {
+    <div class="ov-kpis">
+      <div class="ov-kpi">
+        <span class="ov-kpi-label">Programados hoy</span>
+        <span class="ov-kpi-value">{{ visibleTotals().planned }}</span>
+      </div>
+      <div class="ov-kpi">
+        <span class="ov-kpi-label">Visitados</span>
+        <span class="ov-kpi-value">{{ visibleTotals().visited }}</span>
+        <span class="ov-kpi-detail">{{ visitedPercent() }}%</span>
+      </div>
+      <div class="ov-kpi">
+        <span class="ov-kpi-label">Con pedido</span>
+        <span class="ov-kpi-value">{{ visibleTotals().ordered }}</span>
+        <span class="ov-kpi-detail">{{ formatSoles(visibleTotals().orderAmount) }}</span>
+      </div>
+      <div class="ov-kpi">
+        <span class="ov-kpi-label">Pendientes</span>
+        <span class="ov-kpi-value">{{ visibleTotals().pending }}</span>
+      </div>
+      <div class="ov-kpi" [class.ov-kpi-warn]="visibleTotals().offPlan > 0">
+        <span class="ov-kpi-label">Fuera de plan</span>
+        <span class="ov-kpi-value">{{ visibleTotals().offPlan }}</span>
+      </div>
+      @if (onlyVisibleLabel()) {
+        <span class="ov-kpi-note">de los vendedores visibles</span>
+      }
+      @if (orphanCount() > 0) {
+        <button type="button" class="ov-orphan-chip" (click)="toggleOrphans()">
+          {{ orphansLayerOn() ? 'Ocultar' : '' }} {{ orphanCount() }} clientes sin vendedor
+        </button>
+      }
+    </div>
+    @if (visibleTotals().withoutLocation > 0) {
+      <p class="ov-note">
+        {{ visibleTotals().withoutLocation }} clientes programados sin ubicación no se muestran en
+        el mapa
+      </p>
+    }
+
+    <div class="ov-body">
+      <button type="button" class="ov-drawer-toggle" (click)="sidePanelOpen.set(true)">
+        <span class="material-icons" aria-hidden="true">people</span>
+        Vendedores
+      </button>
+      <div class="ov-side" [class.open]="sidePanelOpen()">
+        <button type="button" class="ov-side-close" (click)="sidePanelOpen.set(false)">✕</button>
+        <div class="ov-side-head">
+          <span class="ov-side-title">Vendedores</span>
+          <span class="ov-side-count">{{ visibleCount() }} de {{ totalCount() }} visibles</span>
+        </div>
+        <div class="ov-side-actions">
+          <button type="button" class="ov-link" (click)="showAll()">Mostrar todos</button>
+          <button type="button" class="ov-link" (click)="hideAll()">Ocultar todos</button>
+        </div>
+        <div class="ov-vendor-list">
+          @for (v of vendorsWithPlan(); track v.userId) {
+            <div
+              class="ov-vendor-row"
+              [class.hidden]="isHidden(v.userId)"
+              (mouseenter)="onVendorHoverEnter(v.userId)"
+              (mouseleave)="onVendorHoverLeave()"
+            >
+              <span class="ov-vendor-dot" [style.background]="mapVendorColorVar(v.mapColor)"></span>
+              <div class="ov-vendor-main" (click)="selectVendor.emit(v.userId)">
+                <div class="ov-vendor-top">
+                  <span class="ov-vendor-name">{{ v.code }} {{ v.userName }}</span>
+                  <span class="ov-vendor-progress"
+                    >{{ v.counters.visited }}/{{ v.counters.planned }}</span
+                  >
+                </div>
+                <div class="ov-vendor-bar">
+                  <div
+                    class="ov-vendor-bar-fill"
+                    [style.background]="mapVendorColorVar(v.mapColor)"
+                    [style.width.%]="
+                      v.counters.planned ? (v.counters.visited / v.counters.planned) * 100 : 0
+                    "
+                  ></div>
+                </div>
+                <div
+                  class="ov-vendor-sub"
+                  [style.color]="'var(' + routeStatusLabel(v.routeStatus, true).tone + ')'"
+                >
+                  {{ routeStatusLabel(v.routeStatus, true).label }}
+                  @if (v.routeStatus !== 'NOT_STARTED') {
+                    · {{ formatSoles(v.counters.orderAmount) }}
+                  }
+                </div>
+              </div>
+              <button
+                type="button"
+                class="ov-eye"
+                [attr.aria-label]="isHidden(v.userId) ? 'Mostrar' : 'Ocultar'"
+                (click)="toggleVendorVisibility(v.userId)"
+              >
+                <span class="material-icons" aria-hidden="true">{{
+                  isHidden(v.userId) ? 'visibility_off' : 'visibility'
+                }}</span>
+              </button>
+            </div>
+          }
+          @if (vendorsWithoutPlan().length > 0) {
+            <div class="ov-vendor-sep">Sin clientes programados</div>
+            @for (v of vendorsWithoutPlan(); track v.userId) {
+              <div class="ov-vendor-row ov-vendor-dim">
+                <span
+                  class="ov-vendor-dot"
+                  [style.background]="mapVendorColorVar(v.mapColor)"
+                ></span>
+                <div class="ov-vendor-main" (click)="selectVendor.emit(v.userId)">
+                  <span class="ov-vendor-name">{{ v.code }} {{ v.userName }}</span>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </div>
+
+      <div class="ov-map-wrap">
+        <div class="ov-map" #mapEl></div>
+        <div class="ov-legend">
+          <span class="ov-legend-title">COLOR = VENDEDOR · FORMA = VISITA</span>
+          <div class="ov-legend-items">
+            <span class="ov-legend-item"
+              ><span class="ov-legend-mark ov-mark-pending"></span>Pendiente</span
+            >
+            <span class="ov-legend-item"
+              ><span class="ov-legend-mark ov-mark-ok">✓</span>Atendido</span
+            >
+            <span class="ov-legend-item"
+              ><span class="ov-legend-mark ov-mark-no">✕</span>No compró</span
+            >
+            <span class="ov-legend-item"
+              ><span class="ov-legend-mark ov-mark-closed">–</span>Cerrado</span
+            >
+            <span class="ov-legend-item"
+              ><span class="ov-legend-mark ov-mark-offplan"></span>Fuera de plan</span
+            >
+          </div>
+          <p class="ov-legend-help">
+            Pasa el mouse por un vendedor para resaltarlo · clic en su nombre para ver su recorrido
+          </p>
+        </div>
+
+        <app-map-customer-popup
+          [data]="popupData()"
+          [loading]="popupLoading()"
+          [error]="popupError()"
+          [position]="popupPosition()"
+          (close)="closePopup()"
+          (assignVendor)="onAssignVendor()"
+        />
+      </div>
+    </div>
+  }
+}

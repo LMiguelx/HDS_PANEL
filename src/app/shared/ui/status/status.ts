@@ -8,6 +8,38 @@ const NORMALIZED_MAP: Record<string, string> = {
   pendiente: 'pendiente',
   'sin stock': 'sin-stock',
   agotado: 'sin-stock',
+  // Planilla de reparto (delivery_batch_status)
+  abierta: 'open',
+  'en ruta': 'in-route',
+  liquidada: 'settled',
+  // Ítem de planilla (delivery_item_status) — "Pendiente" reutiliza el slug
+  // de arriba a propósito, mismo matiz visual.
+  entregado: 'delivered',
+  'entrega parcial': 'partial',
+  rechazado: 'rejected',
+  // Conciliación de factura (invoice_match_status)
+  'sin conciliar': 'unmatched',
+  'conciliado automáticamente': 'matched-auto',
+  'conciliado manualmente': 'matched-manual',
+  'con diferencias': 'mismatch',
+  // Pedido (order_status) — reutiliza los slugs open/in-route/delivered/
+  // partial/rejected ya definidos arriba (mismos tokens de color).
+  abierto: 'open',
+  'enviado a facturación': 'sent-to-billing',
+  'entregado en mostrador': 'counter-delivered',
+  anulado: 'cancelled',
+  // Visita (customer_visit_status) — doc 42, secciones 3.3 y 6.4. "Pendiente"
+  // a secas no se mapea acá: choca con el "Pendiente" de Promoción
+  // (--st-pendiente, otro color) — una visita pendiente siempre fuerza
+  // `[status]="'pending-visit'"` en vez de confiar en el label.
+  atendido: 'attended',
+  'no compró': 'no-purchase',
+  cerrado: 'closed',
+  'pendiente de visitar': 'pending-visit',
+  // Premio a elegir (choice_status) — doc 47, sección 4.5. "Por elegir" no se
+  // mapea: cae en el "pendiente" por defecto (mismo matiz ámbar).
+  elegido: 'delivered',
+  'no otorgado': 'pending',
 };
 
 function normalize(text: string): string {

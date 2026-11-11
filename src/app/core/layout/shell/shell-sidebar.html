@@ -1,0 +1,144 @@
+<nav class="sidebar" [class.open]="drawer.open()" [class.collapsed]="collapsed() && !isHandset()">
+  @if (!collapsed() || isHandset()) {
+    <div class="nav-search">
+      <span class="material-icons nav-search-icon" aria-hidden="true">search</span>
+      <input
+        #searchInput
+        type="search"
+        class="nav-search-input"
+        placeholder="Buscar módulo"
+        [value]="searchQuery()"
+        (input)="onSearchInput($event)"
+        (keydown)="onSearchKeydown($event)"
+      />
+      <kbd class="nav-search-kbd">Ctrl K</kbd>
+    </div>
+  }
+
+  @if (isSearching() && searchMatches().length === 0) {
+    <p class="nav-search-empty">Sin módulos con ese nombre</p>
+  }
+
+  <div class="nav-list">
+    @for (item of visibleDirectItems(); track item.route) {
+      <a
+        class="nav-direct"
+        [class.is-coming-soon]="item.comingSoon"
+        [routerLink]="item.route"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        [title]="collapsed() && !isHandset() ? item.label : ''"
+        (click)="closeDrawer()"
+      >
+        <span class="nav-icon material-icons" aria-hidden="true">{{ item.icon }}</span>
+        @if (!collapsed() || isHandset()) {
+          <span class="nav-label">{{ item.label }}</span>
+          @if (item.comingSoon) {
+            <span class="nav-tag">Próximamente</span>
+          }
+        }
+      </a>
+    }
+
+    @for (group of visibleGroups(); track group.name) {
+      @if (group.items.length === 1) {
+        <a
+          class="nav-direct"
+          [routerLink]="group.items[0].route"
+          routerLinkActive="active"
+          [title]="collapsed() && !isHandset() ? group.items[0].label : ''"
+          (click)="closeDrawer()"
+        >
+          <span class="nav-icon material-icons" aria-hidden="true">{{ group.icon }}</span>
+          @if (!collapsed() || isHandset()) {
+            <span class="nav-label">{{ group.items[0].label }}</span>
+          }
+          @if (groupBadge(group) > 0) {
+            <span class="nav-badge">{{ groupBadge(group) }}</span>
+          }
+        </a>
+      } @else {
+        <div
+          class="nav-group"
+          (mouseenter)="onGroupHoverEnter(group.name)"
+          (mouseleave)="onGroupHoverLeave()"
+        >
+          <button
+            type="button"
+            class="nav-group-head"
+            [attr.aria-expanded]="isSearching() || openGroup() === group.name"
+            [title]="collapsed() && !isHandset() ? group.name : ''"
+            (click)="toggleGroup(group.name)"
+            (focus)="onGroupHoverEnter(group.name)"
+          >
+            <span class="nav-icon material-icons" aria-hidden="true">{{ group.icon }}</span>
+            @if (!collapsed() || isHandset()) {
+              <span class="nav-label nav-group-label">{{ group.name }}</span>
+              @if (groupBadge(group) > 0 && openGroup() !== group.name && !isSearching()) {
+                <span class="nav-badge">{{ groupBadge(group) }}</span>
+              }
+              <span
+                class="material-icons nav-group-caret"
+                [class.open]="isSearching() || openGroup() === group.name"
+                aria-hidden="true"
+                >chevron_right</span
+              >
+            } @else if (groupBadge(group) > 0) {
+              <span class="nav-badge nav-badge-collapsed">{{ groupBadge(group) }}</span>
+            }
+          </button>
+
+          @if ((!collapsed() || isHandset()) && (isSearching() || openGroup() === group.name)) {
+            <div class="nav-sublist">
+              @for (item of group.items; track item.route) {
+                <a
+                  class="nav-subitem"
+                  [class.is-coming-soon]="item.comingSoon"
+                  [routerLink]="item.route"
+                  routerLinkActive="active"
+                  (click)="closeDrawer()"
+                >
+                  {{ item.label }}
+                  @if (item.comingSoon) {
+                    <span class="nav-tag">Próximamente</span>
+                  } @else if (badgeFor(item) > 0) {
+                    <span class="nav-badge">{{ badgeFor(item) }}</span>
+                  }
+                </a>
+              }
+            </div>
+          }
+
+          @if (collapsed() && !isHandset() && hoveredGroup() === group.name) {
+            <div
+              class="nav-flyout"
+              (mouseenter)="onGroupHoverEnter(group.name)"
+              (mouseleave)="onGroupHoverLeave()"
+            >
+              <div class="nav-flyout-title">{{ group.name }}</div>
+              @for (item of group.items; track item.route) {
+                <a class="nav-flyout-item" [routerLink]="item.route" routerLinkActive="active">
+                  {{ item.label }}
+                  @if (badgeFor(item) > 0) {
+                    <span class="nav-badge">{{ badgeFor(item) }}</span>
+                  }
+                </a>
+              }
+            </div>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  @if (!isHandset()) {
+    <button type="button" class="collapse-btn" (click)="toggleCollapsed()">
+      <span class="material-icons" aria-hidden="true">{{
+        collapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left'
+      }}</span>
+      @if (!collapsed()) {
+        <span>Contraer menú</span>
+      }
+    </button>
+  }
+</nav>

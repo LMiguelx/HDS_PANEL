@@ -1,15 +1,7 @@
-﻿// Administración — empresa, sedes, configuración, mantenimiento. Archivo 07.
-
-export interface TenantInfo {
-  tenantId: number;
-  legalName: string;
-  tradeName: string;
-  taxId: string; // RUC
-  planCode: string;
-  status: string;
-  contactEmail: string;
-  contactPhone: string;
-}
+﻿// Sedes y configuración (/api/tenant). Ver
+// 21-panel-admin-usuarios-roles-catalogo-precios-inventario.md, sección 4.
+// GET /api/tenant (datos de la empresa) está documentado como endpoint pero
+// sin el detalle de su DTO — no se modela ni se usa acá hasta confirmarlo.
 
 export interface BranchView {
   branchId: number;
@@ -41,9 +33,4 @@ export interface UpsertConfigCommand {
   configType: string;
   value: string;
   description: string;
-}
-
-export interface RecalculationResult {
-  metricRows: number;
-  summaryRows: number;
 }
