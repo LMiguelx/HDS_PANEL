@@ -23,9 +23,11 @@ export class PendingBonusAdminService {
   /** Última sede elegida en la bandeja — se recuerda mientras dure la sesión (doc 51, sección 5.3). */
   lastBranchId = signal<number | null>(null);
 
-  inbox(branchId?: number | null) {
+  /** `date` (nuevo, doc 78 sección 5.2) — `yyyy-MM-dd`: solo pedidos tomados ese día; sin valor, todos los abiertos. */
+  inbox(branchId?: number | null, date?: string | null) {
     let params = new HttpParams();
     if (branchId) params = params.set('branchId', String(branchId));
+    if (date) params = params.set('date', date);
     return this.http.get<PendingBonusInboxView>(`${this.base}/inbox`, { params });
   }
 

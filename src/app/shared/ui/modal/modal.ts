@@ -13,7 +13,12 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
   selector: 'ui-modal',
   imports: [CdkTrapFocus],
   template: `
-    <div class="ui-modal" cdkTrapFocus cdkTrapFocusAutoCapture="true">
+    <div
+      class="ui-modal"
+      [class.ui-modal-wide]="wide()"
+      cdkTrapFocus
+      cdkTrapFocusAutoCapture="true"
+    >
       <header class="ui-modal-header">
         <div class="ui-modal-heading">
           <h2 class="ui-modal-title">{{ title() }}</h2>
@@ -52,6 +57,10 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
         border-radius: var(--radius-card);
         box-shadow: var(--elev-dialog);
         overflow: hidden;
+      }
+      /** Para pantallas densas con tabla (p. ej. Recortar negativos, doc 78) — mismo chrome, más ancho. */
+      .ui-modal-wide {
+        max-width: 960px;
       }
       .ui-modal-header {
         display: flex;
@@ -123,5 +132,7 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
 export class UiModal {
   title = input.required<string>();
   subtitle = input('');
+  /** Variante ancha (~960px) para pantallas densas con tabla — doc 78. */
+  wide = input(false);
   close = output<void>();
 }

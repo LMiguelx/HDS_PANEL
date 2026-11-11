@@ -31,6 +31,11 @@ function groupKey(promoId: number, productId: number): string {
   return `${promoId}-${productId}`;
 }
 
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /** "Sin stock" (0) · "Stock parcial" (>0 y <debido) · "Hay stock" (≥debido) — doc 51, sección 5.3. */
 function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: string } {
   const stock = group.availableStock ?? 0;
@@ -62,6 +67,24 @@ function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: str
           </p>
         </div>
         <div class="pb-toolbar">
+          <div class="pb-date-toggle">
+            <button
+              type="button"
+              class="pb-date-btn"
+              [class.on]="dateFilter() === 'today'"
+              (click)="setDateFilter('today')"
+            >
+              Hoy
+            </button>
+            <button
+              type="button"
+              class="pb-date-btn"
+              [class.on]="dateFilter() === 'all'"
+              (click)="setDateFilter('all')"
+            >
+              Todos
+            </button>
+          </div>
           <ui-field
             label="Sede"
             type="select"
@@ -90,11 +113,7 @@ function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: str
           <ui-empty
             variant="al-dia"
             eyebrow="Al día"
-            [title]="
-              branchFilter()
-                ? 'No hay bonificaciones sin stock en esta sede.'
-                : 'No hay bonificaciones sin stock.'
-            "
+            [title]="emptyTitle()"
             body="Los pedidos abiertos tienen todos sus premios reservados."
           />
         } @else {
@@ -119,6 +138,16 @@ function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: str
                         Premio: {{ group.productName }} · {{ group.productCode }} ·
                         {{ group.brandName }}
                       </div>
+                      @if (group.ruleConditions) {
+                        <div class="pb-group-rule">
+                          <strong>Compra:</strong> {{ group.ruleConditions }}
+                        </div>
+                      }
+                      @if (group.ruleTiers) {
+                        <div class="pb-group-rule">
+                          <strong>Premio:</strong> {{ group.ruleTiers }}
+                        </div>
+                      }
                     </div>
                     @if (group.availableStock != null) {
                       <span
@@ -312,6 +341,30 @@ function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: str
       .pb-toolbar ui-field {
         width: 200px;
       }
+      .pb-date-toggle {
+        display: inline-flex;
+        border: 1px solid var(--divider);
+        border-radius: var(--radius-control, 0);
+        overflow: hidden;
+        align-self: flex-end;
+        margin-bottom: 1px;
+      }
+      .pb-date-btn {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        padding: 0 16px;
+        min-height: var(--touch-min);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink-muted);
+        cursor: pointer;
+      }
+      .pb-date-btn.on {
+        background: var(--accent-wash);
+        color: var(--accent-ink);
+      }
       .pb-skeleton {
         height: 200px;
         background: var(--faint);
@@ -367,6 +420,15 @@ function stockBadge(group: PendingBonusGroupView): { colorVar: string; text: str
         font-size: 13px;
         color: var(--ink-muted);
         margin-top: 2px;
+      }
+      .pb-group-rule {
+        font-size: 13px;
+        color: var(--ink-muted);
+        margin-top: 4px;
+        line-height: 1.5;
+      }
+      .pb-group-rule strong {
+        color: var(--ink);
       }
       .pb-stock-badge {
         flex: none;
@@ -473,6 +535,8 @@ export class PendingBonusesPage {
   /** `?orderId=` — doc 65, sección 1.7: "Resolver" del grupo "Bonificación sin stock" llega con el pedido filtrado. */
   orderIdQuery = input('', { alias: 'orderId' });
   protected filterOrderId = computed(() => Number(this.orderIdQuery()) || null);
+  /** `?today=1` — doc 78, sección 5.5: desde Validación de pedidos, la bandeja abre con Hoy activo. */
+  todayQuery = input('', { alias: 'today' });
 
   protected PERMISSIONS = PERMISSIONS;
   protected dateTimeText = dateTimeText;
@@ -493,14 +557,29 @@ export class PendingBonusesPage {
   protected loading = signal(true);
   protected error = signal(false);
   protected busyGroup = signal<string | null>(null);
+  /** Por defecto Todos — doc 78, sección 5.5 — salvo que se llegue desde Validación con `?today=1`. */
+  protected dateFilter = signal<'today' | 'all'>('all');
 
   private selections = signal<Map<string, Set<number>>>(new Map());
 
   constructor() {
     const lastBranchId = this.pendingBonusSvc.lastBranchId();
     if (lastBranchId) this.branchFilter.set(String(lastBranchId));
+    if (this.todayQuery() === '1') this.dateFilter.set('today');
     this.companySvc.branches().subscribe((list) => this.branches.set(list));
     this.load();
+  }
+
+  protected setDateFilter(f: 'today' | 'all') {
+    if (this.dateFilter() === f) return;
+    this.dateFilter.set(f);
+    this.load();
+  }
+
+  protected emptyTitle(): string {
+    const scope = this.branchFilter() ? ' en esta sede' : '';
+    const when = this.dateFilter() === 'today' ? ' tomado hoy' : '';
+    return `No hay bonificaciones sin stock${when}${scope}.`;
   }
 
   protected countText(): string {
@@ -519,7 +598,8 @@ export class PendingBonusesPage {
     this.loading.set(true);
     this.error.set(false);
     const branchId = this.branchFilter() ? Number(this.branchFilter()) : undefined;
-    this.pendingBonusSvc.inbox(branchId).subscribe({
+    const date = this.dateFilter() === 'today' ? todayIso() : null;
+    this.pendingBonusSvc.inbox(branchId, date).subscribe({
       next: (data) => {
         this.inbox.set(data);
         this.loading.set(false);
@@ -547,6 +627,13 @@ export class PendingBonusesPage {
 
   protected clearOrderFilter() {
     this.router.navigate([], { queryParams: {} });
+  }
+
+  /** doc 78, sección 5.5 — vuelve a Validación y revalida solo los pedidos recién resueltos. */
+  private goToValidation(orderIds: number[]) {
+    this.router.navigate(['/validacion-facturacion'], {
+      queryParams: { orderIds: orderIds.join(',') },
+    });
   }
 
   protected isSelected(group: PendingBonusGroupView, orderId: number): boolean {
@@ -696,7 +783,10 @@ export class PendingBonusesPage {
       .subscribe({
         next: () => {
           this.busyGroup.set(null);
-          this.toast.success(substituteProductId ? 'Premio sustituido' : 'Premio no otorgado');
+          this.toast.success(substituteProductId ? 'Premio sustituido' : 'Premio no otorgado', {
+            label: 'Ver en Validación',
+            onClick: () => this.goToValidation([orderId]),
+          });
           this.load();
         },
         error: (err) => {
@@ -727,9 +817,11 @@ export class PendingBonusesPage {
       .subscribe({
         next: (res: BatchResolutionResult) => {
           this.busyGroup.set(null);
+          const resolvedIds = selected.map((o) => o.orderId);
           if (res.failed === 0) {
             this.toast.success(
               `${res.resolved} pedido${res.resolved === 1 ? '' : 's'} resuelto${res.resolved === 1 ? '' : 's'}`,
+              { label: 'Ver en Validación', onClick: () => this.goToValidation(resolvedIds) },
             );
           } else {
             this.dialog.open(ResolveBatchResultDialog, { data: res, width: '560px' });

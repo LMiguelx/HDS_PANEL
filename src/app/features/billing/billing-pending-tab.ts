@@ -47,6 +47,9 @@ import { CounterSessionStore } from '../orders/counter-session-store';
 import { IntakeStatusService } from '../../core/order-intake/intake-status.service';
 import { SalesReportAdminService } from '../sales-reports/sales-report-admin';
 import { negativeStockExportTable } from '../sales-reports/domain/negative-stock.columns';
+import { StockCutsListDialog } from './ui/stock-cuts-list-dialog';
+import { StockCutDialog } from './ui/stock-cut-dialog';
+import { ApplyStockCutsResult } from '../../shared/models/stock-cuts.models';
 
 function todayIso(): string {
   const d = new Date();
@@ -286,15 +289,31 @@ const RECALCULATE_CHUNK = 100;
             <h1>Resultado de la validación</h1>
             <p class="bpt-sub">{{ dayLongText() }}</p>
           </div>
-          <button
-            uiButton
-            variant="secondary"
-            [disabled]="recalculatingBatch()"
-            (click)="backToBrowse()"
-          >
-            <span class="material-icons" aria-hidden="true">refresh</span>
-            Validar de nuevo
-          </button>
+          <div class="bpt-head-actions">
+            @if (intakeOpen()) {
+              <span class="bpt-muted bpt-head-actions-note"
+                >La toma de pedidos sigue abierta: pueden entrar pedidos nuevos</span
+              >
+            }
+            <button
+              uiButton
+              variant="ghost"
+              size="sm"
+              [disabled]="recalculatingBatch()"
+              (click)="validateAllDay()"
+            >
+              Validar todo de nuevo
+            </button>
+            <button
+              uiButton
+              variant="secondary"
+              [disabled]="recalculatingBatch() || invalidCount() === 0"
+              (click)="revalidateInvalid()"
+            >
+              <span class="material-icons" aria-hidden="true">refresh</span>
+              Validar de nuevo
+            </button>
+          </div>
         </div>
 
         @if (notFoundCount() > 0) {
@@ -388,7 +407,10 @@ const RECALCULATE_CHUNK = 100;
                 @if (rr.stockPendingCount > 0) {
                   <div class="bpt-recalc-pending-row">
                     <span>{{ rr.stockPendingCount }} con bonificaciones sin stock</span>
-                    <a routerLink="/pedidos/bonificaciones-sin-stock" class="bpt-issue-link"
+                    <a
+                      routerLink="/pedidos/bonificaciones-sin-stock"
+                      [queryParams]="{ today: '1' }"
+                      class="bpt-issue-link"
                       >Ir a la bandeja</a
                     >
                   </div>
@@ -490,6 +512,14 @@ const RECALCULATE_CHUNK = 100;
                 >
                   Ver
                 </button>
+                <button
+                  type="button"
+                  class="bpt-summary-action"
+                  [disabled]="negLoading()"
+                  (click)="openStockCutsList()"
+                >
+                  Recortar negativos
+                </button>
                 <ui-export-menu
                   [formats]="['xlsx', 'pdf']"
                   [disabled]="nr.negativeCount === 0"
@@ -564,9 +594,9 @@ const RECALCULATE_CHUNK = 100;
               en el pedido que corresponda. Si el almacén va a subir stock, espere la subida y pulse
               <strong>Validar de nuevo</strong>.
             </div>
-            <a routerLink="/reportes-ventas/validacion-stock" class="bpt-summary-action"
-              >Ver por producto</a
-            >
+            <button type="button" class="bpt-summary-action" (click)="openStockCutsList()">
+              Recortar negativos
+            </button>
           </div>
         }
 
@@ -668,13 +698,24 @@ const RECALCULATE_CHUNK = 100;
                     >
                       Editar pedido
                     </button>
+                    @if (stockShortfallProductId(o); as productId) {
+                      <button
+                        type="button"
+                        uiButton
+                        variant="secondary"
+                        size="sm"
+                        (click)="openStockCut(productId)"
+                      >
+                        Recortar negativos
+                      </button>
+                    }
                   } @else if (o.nextAction === 'BONUS_TRAY') {
                     <button
                       uiButton
                       variant="secondary"
                       size="sm"
                       routerLink="/pedidos/bonificaciones-sin-stock"
-                      [queryParams]="{ orderId: o.orderId }"
+                      [queryParams]="{ orderId: o.orderId, today: '1' }"
                     >
                       Resolver
                     </button>
@@ -906,16 +947,18 @@ const RECALCULATE_CHUNK = 100;
               </div>
             }
           </li>
-          <li><strong>ERP / almacén:</strong> el almacén sube el stock.</li>
           <li><strong>Validación de pedidos:</strong> Validar todos.</li>
+          <li><strong>Tarjeta Negativos:</strong> exporta el reporte y envíalo a almacén.</li>
+          <li><strong>ERP / almacén:</strong> el almacén sube el stock.</li>
+          <li><strong>Validación de pedidos:</strong> Validar de nuevo (solo los con motivos).</li>
           <li><strong>Chip Recalcular:</strong> Seleccionar todos → Recalcular seleccionados.</li>
           <li>
-            <strong>Chip Editar cantidades:</strong> Ver por producto y editar los pedidos que
-            correspondan (o espera otra subida del ERP y Validar de nuevo).
+            <strong>Recortar negativos:</strong> por cada producto negativo, vista previa y Aplicar
+            recorte (automático o eligiendo pedidos).
           </li>
           <li>
-            <strong>Chip Bonificación sin stock:</strong> resuelve en la bandeja (sustituir o no
-            otorgar).
+            <strong>Chip Bonificación sin stock:</strong> bandeja con Hoy, sustituye o no otorga
+            leyendo la regla de la promoción.
           </li>
           <li>
             <strong>Chips Premio por elegir, Definir precio, Corregir a mano:</strong> resuelve uno
@@ -923,6 +966,10 @@ const RECALCULATE_CHUNK = 100;
           </li>
           <li><strong>Validación de pedidos:</strong> Validar de nuevo y Enviar válidos.</li>
         </ol>
+        <p class="bpt-help-note">
+          Recortar negativos va antes de Bonificación sin stock: quitar un producto puede hacer que
+          un pedido deje de ganar una promoción y ya no deba el premio.
+        </p>
       </aside>
     }
   `,
@@ -1023,10 +1070,26 @@ const RECALCULATE_CHUNK = 100;
         margin-top: 4px;
         font-weight: 700;
       }
+      .bpt-help-note {
+        margin: 16px 0 0;
+        padding-top: 12px;
+        border-top: 1px solid var(--hairline);
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
       .bpt-toolbar-actions {
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
+      }
+      .bpt-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .bpt-head-actions-note {
+        font-size: 12px;
       }
       .bpt-info-banner {
         display: flex;
@@ -1791,20 +1854,35 @@ export class BillingPendingTab {
    */
   constructor() {
     this.counterSession.ensureLoaded();
+    // doc 78, sección 5.5: al volver de resolver bonificaciones (puede ser
+    // más de un pedido a la vez), revalidar solo esos — "orderIds" en plural.
+    const orderIdsParam = this.route.snapshot.queryParamMap.get('orderIds');
+    if (orderIdsParam) {
+      const ids = orderIdsParam
+        .split(',')
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0);
+      if (ids.length > 0) this.validateFromLink(ids);
+      return;
+    }
     const orderId = Number(this.route.snapshot.queryParamMap.get('orderId'));
-    if (orderId) this.validateFromLink(orderId);
+    if (orderId) this.validateFromLink([orderId]);
   }
 
-  private validateFromLink(orderId: number) {
+  private validateFromLink(orderIds: number[]) {
     this.resetValidationState();
     this.validationDate.set(null);
-    this.totalToValidate.set(1);
+    this.totalToValidate.set(orderIds.length);
     this.phase.set('validating');
     // Mostrar el pedido sin importar si quedó válido o con motivos — el
     // filtro por defecto (el primer grupo con pedidos) lo ocultaría si ya es válido.
     this.groupFilter.set('all');
-    this.expandedIds.set(new Set([orderId]));
-    this.runValidateChunks([[orderId]], 0);
+    this.expandedIds.set(new Set(orderIds));
+    const chunks: number[][] = [];
+    for (let i = 0; i < orderIds.length; i += VALIDATE_CHUNK) {
+      chunks.push(orderIds.slice(i, i + VALIDATE_CHUNK));
+    }
+    this.runValidateChunks(chunks, 0);
   }
 
   protected countText(): string {
@@ -1886,6 +1964,8 @@ export class BillingPendingTab {
       : 0,
   );
   private cancelRequested = signal(false);
+  /** doc 78, sección 2.2 — aviso junto a "Validar de nuevo" si pueden entrar pedidos nuevos. */
+  protected intakeOpen = computed(() => this.intake.status()?.open ?? false);
 
   /** doc 65, sección 1.7 — chip activo por defecto es Todos. */
   protected groupFilter = signal<GroupFilter>('all');
@@ -2145,6 +2225,57 @@ export class BillingPendingTab {
       .finally(() => this.exportingNeg.set(false));
   }
 
+  /** "Recortar negativos" — lista de hoy, doc 78, sección 4.4.1 y 4.4.3. */
+  protected openStockCutsList() {
+    const report = this.negReport();
+    if (!report) return;
+    this.dialog
+      .open<StockCutsListDialog, { report: typeof report }, number | null>(StockCutsListDialog, {
+        data: { report },
+        width: 'min(960px, 94vw)',
+      })
+      .afterClosed()
+      .subscribe((productId) => {
+        if (productId != null) this.openStockCut(productId);
+      });
+  }
+
+  /** Recorte directo de un producto — doc 78, sección 4.4.2 (desde una fila de Editar cantidades). */
+  protected openStockCut(productId: number) {
+    const warehouseId = this.counterSession.warehouseId();
+    if (!warehouseId) return;
+    this.dialog.open(StockCutDialog, {
+      width: 'min(960px, 94vw)',
+      data: {
+        warehouseId,
+        productId,
+        onApplied: (result: ApplyStockCutsResult) => this.handleStockCutApplied(result),
+      },
+    });
+  }
+
+  /** Efectos en Validación tras aplicar un recorte — doc 78, sección 4.7. */
+  private handleStockCutApplied(result: ApplyStockCutsResult) {
+    const cancelledIds = new Set(
+      result.orders.filter((o) => o.result === 'ORDER_CANCELLED').map((o) => o.orderId),
+    );
+    this.validationOrders.update((list) => list.filter((o) => !cancelledIds.has(o.orderId)));
+    if (result.validation) {
+      this.replaceValidated(result.validation);
+    } else {
+      this.validCount.set(this.validationOrders().filter((o) => o.valid).length);
+      this.invalidCount.set(this.validationOrders().filter((o) => !o.valid).length);
+    }
+    this.loadNegatives();
+  }
+
+  /** productId del primer motivo de faltante de stock de la fila (venta, no bonificación) — doc 78, sección 3.2. */
+  protected stockShortfallProductId(o: OrderBillingValidation): number | null {
+    return (
+      o.issues.find((i) => i.code === 'STOCK_SHORTFALL' && i.productId != null)?.productId ?? null
+    );
+  }
+
   private runValidatePage(page: number) {
     if (this.cancelRequested()) {
       this.phase.set('results');
@@ -2204,6 +2335,64 @@ export class BillingPendingTab {
     this.phase.set('browse');
     this.selectedOrders.set(new Map());
     this.load();
+  }
+
+  /**
+   * "Validar de nuevo" — doc 78, sección 2.2: ya no recorre el día entero,
+   * solo revalida los pedidos con motivos que hay en pantalla. Las filas
+   * válidas quedan como estaban.
+   */
+  protected revalidateInvalid() {
+    const ids = this.validationOrders()
+      .filter((o) => !o.valid)
+      .map((o) => o.orderId);
+    if (ids.length === 0 || this.recalculatingBatch()) return;
+    this.cancelRequested.set(false);
+    this.expandedIds.set(new Set());
+    this.resultsSelected.set(new Set());
+    this.recalculateOutcomes.set([]);
+    this.showRecalculateResult.set(false);
+    this.totalToValidate.set(ids.length);
+    this.validatedSoFar.set(0);
+    this.phase.set('validating');
+    const chunks: number[][] = [];
+    for (let i = 0; i < ids.length; i += VALIDATE_CHUNK)
+      chunks.push(ids.slice(i, i + VALIDATE_CHUNK));
+    this.runRevalidateChunks(chunks, 0);
+  }
+
+  private runRevalidateChunks(chunks: number[][], index: number) {
+    if (index >= chunks.length || this.cancelRequested()) {
+      this.phase.set('results');
+      this.loadNegatives();
+      return;
+    }
+    this.billingSvc.validate({ orderIds: chunks[index] }).subscribe({
+      next: (result) => {
+        this.replaceValidated(result);
+        this.runRevalidateChunks(chunks, index + 1);
+      },
+      error: () => this.phase.set('results'),
+    });
+  }
+
+  /** Reemplaza las filas revalidadas en lugar de duplicarlas — a diferencia de `accumulate()`. */
+  private replaceValidated(result: {
+    notFoundOrderIds: number[];
+    orders: OrderBillingValidation[];
+  }) {
+    const updatedIds = new Set(result.orders.map((o) => o.orderId));
+    const removedIds = new Set(result.notFoundOrderIds);
+    this.validationOrders.update((list) =>
+      [
+        ...list.filter((o) => !updatedIds.has(o.orderId) && !removedIds.has(o.orderId)),
+        ...result.orders,
+      ].sort((a, b) => a.orderId - b.orderId),
+    );
+    this.notFoundCount.update((n) => n + result.notFoundOrderIds.length);
+    this.validatedSoFar.update((n) => n + result.orders.length + result.notFoundOrderIds.length);
+    this.validCount.set(this.validationOrders().filter((o) => o.valid).length);
+    this.invalidCount.set(this.validationOrders().filter((o) => !o.valid).length);
   }
 
   protected toggleExpand(orderId: number) {

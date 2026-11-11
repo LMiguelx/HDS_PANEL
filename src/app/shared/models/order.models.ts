@@ -153,6 +153,10 @@ export interface PendingBonusGroupView {
   totalQuantity: number;
   availableStock: number | null; // null = pedidos de varias sedes
   orders: PendingBonusOrderRow[];
+  /** NUEVO (doc 78, sección 5.3) — qué tiene que comprar el cliente; null = se omite. */
+  ruleConditions: string | null;
+  /** NUEVO (doc 78, sección 5.3) — cada tramo con su premio; null = se omite. */
+  ruleTiers: string | null;
 }
 
 /** Dotación pendiente: solo seguimiento, se resuelve editando el pedido — doc 51, sección 5.2. */
