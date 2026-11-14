@@ -12,7 +12,6 @@ import { ToastService } from '../../../../core/ui/toast';
 import { PERMISSIONS } from '../../../../core/auth/permissions';
 import { AuthService } from '../../../../core/auth/auth';
 import { GoodsReceiptsApi } from '../../data-access/goods-receipts.api';
-import { CatalogLookupService } from '../../../catalog/catalog-lookup';
 import {
   BrandProductView,
   DocumentTypeCode,
@@ -23,7 +22,6 @@ import {
   ReceiptUnitType,
   UpdateReceiptCommand,
 } from '../../domain/goods-receipt.models';
-import { WarehouseView } from '../../../../shared/models/inventory.models';
 import {
   BADGE_TONE_VAR,
   DOCUMENT_TYPE_OPTIONS,
@@ -144,7 +142,6 @@ function numOrNull(raw: string): number | null {
 })
 export class ReceiptDetailPage {
   private api = inject(GoodsReceiptsApi);
-  private catalogSvc = inject(CatalogLookupService);
   private dialog = inject(UiDialogService);
   private toast = inject(ToastService);
   private router = inject(Router);
@@ -170,9 +167,11 @@ export class ReceiptDetailPage {
   protected error = signal(false);
   protected notFound = signal(false);
 
-  protected warehouses = signal<WarehouseView[]>([]);
   protected brandProducts = signal<BrandProductView[]>([]);
-  protected contextError = signal('');
+  /** 404 o 409 "no recibe mercadería por planilla" — doc 82, sección 5.2: entrega en solo lectura. */
+  protected contextBlockingError = signal('');
+  /** 409 "marca no habilitada en el almacén" — doc 82, sección 5.2: se puede ver y anular, pero no elegir productos. */
+  protected contextBrandWarning = signal('');
 
   // — Borrador de cabecera —
   protected supplierName = signal('');
@@ -194,8 +193,14 @@ export class ReceiptDetailPage {
   protected fieldErrors = signal<Record<string, string>>({});
 
   protected canEdit = computed(
-    () => this.detail()?.statusCode === 'IN_REVIEW' && this.canEditPermission(),
+    () =>
+      this.detail()?.statusCode === 'IN_REVIEW' &&
+      this.canEditPermission() &&
+      !this.contextBlockingError(),
   );
+
+  /** doc 82, sección 5.2: con la marca no habilitada en el almacén, se puede editar pero no elegir productos. */
+  protected canPickProducts = computed(() => this.canEdit() && !this.contextBrandWarning());
 
   protected issues = computed(() => this.detail()?.issues ?? []);
   protected blockingCount = computed(
@@ -203,10 +208,6 @@ export class ReceiptDetailPage {
   );
   protected warningCount = computed(
     () => this.issues().filter((i) => i.severity === 'WARNING').length,
-  );
-
-  protected warehouseOptions = computed<UiFieldOption[]>(() =>
-    this.warehouses().map((w) => ({ value: String(w.warehouseId), label: w.name })),
   );
 
   private productLookup = computed<UiLookupItem[]>(() =>
@@ -241,10 +242,6 @@ export class ReceiptDetailPage {
     });
   });
 
-  constructor() {
-    this.catalogSvc.warehouses().subscribe((list) => this.warehouses.set(list));
-  }
-
   load() {
     const id = Number(this.receiptId());
     if (!id) return;
@@ -278,17 +275,27 @@ export class ReceiptDetailPage {
     this.lines.set(d.lines.map(toDraft));
     this.dirty.set(false);
     this.fieldErrors.set({});
-    if (d.statusCode === 'IN_REVIEW') this.loadContext(d.brandId);
+    if (d.statusCode === 'IN_REVIEW') this.loadContext(d.brandId, d.warehouseId);
   }
 
-  private loadContext(brandId: number) {
-    this.contextError.set('');
-    this.api.brandContext(brandId).subscribe({
+  private loadContext(brandId: number, warehouseId: number) {
+    this.contextBlockingError.set('');
+    this.contextBrandWarning.set('');
+    this.brandProducts.set([]);
+    this.api.brandContext(brandId, warehouseId).subscribe({
       next: (ctx) => this.brandProducts.set(ctx.products),
       error: (err) => {
-        const detalle =
+        const detalle: string =
           err?.error?.detail ?? 'No se pudo cargar el catálogo de productos de la marca.';
-        this.contextError.set(detalle);
+        const lower = detalle.toLowerCase();
+        if (
+          err?.status === 409 &&
+          (lower.includes('no está habilitada') || lower.includes('no esta habilitada'))
+        ) {
+          this.contextBrandWarning.set(detalle);
+        } else {
+          this.contextBlockingError.set(detalle);
+        }
       },
     });
   }
@@ -312,10 +319,6 @@ export class ReceiptDetailPage {
   }
   protected onDocumentNumber(v: string) {
     this.documentNumber.set(v);
-    this.markDirty();
-  }
-  protected onWarehouseId(v: string) {
-    this.warehouseId.set(v);
     this.markDirty();
   }
   protected onUnitType(v: ReceiptUnitType) {

@@ -26,6 +26,7 @@ export class CatalogLookupService {
   private api = environment.apiUrl;
 
   private customerTypesCache$: Observable<CustomerTypeView[]> | null = null;
+  private warehousesCache$: Observable<WarehouseView[]> | null = null;
 
   /**
    * Catálogo global de tipos de cliente — nuevo, doc 38 sección 4.1. Es
@@ -53,8 +54,16 @@ export class CatalogLookupService {
     return this.http.get<PaymentConditionView[]>(`${this.api}/catalog/payment-conditions`);
   }
 
-  warehouses() {
-    return this.http.get<WarehouseView[]>(`${this.api}/inventory/warehouses`);
+  /**
+   * Doc 82, sección 1: ahora lo pide el selector compartido de almacén en
+   * muchas pantallas a la vez — se memoriza para el resto de la sesión en
+   * vez de repetir la misma consulta en cada una.
+   */
+  warehouses(): Observable<WarehouseView[]> {
+    this.warehousesCache$ ??= cacheForSession(
+      this.http.get<WarehouseView[]>(`${this.api}/inventory/warehouses`),
+    );
+    return this.warehousesCache$;
   }
 
   /**

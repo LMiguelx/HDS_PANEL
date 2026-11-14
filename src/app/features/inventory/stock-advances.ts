@@ -4,6 +4,7 @@ import { Observable, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
+import { UiWarehouseSelect } from '../../shared/ui/warehouse-select/warehouse-select';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiInfoTip } from '../../shared/ui/info-tip/info-tip';
@@ -17,6 +18,7 @@ import {
   ImportAdvancesCsvDialogResult,
 } from './ui/import-advances-dialog';
 import { InventoryAdminService } from './inventory-admin';
+import { CatalogLookupService } from '../catalog/catalog-lookup';
 import { ProductAdminService } from '../catalog/product-admin';
 import { ToastService } from '../../core/ui/toast';
 import { AuthService } from '../../core/auth/auth';
@@ -24,7 +26,6 @@ import {
   CreateStockAdvancesResult,
   StockAdvanceLine,
   StockAdvanceView,
-  WarehouseView,
 } from '../../shared/models/inventory.models';
 import { dateTimeText } from '../assignments/assignment-format';
 import {
@@ -57,7 +58,16 @@ const SHOW_OPTIONS: UiFieldOption[] = [
  */
 @Component({
   selector: 'app-stock-advances',
-  imports: [RouterLink, UiButton, UiField, UiTypeahead, UiEmpty, UiInfoTip, InventoryModuleTabs],
+  imports: [
+    RouterLink,
+    UiButton,
+    UiField,
+    UiWarehouseSelect,
+    UiTypeahead,
+    UiEmpty,
+    UiInfoTip,
+    InventoryModuleTabs,
+  ],
   template: `
     <app-inventory-module-tabs />
     <section class="sadv-page">
@@ -76,12 +86,12 @@ const SHOW_OPTIONS: UiFieldOption[] = [
           <div class="sadv-form">
             <h2 class="sadv-card-title">Nuevo adelanto</h2>
 
-            <ui-field
-              label="Almacén"
-              type="select"
-              [(value)]="formWarehouseId"
-              [options]="warehouseOptions()"
-              [disabled]="loadingWarehouses()"
+            <ui-warehouse-select
+              mode="orders"
+              storageKey="stock-advances-form"
+              hint="Los adelantos solo se registran en el almacén donde se toman pedidos."
+              [value]="formWarehouseIdNum()"
+              (valueChange)="onFormWarehouseIdChange($event)"
             />
             <ui-field
               label="Nota"
@@ -283,11 +293,12 @@ const SHOW_OPTIONS: UiFieldOption[] = [
           </div>
 
           <div class="sadv-filters">
-            <ui-field
-              label="Almacén"
-              type="select"
-              [(value)]="filterWarehouseId"
-              [options]="filterWarehouseOptions()"
+            <ui-warehouse-select
+              mode="all"
+              [allowAll]="true"
+              storageKey="stock-advances-filter"
+              [value]="filterWarehouseIdNum()"
+              (valueChange)="onFilterWarehouseIdChange($event)"
             />
             <ui-typeahead
               label="Producto"
@@ -714,6 +725,7 @@ const SHOW_OPTIONS: UiFieldOption[] = [
 })
 export class StockAdvancesPage {
   private inventorySvc = inject(InventoryAdminService);
+  private catalogSvc = inject(CatalogLookupService);
   private productSvc = inject(ProductAdminService);
   private auth = inject(AuthService);
   private dialog = inject(UiDialogService);
@@ -729,9 +741,6 @@ export class StockAdvancesPage {
   protected tone = advanceWarningToneVar;
 
   protected canManage = computed(() => this.auth.hasAny('stock.advance'));
-
-  protected warehouses = signal<WarehouseView[]>([]);
-  protected loadingWarehouses = signal(true);
 
   // Formulario
   protected formWarehouseId = signal('');
@@ -771,13 +780,21 @@ export class StockAdvancesPage {
       .pipe(map((page) => (page.content ?? []).map(toProductLookup)));
   };
 
-  protected warehouseOptions = computed<UiFieldOption[]>(() =>
-    this.warehouses().map((w) => ({ value: String(w.warehouseId), label: w.name })),
-  );
-  protected filterWarehouseOptions = computed<UiFieldOption[]>(() => [
-    { value: '', label: 'Todos' },
-    ...this.warehouses().map((w) => ({ value: String(w.warehouseId), label: w.name })),
-  ]);
+  protected formWarehouseIdNum = computed(() => {
+    const v = Number(this.formWarehouseId());
+    return v > 0 ? v : null;
+  });
+  protected onFormWarehouseIdChange(id: number | null) {
+    this.formWarehouseId.set(id != null ? String(id) : '');
+  }
+
+  protected filterWarehouseIdNum = computed(() => {
+    const v = Number(this.filterWarehouseId());
+    return v > 0 ? v : null;
+  });
+  protected onFilterWarehouseIdChange(id: number | null) {
+    this.filterWarehouseId.set(id != null ? String(id) : '');
+  }
 
   private filtersEffect = effect(() => {
     this.showMode();
@@ -799,17 +816,6 @@ export class StockAdvancesPage {
       this.filterProduct.set({ id: Number(qpProductId), name: `Producto #${qpProductId}` });
       this.showMode.set('false'); // viene a revisar un producto puntual: no ocultar lo ya cerrado
     }
-
-    this.inventorySvc.warehouses().subscribe({
-      next: (list) => {
-        this.warehouses.set(list);
-        this.loadingWarehouses.set(false);
-        this.formWarehouseId.set(
-          qpWarehouse || (list.length > 0 ? String(list[0].warehouseId) : ''),
-        );
-      },
-      error: () => this.loadingWarehouses.set(false),
-    });
   }
 
   protected countText(): string {
@@ -916,27 +922,29 @@ export class StockAdvancesPage {
   private handleCsvFile(file: File) {
     this.csvError.set('');
     const warehouseId = Number(this.formWarehouseId());
-    const warehouseName = this.warehouses().find((w) => w.warehouseId === warehouseId)?.name ?? '';
     if (!warehouseId) return;
-    file.text().then((text) => {
-      const parsed = parseAdvancesCsv(text);
-      if (parsed.error) {
-        this.csvError.set(parsed.error);
-        return;
-      }
-      this.dialog
-        .open<
-          ImportAdvancesCsvDialog,
-          ImportAdvancesCsvDialogData,
-          ImportAdvancesCsvDialogResult | null
-        >(ImportAdvancesCsvDialog, {
-          data: { warehouseId, warehouseName, fileName: file.name, parsed },
-          width: '860px',
-        })
-        .afterClosed()
-        .subscribe((result) => {
-          if (result) this.mergeImportedLines(result.lines, warehouseId);
-        });
+    this.catalogSvc.warehouses().subscribe((list) => {
+      const warehouseName = list.find((w) => w.warehouseId === warehouseId)?.name ?? '';
+      file.text().then((text) => {
+        const parsed = parseAdvancesCsv(text);
+        if (parsed.error) {
+          this.csvError.set(parsed.error);
+          return;
+        }
+        this.dialog
+          .open<
+            ImportAdvancesCsvDialog,
+            ImportAdvancesCsvDialogData,
+            ImportAdvancesCsvDialogResult | null
+          >(ImportAdvancesCsvDialog, {
+            data: { warehouseId, warehouseName, fileName: file.name, parsed },
+            width: '860px',
+          })
+          .afterClosed()
+          .subscribe((result) => {
+            if (result) this.mergeImportedLines(result.lines, warehouseId);
+          });
+      });
     });
   }
 

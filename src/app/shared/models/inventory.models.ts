@@ -7,6 +7,10 @@ export interface WarehouseView {
   branchId: number;
   code: string;
   name: string;
+  /** NUEVO (doc 82, sección 1) — sucursal del almacén. */
+  branchName: string;
+  /** NUEVO (doc 82, sección 1) — almacén de venta de su sucursal (el que usan pedidos, reparto, validación, negativos y recorte). */
+  isDefault: boolean;
 }
 
 /**

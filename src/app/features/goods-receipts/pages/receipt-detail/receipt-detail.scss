@@ -167,8 +167,19 @@ h1 {
 }
 .grd-context-error {
   margin: 0 0 12px;
+  padding: 10px 14px;
   font-size: 13px;
-  color: var(--st-mismatch);
+  line-height: 1.5;
+}
+.grd-context-error-danger {
+  border-left: 3px solid var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
+  color: var(--ink);
+}
+.grd-context-error-warning {
+  border-left: 3px solid var(--status-warn);
+  background: color-mix(in srgb, var(--status-warn) 10%, transparent);
+  color: var(--ink);
 }
 
 .grd-table-wrap {

@@ -197,16 +197,16 @@
 
       <div class="grd-block">
         <div class="grd-block-title">Entrega</div>
+        <div class="grd-ro-row">
+          <span
+            >Almacén
+            <span
+              uiInfoTip="El almacén lo elige almacén al tomar la foto. Si es incorrecto, anule la entrega y vuelva a cargarla"
+            ></span
+          ></span>
+          <strong>{{ d.warehouseName }}</strong>
+        </div>
         @if (canEdit()) {
-          <div class="grd-field">
-            <ui-field
-              label="Almacén"
-              type="select"
-              [value]="warehouseId()"
-              (valueChange)="onWarehouseId($event)"
-              [options]="warehouseOptions()"
-            />
-          </div>
           <div class="grd-radio-group">
             <span class="grd-radio-label">Viene en</span>
             <label class="grd-radio-option">
@@ -235,9 +235,6 @@
           />
         } @else {
           <div class="grd-ro-row">
-            <span>Almacén</span><strong>{{ d.warehouseName }}</strong>
-          </div>
-          <div class="grd-ro-row">
             <span>Viene en</span
             ><strong>{{ d.unitType === 'PACKAGE' ? 'Paquetes' : 'Unidades' }}</strong>
           </div>
@@ -263,8 +260,12 @@
       }
     </div>
 
-    @if (contextError() && canEdit()) {
-      <p class="grd-context-error">{{ contextError() }}</p>
+    @if (contextBlockingError()) {
+      <div class="grd-context-error grd-context-error-danger">{{ contextBlockingError() }}</div>
+    } @else if (contextBrandWarning()) {
+      <div class="grd-context-error grd-context-error-warning">
+        {{ contextBrandWarning() }} Pida que se habilite la marca en el almacén o anule la entrega.
+      </div>
     }
 
     <div class="grd-table-wrap">
@@ -344,7 +345,7 @@
                 } @else if (lineProductState(l) === 'accepted') {
                   <span class="grd-accepted-badge">Aceptado</span>
                 }
-                @if (canEdit()) {
+                @if (canPickProducts()) {
                   <div class="grd-cell-field">
                     <ui-typeahead
                       label="Producto"

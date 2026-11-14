@@ -6,15 +6,14 @@ import { UiField, UiFieldOption } from '../../../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../../../shared/ui/empty/empty';
 import { UiInfoTip } from '../../../../shared/ui/info-tip/info-tip';
+import { UiWarehouseSelect } from '../../../../shared/ui/warehouse-select/warehouse-select';
 import { GoodsReceiptsApi } from '../../data-access/goods-receipts.api';
-import { CatalogLookupService } from '../../../catalog/catalog-lookup';
 import { LookupService, toUiLookup } from '../../../promos/lookup';
 import {
   ReceiptBrandOption,
   ReceiptListFilters,
   ReceiptSummary,
 } from '../../domain/goods-receipt.models';
-import { WarehouseView } from '../../../../shared/models/inventory.models';
 import {
   BADGE_TONE_VAR,
   STATUS_OPTIONS,
@@ -42,7 +41,7 @@ function todayIso(): string {
  */
 @Component({
   selector: 'app-receipt-list',
-  imports: [UiButton, UiField, UiTypeahead, UiEmpty, UiInfoTip],
+  imports: [UiButton, UiField, UiWarehouseSelect, UiTypeahead, UiEmpty, UiInfoTip],
   template: `
     <section class="rl-page">
       <div class="rl-head">
@@ -80,11 +79,12 @@ function todayIso(): string {
           [search]="userSearch"
           [(selected)]="createdBy"
         />
-        <ui-field
-          label="Almacén"
-          type="select"
-          [(value)]="warehouseId"
-          [options]="warehouseOptions()"
+        <ui-warehouse-select
+          mode="all"
+          [allowAll]="true"
+          storageKey="receipt-list"
+          [value]="warehouseIdNum()"
+          (valueChange)="onWarehouseIdChange($event)"
         />
         <ui-field label="ERP" type="select" [(value)]="erpTaken" [options]="erpOptions" />
         <ui-field label="Desde" type="date" [(value)]="fromDate" />
@@ -115,6 +115,7 @@ function todayIso(): string {
               <th>N.°</th>
               <th>Fecha</th>
               <th>Marca</th>
+              <th>Almacén</th>
               <th>Documento</th>
               <th>Proveedor</th>
               <th>Líneas</th>
@@ -137,6 +138,7 @@ function todayIso(): string {
                   {{ shortDate(r.createdAt) }}
                 </td>
                 <td>{{ r.brandName }}</td>
+                <td class="rl-muted">{{ r.warehouseName }}</td>
                 <td [class.rl-muted]="!r.documentTypeName && !r.documentNumber">
                   {{ documentSummaryText(r.documentTypeName, r.documentNumber) }}
                 </td>
@@ -308,7 +310,6 @@ function todayIso(): string {
 })
 export class ReceiptListPage {
   private api = inject(GoodsReceiptsApi);
-  private catalogSvc = inject(CatalogLookupService);
   private lookupSvc = inject(LookupService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -335,16 +336,18 @@ export class ReceiptListPage {
   protected page = signal(Number(this.qp.get('page') ?? 0));
 
   protected brands = signal<ReceiptBrandOption[]>([]);
-  protected warehouses = signal<WarehouseView[]>([]);
 
   protected brandOptions = computed<UiFieldOption[]>(() => [
     { value: '', label: 'Todas' },
     ...this.brands().map((b) => ({ value: String(b.brandId), label: b.brandName })),
   ]);
-  protected warehouseOptions = computed<UiFieldOption[]>(() => [
-    { value: '', label: 'Todos' },
-    ...this.warehouses().map((w) => ({ value: String(w.warehouseId), label: w.name })),
-  ]);
+  protected warehouseIdNum = computed(() => {
+    const v = Number(this.warehouseId());
+    return v > 0 ? v : null;
+  });
+  protected onWarehouseIdChange(id: number | null) {
+    this.warehouseId.set(id != null ? String(id) : '');
+  }
 
   protected hasFilters = computed(
     () =>
@@ -408,7 +411,6 @@ export class ReceiptListPage {
   });
 
   constructor() {
-    this.catalogSvc.warehouses().subscribe((list) => this.warehouses.set(list));
     this.api.brandOptions().subscribe((list) => this.brands.set(list));
 
     const cbId = this.qp.get('createdBy');

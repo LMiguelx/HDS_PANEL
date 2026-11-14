@@ -67,9 +67,17 @@ export class GoodsReceiptsApi {
     return this.http.post<ReceiptDetail>(`${this.base}/${receiptId}/cancel`, {});
   }
 
-  /** Productos de la marca para el selector de líneas — sección 7.5. */
-  brandContext(brandId: number) {
-    return this.http.get<BrandReceiptContext>(`${this.base}/brands/${brandId}/context`);
+  /**
+   * Productos de la marca para el selector de líneas — sección 7.5. Con
+   * `warehouseId` (doc 82, sección 5.2), solo los productos de la marca
+   * asignados a ese almacén — así se usa siempre desde el detalle de una
+   * entrega. Sin `warehouseId`, toda la marca: así lo usa Configuración por
+   * marca → Equivalencias, que no es de un almacén.
+   */
+  brandContext(brandId: number, warehouseId?: number) {
+    return this.http.get<BrandReceiptContext>(`${this.base}/brands/${brandId}/context`, {
+      params: warehouseId ? { warehouseId: String(warehouseId) } : {},
+    });
   }
 
   // ─────────────────────── Configuración por marca — sección 8 ───────────────────────

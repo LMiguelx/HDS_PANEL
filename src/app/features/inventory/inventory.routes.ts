@@ -38,4 +38,12 @@ export const INVENTORY_ROUTES: Routes = [
     path: 'kardex/:productId',
     loadComponent: () => import('./kardex').then((m) => m.KardexPage),
   },
+  {
+    path: 'conteo',
+    loadComponent: () => import('./stock-count-board').then((m) => m.StockCountBoardPage),
+  },
+  {
+    path: 'conteo/:stockCountId',
+    loadComponent: () => import('./stock-count-detail').then((m) => m.StockCountDetailPage),
+  },
 ];

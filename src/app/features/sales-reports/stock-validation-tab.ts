@@ -1,7 +1,8 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
-import { UiField, UiFieldOption } from '../../shared/ui/field/field';
+import { UiField } from '../../shared/ui/field/field';
+import { UiWarehouseSelect } from '../../shared/ui/warehouse-select/warehouse-select';
 import { UiToggle } from '../../shared/ui/toggle/toggle';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiInfoTip } from '../../shared/ui/info-tip/info-tip';
@@ -12,9 +13,6 @@ import { TableExporter } from '../../shared/utils/export/table-exporter.service'
 import { ExportFormat } from '../../shared/utils/export/export.models';
 import { SalesReportModuleTabs } from './ui/module-tabs';
 import { SalesReportAdminService } from './sales-report-admin';
-import { CatalogLookupService } from '../catalog/catalog-lookup';
-import { CounterSessionStore } from '../orders/counter-session-store';
-import { WarehouseView } from '../../shared/models/inventory.models';
 import {
   NegativeStockReport,
   StockValidationReport,
@@ -84,7 +82,16 @@ const CARDS: CardDef[] = [
  */
 @Component({
   selector: 'app-stock-validation-tab',
-  imports: [UiButton, UiField, UiToggle, UiEmpty, UiInfoTip, UiExportMenu, SalesReportModuleTabs],
+  imports: [
+    UiButton,
+    UiField,
+    UiWarehouseSelect,
+    UiToggle,
+    UiEmpty,
+    UiInfoTip,
+    UiExportMenu,
+    SalesReportModuleTabs,
+  ],
   template: `
     <app-sales-report-module-tabs />
     <section class="svt-page">
@@ -152,12 +159,11 @@ const CARDS: CardDef[] = [
         }
 
         <div class="svt-toolbar">
-          <ui-field
-            label="Almacén"
-            type="select"
-            [(value)]="warehouseId"
-            [options]="warehouseOptions()"
-            [disabled]="loadingWarehouses()"
+          <ui-warehouse-select
+            mode="sale"
+            storageKey="stock-validation"
+            [value]="warehouseIdNum()"
+            (valueChange)="onWarehouseIdChange($event)"
           />
           <ui-toggle label="Solo con problema" [(checked)]="onlyIssues" class="svt-toggle" />
         </div>
@@ -298,12 +304,11 @@ const CARDS: CardDef[] = [
         }
 
         <div class="svt-toolbar">
-          <ui-field
-            label="Almacén"
-            type="select"
-            [(value)]="warehouseId"
-            [options]="warehouseOptions()"
-            [disabled]="loadingWarehouses()"
+          <ui-warehouse-select
+            mode="sale"
+            storageKey="stock-validation"
+            [value]="warehouseIdNum()"
+            (valueChange)="onWarehouseIdChange($event)"
           />
           <ui-field label="Día de los pedidos" type="date" [(value)]="negDate" />
         </div>
@@ -660,13 +665,11 @@ const CARDS: CardDef[] = [
 })
 export class StockValidationTab {
   private reportSvc = inject(SalesReportAdminService);
-  private catalogSvc = inject(CatalogLookupService);
   private dialog = inject(UiDialogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private exporter = inject(TableExporter);
   private toast = inject(ToastService);
-  protected counterSession = inject(CounterSessionStore);
 
   protected quantityText = quantityText;
   protected dateTimeText = dateTimeText;
@@ -677,9 +680,7 @@ export class StockValidationTab {
   protected cards = CARDS;
   protected toneVar = (row: StockValidationRow) => BADGE_TONE_VAR[statusTone(row)];
 
-  protected warehouses = signal<WarehouseView[]>([]);
-  protected loadingWarehouses = signal(true);
-  protected warehouseId = signal('');
+  protected warehouseId = signal(this.route.snapshot.queryParamMap.get('warehouseId') || '');
   protected onlyIssues = signal(true);
   protected activeCard = signal<CardKey | null>(null);
 
@@ -698,10 +699,13 @@ export class StockValidationTab {
   protected negErrorDetail = signal('');
   protected exportingNeg = signal(false);
 
-  protected warehouseOptions = computed<UiFieldOption[]>(() => [
-    { value: '', label: this.loadingWarehouses() ? 'Cargando…' : 'Selecciona un almacén' },
-    ...this.warehouses().map((w) => ({ value: String(w.warehouseId), label: w.name })),
-  ]);
+  protected warehouseIdNum = computed(() => {
+    const v = Number(this.warehouseId());
+    return v > 0 ? v : null;
+  });
+  protected onWarehouseIdChange(id: number | null) {
+    this.warehouseId.set(id != null ? String(id) : '');
+  }
 
   protected subtitleText = computed(() => {
     const r = this.report();
@@ -740,26 +744,6 @@ export class StockValidationTab {
       if (tab === 'negativos' && this.warehouseId()) this.loadNegatives();
     });
   });
-
-  constructor() {
-    this.counterSession.ensureLoaded();
-    const qpWarehouseId = this.route.snapshot.queryParamMap.get('warehouseId');
-    this.catalogSvc.warehouses().subscribe({
-      next: (list) => {
-        this.warehouses.set(list);
-        this.loadingWarehouses.set(false);
-        if (qpWarehouseId && list.some((w) => String(w.warehouseId) === qpWarehouseId)) {
-          this.warehouseId.set(qpWarehouseId);
-          return;
-        }
-        const ownId = this.counterSession.warehouseId();
-        if (ownId && list.some((w) => w.warehouseId === ownId)) {
-          this.warehouseId.set(String(ownId));
-        }
-      },
-      error: () => this.loadingWarehouses.set(false),
-    });
-  }
 
   protected toggleCard(key: CardKey) {
     this.activeCard.set(this.activeCard() === key ? null : key);

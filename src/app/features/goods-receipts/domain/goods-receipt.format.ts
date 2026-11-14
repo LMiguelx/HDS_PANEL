@@ -108,6 +108,8 @@ const ISSUE_FIELD: Record<string, IssueField> = {
   NO_LINES: 'lines',
   PRODUCT_NOT_MATCHED: 'productCode',
   PRODUCT_NOT_IN_BRAND: 'productCode',
+  // NUEVO (doc 82, sección 5.3) — producto elegido a mano que el almacén no tiene.
+  PRODUCT_NOT_IN_WAREHOUSE: 'productCode',
   PRODUCT_DUPLICATED: 'productCode',
   // doc 71, sección 1.3 — sugerencia de producto sin revisar.
   SUGGESTION_NOT_ACCEPTED: 'productCode',

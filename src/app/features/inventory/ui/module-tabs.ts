@@ -29,6 +29,9 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
         *hasPermission="['stock.advance', 'report.view']"
         >Cuadre con el ERP</a
       >
+      <a routerLink="/inventario/conteo" routerLinkActive="active" *hasPermission="'report.view'"
+        >Conteo de inventario</a
+      >
     </nav>
   `,
   styles: [
