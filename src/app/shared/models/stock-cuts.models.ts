@@ -5,12 +5,17 @@ import { BillingValidationResult } from './billing-validation.models';
 export type StockCutMode = 'AUTO' | 'SELECTED';
 export type StockCutAction = 'REMOVE_LINE' | 'CANCEL_ORDER';
 
-/** Vista previa. `orderIds` solo con `mode = 'SELECTED'` (máx. 200); con 'AUTO' se ignora. */
+/**
+ * Vista previa. `orderIds` solo con `mode = 'SELECTED'` (máx. 200); con
+ * 'AUTO' se ignora. `date` (`yyyy-MM-dd`) — doc 86: la fecha que tiene
+ * seleccionada la pantalla de Validación; sin ella usa hoy.
+ */
 export interface StockCutPreviewCommand {
   warehouseId: number;
   productId: number;
   mode: StockCutMode;
   orderIds?: number[];
+  date?: string;
 }
 
 /** Un pedido abierto de hoy que lleva el producto como venta. */
@@ -33,6 +38,8 @@ export interface StockCutCandidate {
 }
 
 export interface StockCutPreview {
+  /** Día que se usó para la cuenta (`yyyy-MM-dd`) — doc 86. */
+  date: string;
   warehouseId: number;
   warehouseName: string;
   productId: number;
@@ -63,6 +70,8 @@ export interface StockCutItem {
 export interface ApplyStockCutsCommand {
   warehouseId: number;
   productId: number;
+  /** La misma `date` del `preview` que se está confirmando — doc 86. */
+  date?: string;
   items: StockCutItem[]; // 1 a 100, en el orden en que se muestran
 }
 

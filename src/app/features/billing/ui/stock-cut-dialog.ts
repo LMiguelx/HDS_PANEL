@@ -19,7 +19,7 @@ import {
   StockCutResultCode,
 } from '../../../shared/models/stock-cuts.models';
 import { BillingValidationResult } from '../../../shared/models/billing-validation.models';
-import { timeText } from '../../assignments/assignment-format';
+import { dateText, timeText } from '../../assignments/assignment-format';
 import { formatSoles } from '../../../shared/pipes/money';
 import { erpUploadScreenText } from '../../sales-reports/stock-validation-format';
 
@@ -37,6 +37,8 @@ const RESULT_LABEL: Record<StockCutResultCode, string> = {
 export interface StockCutDialogData {
   warehouseId: number;
   productId: number;
+  /** Fecha de la validación en pantalla (`yyyy-MM-dd`) — doc 86: se manda siempre, igual en preview y en apply. */
+  date: string;
   /** Se llama cada vez que se aplica un recorte con éxito — puede pasar más de una vez si se usa "Volver a revisar" (doc 78, sección 4.6). */
   onApplied: (result: ApplyStockCutsResult) => void;
 }
@@ -46,11 +48,7 @@ export interface StockCutDialogData {
   selector: 'app-stock-cut-dialog',
   imports: [UiButton, UiModal, UiCheckbox, UiEmpty],
   template: `
-    <ui-modal
-      [title]="'Recortar ' + (preview()?.productCode ?? '') + ' ' + (preview()?.productName ?? '')"
-      [wide]="true"
-      (close)="ref.close()"
-    >
+    <ui-modal [title]="dialogTitle()" [wide]="true" (close)="ref.close()">
       @if (previewLoading() && !preview()) {
         <div class="scd-skeleton" role="status" aria-label="Cargando"></div>
       } @else if (previewError()) {
@@ -435,6 +433,13 @@ export class StockCutDialog {
       0,
   );
 
+  /** "Recortar 1904 AJINOMOTO... · 14/11/2026" — doc 86, sección 3. */
+  protected dialogTitle = computed(() => {
+    const p = this.preview();
+    if (!p) return 'Recortar';
+    return `Recortar ${p.productCode} ${p.productName} · ${dateText(p.date)}`;
+  });
+
   constructor() {
     this.selectionChanged$.pipe(debounceTime(400), takeUntilDestroyed()).subscribe(() => {
       this.runPreview();
@@ -451,6 +456,7 @@ export class StockCutDialog {
         productId: this.data.productId,
         mode: this.mode(),
         orderIds: this.mode() === 'SELECTED' ? Array.from(this.selectedIds()) : undefined,
+        date: this.data.date,
       })
       .subscribe({
         next: (p) => {
@@ -564,7 +570,12 @@ export class StockCutDialog {
     }
     const chunk = items.slice(index, index + APPLY_CHUNK);
     this.svc
-      .apply({ warehouseId: this.data.warehouseId, productId: p.productId, items: chunk })
+      .apply({
+        warehouseId: this.data.warehouseId,
+        productId: p.productId,
+        date: p.date,
+        items: chunk,
+      })
       .subscribe({
         next: (result) => {
           const merged: ApplyStockCutsResult = {

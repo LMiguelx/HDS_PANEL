@@ -2243,12 +2243,14 @@ export class BillingPendingTab {
   /** Recorte directo de un producto — doc 78, sección 4.4.2 (desde una fila de Editar cantidades). */
   protected openStockCut(productId: number) {
     const warehouseId = this.counterSession.warehouseId();
-    if (!warehouseId) return;
+    const date = this.validationDate();
+    if (!warehouseId || !date) return;
     this.dialog.open(StockCutDialog, {
       width: 'min(960px, 94vw)',
       data: {
         warehouseId,
         productId,
+        date,
         onApplied: (result: ApplyStockCutsResult) => this.handleStockCutApplied(result),
       },
     });
