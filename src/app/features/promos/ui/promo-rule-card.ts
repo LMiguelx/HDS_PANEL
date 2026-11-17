@@ -1,6 +1,10 @@
 import { Component, computed, input } from '@angular/core';
-import { ConditionView, TierView } from '../promo.types';
-import { conditionsSummaryText, thresholdText } from '../domain/promo-texts';
+import { ConditionGroupView, ConditionView, TierView } from '../promo.types';
+import {
+  conditionsSummaryText,
+  subgroupsGainJoinedText,
+  thresholdText,
+} from '../domain/promo-texts';
 import { quantityText } from '../../sales-reports/sales-report-format';
 import { formatSoles } from '../../../shared/pipes/money';
 
@@ -9,6 +13,7 @@ export interface PromoRuleCardSource {
   promoType?: string | null;
   measureType?: string | null;
   conditions?: ConditionView[] | null;
+  conditionGroups?: ConditionGroupView[] | null; // doc 90
   tiers?: TierView[] | null;
   salesChannelName?: string | null;
   maxApplicationsPerCustomer?: number | null;
@@ -141,6 +146,8 @@ export class PromoRuleCard {
   }
 
   protected scopeText(): string {
+    const groups = this.source().conditionGroups ?? [];
+    if (groups.length > 0) return subgroupsGainJoinedText(groups);
     const conditions = this.source().conditions ?? [];
     if (this.source().promoType === 'CUSTOMER_LIST' || conditions.length === 0) return '';
     if (conditions.length === 1) return conditionsSummaryText(conditions);

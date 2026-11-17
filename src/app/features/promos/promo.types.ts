@@ -16,7 +16,24 @@ export type PromoPageResponse = Omit<
 export type UpdatePromoCommand = Omit<components['schemas']['UpdatePromoCommand'], 'conditions'> & {
   combineTiers: boolean; // NUEVO — doc 57
   conditions?: ConditionCommand[];
+  conditionGroups?: ConditionGroupCommand[]; // NUEVO — doc 90. null o [] = sin subgrupos
 };
+
+/** Subgrupo de compra — doc 90, sección 2.1: "Doffi 1 kg" + "Doffi 4 kg". */
+export interface ConditionGroupCommand {
+  groupNumber: number; // obligatorio, ≥ 1, único en la promoción
+  name?: string | null; // opcional, máx. 60
+  minQuantity: number; // obligatorio, > 0, en unidades
+}
+
+/** `text` llega listo del backend — usarlo tal cual (doc 90, sección 2.3). */
+export interface ConditionGroupView {
+  groupNumber: number;
+  name: string | null;
+  minQuantity: number;
+  lineCount: number;
+  text: string; // "Doffi 1 kg: al menos 6 unidades"
+}
 
 /**
  * `featured` (destacada en la app del vendedor) — doc 49, secciones 5.1 y
@@ -43,6 +60,7 @@ export type CreatePromoCommand = Omit<components['schemas']['CreatePromoCommand'
   featured?: boolean;
   combineTiers?: boolean; // NUEVO — doc 57. Si no se envía: false
   conditions?: ConditionCommand[];
+  conditionGroups?: ConditionGroupCommand[]; // NUEVO — doc 90. null o [] = sin subgrupos
 };
 
 /**
@@ -64,6 +82,7 @@ export type PromoDetail = Omit<components['schemas']['PromoDetail'], 'conditions
   featured: boolean; // doc 49, sección 6.1 — destacada en la app del vendedor
   combineTiers: boolean; // doc 57, sección 4.2 — la promoción suma tramos
   conditions?: ConditionView[];
+  conditionGroups?: ConditionGroupView[]; // doc 90 — [] si no usa subgrupos
 };
 
 /** Edición básica — doc 44, sección 7.3: PATCH /promos/{id}/basics, siempre permitido. */
@@ -81,6 +100,7 @@ export interface UpdatePromoBasicsCommand {
 export type ConditionCommand = components['schemas']['ConditionCommand'] & {
   required?: boolean; // NUEVO. Si no se envía: false
   minQuantity?: number | null; // NUEVO — obligatorio si required = true, > 0; si no, enviar null
+  groupNumber?: number | null; // NUEVO — doc 90: subgrupo de la línea; null = sin subgrupos
 };
 
 /** `required`/`minQuantity`/`requiredText` — doc 57, sección 4.2. `requiredText` llega listo. */
@@ -88,6 +108,8 @@ export type ConditionView = components['schemas']['ConditionView'] & {
   required: boolean; // NUEVO
   minQuantity: number | null; // NUEVO — null si no es obligatoria
   requiredText: string | null; // NUEVO — "Obligatorio: al menos N unidad(es)"; null si no es obligatoria
+  groupNumber?: number | null; // NUEVO — doc 90: subgrupo de la línea; null si no usa
+  groupName?: string | null; // NUEVO — doc 90: nombre del subgrupo; null si no tiene
 };
 export type TierCommand = components['schemas']['TierCommand'];
 export type TierView = components['schemas']['TierView'];

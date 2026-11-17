@@ -204,12 +204,19 @@ import { quantityText } from '../sales-reports/sales-report-format';
                         }}</ui-badge
                       >
                     }
+                    @if (p.conditionGroups?.length) {
+                      <ui-badge tone="neutral">Por subgrupos</ui-badge>
+                    }
                   </h3>
                   @if (showSumNote(p)) {
                     <span class="pd-card-note">+ Las cantidades se suman entre sí</span>
                   }
                 </div>
-                <app-promo-conditions-table [conditions]="p.conditions" [promoType]="p.promoType" />
+                <app-promo-conditions-table
+                  [conditions]="p.conditions"
+                  [conditionGroups]="p.conditionGroups"
+                  [promoType]="p.promoType"
+                />
               </ui-card>
 
               <ui-card>
@@ -625,6 +632,7 @@ export class PromoDetailPage {
   }
 
   protected showSumNote(p: PromoDetail): boolean {
+    if (p.conditionGroups?.length) return false; // doc 90: cada subgrupo se suma por separado
     const conditions = p.conditions ?? [];
     return conditions.length > 1 || conditions.some((c) => c.scope !== 'PRODUCT');
   }

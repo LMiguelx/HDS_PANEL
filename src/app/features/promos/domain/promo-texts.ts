@@ -254,6 +254,43 @@ export function tierPhraseText(opts: {
   return `Si compra ${umbral} de ${qc}, recibe ${premios}${alcance}${requiredSuffix ? `, ${requiredSuffix}` : ''}.`;
 }
 
+// ─── Subgrupos de compra — doc 90 ───────────────────────────────────────
+
+type ConditionGroupLike = { groupNumber: number; name?: string | null; minQuantity: number };
+
+/** "Doffi 1 kg" · "Subgrupo 2" si no tiene nombre — doc 90, sección 2.3. */
+export function subgroupName(g: { groupNumber: number; name?: string | null }): string {
+  return g.name?.trim() || `Subgrupo ${g.groupNumber}`;
+}
+
+/** "6 de Doffi 1 kg" — una línea del recuadro "Para ganar" (sección 3.3). */
+export function subgroupGainLineText(g: ConditionGroupLike): string {
+  return `${quantityText(g.minQuantity)} de ${subgroupName(g)}`;
+}
+
+/** "6 de Doffi 1 kg + 6 de Doffi 4 kg" — unión de todos los subgrupos. */
+export function subgroupsGainJoinedText(groups: ConditionGroupLike[]): string {
+  return groups.map((g) => subgroupGainLineText(g)).join(' + ');
+}
+
+/** Suma de los mínimos de cada subgrupo — el "desde" que calcula el backend. */
+export function subgroupsThresholdSum(groups: ConditionGroupLike[]): number {
+  return groups.reduce((acc, g) => acc + (g.minQuantity || 0), 0);
+}
+
+/**
+ * Frase del tramo con subgrupos — doc 90, sección 4: "Lleva 6 de Doffi 1 kg
+ * + 6 de Doffi 4 kg, recibe {premios}." Mismo patrón que `tierPhraseText`,
+ * pero el "qué cuenta" son los subgrupos en vez de la lista de productos.
+ */
+export function subgroupsTierPhraseText(opts: {
+  groups: ConditionGroupLike[];
+  benefits: BenefitLike[];
+}): string {
+  const premios = joinWithY(opts.benefits.map((b) => benefitText(b))) || 'premios por definir';
+  return `Lleva ${subgroupsGainJoinedText(opts.groups)}, recibe ${premios}.`;
+}
+
 /** Una fila: su propio texto. Varias: "Surtido de N productos" (frases cortas, p. ej. el resumen del asistente). */
 export function conditionsSummaryText(
   conditions: {

@@ -10,6 +10,7 @@ import { UiCheckbox } from '../../shared/ui/checkbox/checkbox';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiCard } from '../../shared/ui/card/card';
 import { UiBadge } from '../../shared/ui/badge/badge';
+import { UiMenu } from '../../shared/ui/menu/menu';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { UiWizardSteps, UiWizardStep } from './ui/wizard-steps/wizard-steps';
@@ -20,6 +21,9 @@ import { PromoTargetsBlock } from './ui/promo-targets-block';
 import { PromoService } from './promo';
 import { LookupService } from './lookup';
 import {
+  ConditionCommand,
+  ConditionGroupCommand,
+  ConditionGroupView,
   ConditionView,
   CreatePromoCommand,
   CustomerTargetView,
@@ -40,6 +44,11 @@ import {
   benefitText,
   measureModeText,
   requiredConditionText,
+  subgroupGainLineText,
+  subgroupName,
+  subgroupsGainJoinedText,
+  subgroupsThresholdSum,
+  subgroupsTierPhraseText,
   tierPhraseText,
   whatCountsText,
 } from './domain/promo-texts';
@@ -62,6 +71,16 @@ interface ConditionDraft {
   code?: string; // doc 44, sección 8.3 — solo tiene sentido para PRODUCT
   required?: boolean; // doc 57, sección 5.1 — "Obligatorio"
   minQuantity?: number; // doc 57, sección 5.1 — en unidades, > 0 si required
+  /** Doc 90 — referencia estable al subgrupo (`ConditionGroupDraft.key`); undefined = sin subgrupos. */
+  groupKey?: number;
+}
+
+/** Subgrupo de compra — doc 90, sección 1.2: mínimo propio, nombre opcional. `key` es estable; el
+ * número 1..n que ve el usuario y el que se envía al guardar sale de la posición en el arreglo. */
+interface ConditionGroupDraft {
+  key: number;
+  name: string;
+  minQuantity: number | null;
 }
 
 interface BenefitDraft {
@@ -106,6 +125,12 @@ interface AudienceDraft {
 let benefitKeySeq = 0;
 let tierKeySeq = 0;
 let groupKeySeq = 0;
+let subgroupKeySeq = 0;
+
+/** Subgrupo vacío recién creado — doc 90, sección 3.3: mínimo sin valor. */
+function emptySubgroup(): ConditionGroupDraft {
+  return { key: subgroupKeySeq++, name: '', minQuantity: null };
+}
 
 function slugCode(name: string): string {
   const base = name
@@ -157,6 +182,7 @@ function emptyTier(tierNumber: number): TierDraft {
     HasPermissionDirective,
     UiCard,
     UiBadge,
+    UiMenu,
     PromoConditionsTable,
     PromoTiersTable,
     PromoConfigList,
@@ -270,6 +296,9 @@ function emptyTier(tierNumber: number): TierDraft {
             </div>
           }
           @case (1) {
+            @if (errorSteps().includes(1) && saveError()) {
+              <div class="wizard-save-error wizard-save-error-top">{{ saveError() }}</div>
+            }
             <div class="wizard-q-block">
               <h3 class="wizard-q-title">¿La promoción exige una compra?</h3>
               <p class="wizard-lede">El tipo no se puede cambiar después de crear la promoción.</p>
@@ -319,7 +348,7 @@ function emptyTier(tierNumber: number): TierDraft {
                     type="button"
                     class="wizard-mode-card"
                     [class.selected]="mode() === 'ambito'"
-                    (click)="mode.set('ambito')"
+                    (click)="setMode('ambito')"
                   >
                     <span class="wizard-mode-title">Una marca o familia completa</span>
                     <span class="wizard-mode-body"
@@ -330,7 +359,7 @@ function emptyTier(tierNumber: number): TierDraft {
                     type="button"
                     class="wizard-mode-card"
                     [class.selected]="mode() === 'surtido'"
-                    (click)="mode.set('surtido')"
+                    (click)="setMode('surtido')"
                   >
                     <span class="wizard-mode-title">Productos específicos</span>
                     <span class="wizard-mode-body"
@@ -340,88 +369,297 @@ function emptyTier(tierNumber: number): TierDraft {
                 </div>
 
                 @if (mode() === 'surtido') {
-                  <div class="wizard-2col-wide">
-                    <div>
-                      <ui-typeahead
-                        label="Agregar producto, familia o marca — busca escribiendo el nombre"
-                        placeholder="Ej. Inca Kola"
-                        [clearOnPick]="true"
-                        [search]="scopeSearch"
-                        (picked)="addCondition($event)"
-                      />
-                      <div class="wizard-condition-block">
-                        <div class="wizard-condition-eyebrow">
-                          Estas cantidades se suman entre sí
-                        </div>
-                        <div class="wizard-condition-list">
-                          @for (c of conditions(); track c.name + c.scope) {
-                            <div class="wizard-condition-row">
-                              <div>
-                                <div class="wizard-condition-name">{{ c.name }}</div>
-                                <div class="wizard-condition-meta">{{ scopeLabel(c.scope) }}</div>
-                              </div>
-                              <div class="wizard-condition-required">
-                                <ui-checkbox
-                                  label="Obligatorio"
-                                  [checked]="!!c.required"
-                                  (checkedChange)="setRequired(c, $event)"
-                                />
-                                @if (c.required) {
-                                  <ui-field
-                                    label="Cantidad mínima"
-                                    type="number"
-                                    [hasSuffix]="true"
-                                    [value]="String(c.minQuantity ?? 1)"
-                                    (valueChange)="setMinQuantity(c, $event)"
-                                    [error]="requiredFieldError(c)"
+                  <div class="wizard-q-block">
+                    <h4 class="wizard-sum-mode-title">¿Cómo se suman los productos?</h4>
+                    <div class="wizard-mode-cards">
+                      <button
+                        type="button"
+                        class="wizard-mode-card"
+                        [class.selected]="!subgroupsMode()"
+                        (click)="setSubgroupsMode(false)"
+                      >
+                        <span class="wizard-mode-title">Todo junto</span>
+                        <span class="wizard-mode-body"
+                          >Todos los productos se suman para llegar al tramo.</span
+                        >
+                      </button>
+                      <button
+                        type="button"
+                        class="wizard-mode-card"
+                        [class.selected]="subgroupsMode()"
+                        (click)="setSubgroupsMode(true)"
+                      >
+                        <span class="wizard-mode-title"
+                          >Por subgrupos <ui-badge tone="accent">NUEVO</ui-badge></span
+                        >
+                        <span class="wizard-mode-body"
+                          >Cada subgrupo debe llegar a su mínimo. Ej.: 6 de 1 kg + 6 de 4 kg.</span
+                        >
+                      </button>
+                    </div>
+                  </div>
+
+                  @if (!subgroupsMode()) {
+                    <div class="wizard-2col-wide">
+                      <div>
+                        <ui-typeahead
+                          label="Agregar producto, familia o marca — busca escribiendo el nombre"
+                          placeholder="Ej. Inca Kola"
+                          [clearOnPick]="true"
+                          [search]="scopeSearch"
+                          (picked)="addCondition($event)"
+                        />
+                        <div class="wizard-condition-block">
+                          <div class="wizard-condition-eyebrow">
+                            Estas cantidades se suman entre sí
+                          </div>
+                          <div class="wizard-condition-list">
+                            @for (c of conditions(); track c.name + c.scope) {
+                              <div class="wizard-condition-row">
+                                <div>
+                                  <div class="wizard-condition-name">{{ c.name }}</div>
+                                  <div class="wizard-condition-meta">{{ scopeLabel(c.scope) }}</div>
+                                </div>
+                                <div class="wizard-condition-required">
+                                  <ui-checkbox
+                                    label="Obligatorio"
+                                    [checked]="!!c.required"
+                                    (checkedChange)="setRequired(c, $event)"
+                                  />
+                                  @if (c.required) {
+                                    <ui-field
+                                      label="Cantidad mínima"
+                                      type="number"
+                                      [hasSuffix]="true"
+                                      [value]="String(c.minQuantity ?? 1)"
+                                      (valueChange)="setMinQuantity(c, $event)"
+                                      [error]="requiredFieldError(c)"
+                                    >
+                                      <span fieldSuffix class="wizard-field-suffix">unidades</span>
+                                    </ui-field>
+                                  }
+                                </div>
+                                <div class="wizard-condition-actions">
+                                  <button
+                                    uiButton
+                                    variant="icon"
+                                    title="Quitar"
+                                    (click)="removeCondition(c)"
                                   >
-                                    <span fieldSuffix class="wizard-field-suffix">unidades</span>
-                                  </ui-field>
-                                }
+                                    ✕
+                                  </button>
+                                </div>
                               </div>
-                              <div class="wizard-condition-actions">
-                                <button
-                                  uiButton
-                                  variant="icon"
-                                  title="Quitar"
-                                  (click)="removeCondition(c)"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            </div>
+                            }
+                          </div>
+                          @if (conditions().length > 0) {
+                            <p class="wizard-condition-help">
+                              Con una línea obligatoria, el pedido debe llevar al menos su cantidad
+                              mínima para ganar la promoción, aunque los demás productos ya sumen el
+                              tramo.
+                            </p>
+                          }
+                          @if (allConditionsRequired()) {
+                            <p class="wizard-condition-help">
+                              Todas las líneas son obligatorias: el pedido debe llevar todas.
+                            </p>
                           }
                         </div>
-                        @if (conditions().length > 0) {
-                          <p class="wizard-condition-help">
-                            Con una línea obligatoria, el pedido debe llevar al menos su cantidad
-                            mínima para ganar la promoción, aunque los demás productos ya sumen el
-                            tramo.
+                      </div>
+                      <div class="wizard-side-card">
+                        <div class="wizard-side-eyebrow">Productos que cuentan hoy</div>
+                        @if (conditions().length === 0) {
+                          <p class="wizard-side-text wizard-side-muted">
+                            Agrega al menos un producto.
                           </p>
-                        }
-                        @if (allConditionsRequired()) {
-                          <p class="wizard-condition-help">
-                            Todas las líneas son obligatorias: el pedido debe llevar todas.
+                        } @else {
+                          <p class="wizard-side-text">
+                            <strong>{{ conditions().length }}</strong> producto{{
+                              conditions().length === 1 ? '' : 's'
+                            }}
+                            de {{ code() }}.
                           </p>
                         }
                       </div>
                     </div>
-                    <div class="wizard-side-card">
-                      <div class="wizard-side-eyebrow">Productos que cuentan hoy</div>
-                      @if (conditions().length === 0) {
+                  } @else {
+                    @if (subgroupsStepBannerError()) {
+                      <div class="wizard-save-error">{{ subgroupsStepBannerError() }}</div>
+                    }
+                    <div class="wizard-subgroups-layout">
+                      <div class="wizard-subgroups-main">
+                        @for (g of conditionGroups(); track g.key; let gi = $index) {
+                          <div class="wizard-subgroup-card">
+                            <div class="wizard-subgroup-head">
+                              <span class="wizard-subgroup-title">SUBGRUPO {{ gi + 1 }}</span>
+                              <ui-field
+                                label="Nombre"
+                                placeholder="Ej. Doffi 1 kg"
+                                [value]="g.name"
+                                (valueChange)="setGroupName(g, $event)"
+                                [error]="groupNameError(g)"
+                              />
+                              <ui-field
+                                label="Mínimo"
+                                type="number"
+                                [hasSuffix]="true"
+                                [value]="g.minQuantity != null ? String(g.minQuantity) : ''"
+                                (valueChange)="setGroupMinQuantity(g, $event)"
+                                [error]="groupMinQuantityError(g)"
+                              >
+                                <span fieldSuffix class="wizard-field-suffix">unidades</span>
+                              </ui-field>
+                              <ui-menu label="Más acciones del subgrupo">
+                                <button
+                                  uiButton
+                                  variant="ghost"
+                                  [disabled]="gi === 0"
+                                  (click)="moveSubgroupUp(g)"
+                                >
+                                  Subir
+                                </button>
+                                <button
+                                  uiButton
+                                  variant="ghost"
+                                  [disabled]="gi === conditionGroups().length - 1"
+                                  (click)="moveSubgroupDown(g)"
+                                >
+                                  Bajar
+                                </button>
+                              </ui-menu>
+                              <button
+                                uiButton
+                                variant="icon"
+                                title="Quitar subgrupo"
+                                (click)="removeSubgroup(g)"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            <ui-typeahead
+                              label="Agregar producto, familia o marca a este subgrupo"
+                              placeholder="Ej. Inca Kola"
+                              [clearOnPick]="true"
+                              [search]="scopeSearch"
+                              (picked)="addConditionToGroup($event, g)"
+                            />
+                            @if (duplicateLineError()?.groupKey === g.key) {
+                              <p class="wizard-duplicate-error">
+                                {{ duplicateLineError()!.message }}
+                              </p>
+                            }
+
+                            <div class="wizard-condition-list">
+                              @for (c of groupLines(g); track c.name + c.scope) {
+                                <div class="wizard-condition-row">
+                                  <div>
+                                    <div class="wizard-condition-name">{{ c.name }}</div>
+                                    <div class="wizard-condition-meta">
+                                      {{ scopeLabel(c.scope) }}
+                                    </div>
+                                  </div>
+                                  <div class="wizard-condition-required">
+                                    <ui-checkbox
+                                      label="Obligatorio"
+                                      [checked]="!!c.required"
+                                      (checkedChange)="setRequired(c, $event)"
+                                    />
+                                    @if (c.required) {
+                                      <ui-field
+                                        label="Cantidad mínima"
+                                        type="number"
+                                        [hasSuffix]="true"
+                                        [value]="String(c.minQuantity ?? 1)"
+                                        (valueChange)="setMinQuantity(c, $event)"
+                                        [error]="requiredFieldError(c)"
+                                      >
+                                        <span fieldSuffix class="wizard-field-suffix"
+                                          >unidades</span
+                                        >
+                                      </ui-field>
+                                    }
+                                  </div>
+                                  <div class="wizard-condition-actions">
+                                    @if (otherGroups(c).length > 0) {
+                                      <ui-menu label="Mover a otro subgrupo">
+                                        @for (og of otherGroups(c); track og.key) {
+                                          <button
+                                            uiButton
+                                            variant="ghost"
+                                            (click)="moveConditionToGroup(c, og)"
+                                          >
+                                            Mover a → {{ groupDisplayName(og) }}
+                                          </button>
+                                        }
+                                      </ui-menu>
+                                    }
+                                    <button
+                                      uiButton
+                                      variant="icon"
+                                      title="Quitar"
+                                      (click)="removeCondition(c)"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+                              }
+                            </div>
+                            @if (groupEmptyError(g)) {
+                              <p class="wizard-condition-help wizard-condition-help-error">
+                                {{ groupEmptyError(g) }}
+                              </p>
+                            }
+                            <p class="wizard-condition-help">
+                              {{ groupLines(g).length }} línea{{
+                                groupLines(g).length === 1 ? '' : 's'
+                              }}
+                              · se suman entre sí
+                            </p>
+                          </div>
+                        }
+                        <button uiButton variant="secondary" (click)="addSubgroup()">
+                          + Agregar subgrupo
+                        </button>
+                      </div>
+
+                      <div class="wizard-side-card wizard-subgroups-side">
+                        <div class="wizard-side-eyebrow">Para ganar</div>
+                        @if (subgroupsGainLines().length === 0) {
+                          <p class="wizard-side-text wizard-side-muted">
+                            Arma los subgrupos y su mínimo.
+                          </p>
+                        } @else {
+                          @for (line of subgroupsGainLines(); track line.key) {
+                            <p class="wizard-side-text">
+                              {{ line.isFirst ? '' : '+ ' }}{{ line.text }}
+                            </p>
+                          }
+                          <hr class="wizard-hr" />
+                          <p class="wizard-side-text">
+                            <strong
+                              >Tramo: desde
+                              {{ quantityText(subgroupsThresholdDisplay()) }} unidades</strong
+                            >
+                          </p>
+                        }
                         <p class="wizard-side-text wizard-side-muted">
-                          Agrega al menos un producto.
-                        </p>
-                      } @else {
-                        <p class="wizard-side-text">
-                          <strong>{{ conditions().length }}</strong> producto{{
+                          {{ conditions().length }} producto{{
                             conditions().length === 1 ? '' : 's'
                           }}
-                          de {{ code() }}.
+                          en {{ conditionGroups().length }} subgrupo{{
+                            conditionGroups().length === 1 ? '' : 's'
+                          }}
                         </p>
-                      }
+                      </div>
                     </div>
-                  </div>
+
+                    <p class="wizard-condition-help wizard-subgroups-tip">
+                      ⓘ Cada subgrupo debe llegar a su mínimo, en cualquier mezcla de sus productos.
+                      Con 10 de Doffi 1 kg y 2 de Doffi 4 kg no se gana, aunque sumen 12.
+                    </p>
+                  }
                 } @else {
                   <div class="wizard-2col-wide">
                     <div>
@@ -506,12 +744,21 @@ function emptyTier(tierNumber: number): TierDraft {
                     type="button"
                     class="wizard-mode-card"
                     [class.selected]="measureType() === 'AMOUNT'"
+                    [class.wizard-mode-card-disabled]="subgroupsMode()"
+                    [disabled]="subgroupsMode()"
+                    [title]="
+                      subgroupsMode() ? 'Con subgrupos la compra se cuenta en unidades.' : ''
+                    "
                     (click)="selectMeasureType('AMOUNT')"
                   >
                     <span class="wizard-mode-title">Por importe (S/)</span>
-                    <span class="wizard-mode-body"
-                      >Se suma lo que vale cada producto que cuenta, a su precio de lista.</span
-                    >
+                    <span class="wizard-mode-body">
+                      @if (subgroupsMode()) {
+                        Con subgrupos la compra se cuenta en unidades.
+                      } @else {
+                        Se suma lo que vale cada producto que cuenta, a su precio de lista.
+                      }
+                    </span>
                   </button>
                 </div>
 
@@ -529,7 +776,9 @@ function emptyTier(tierNumber: number): TierDraft {
               <div class="wizard-tramos-main">
                 <h2>Tramos y premios</h2>
                 <p class="wizard-lede">
-                  @if (combineTiers()) {
+                  @if (subgroupsMode()) {
+                    Con subgrupos hay un solo tramo: se gana cuando cada subgrupo llega a su mínimo.
+                  } @else if (combineTiers()) {
                     Con "Sumar tramos": se toma el tramo más alto todas las veces que entre y
                     <strong>lo que sobra se cuenta con los tramos menores</strong>.
                   } @else {
@@ -585,10 +834,12 @@ function emptyTier(tierNumber: number): TierDraft {
                       <p class="wizard-toggle-text wizard-toggle-text-muted">
                         {{ repeatsHelpText() }}
                       </p>
-                      <div class="wizard-sim-line">
-                        <ui-field label="Si compra" type="number" [(value)]="simRepeatQuantity" />
-                        <span class="wizard-total-text">{{ simRepeatResult() }}</span>
-                      </div>
+                      @if (!subgroupsMode()) {
+                        <div class="wizard-sim-line">
+                          <ui-field label="Si compra" type="number" [(value)]="simRepeatQuantity" />
+                          <span class="wizard-total-text">{{ simRepeatResult() }}</span>
+                        </div>
+                      }
                     }
                   </div>
 
@@ -605,9 +856,11 @@ function emptyTier(tierNumber: number): TierDraft {
                         <span class="wizard-tier-step-hint">{{ tierBenefitSummary(t) }}</span>
                       </button>
                     }
-                    <button type="button" class="wizard-add-tier-ladder" (click)="addTier()">
-                      + Agregar tramo
-                    </button>
+                    @if (!subgroupsMode()) {
+                      <button type="button" class="wizard-add-tier-ladder" (click)="addTier()">
+                        + Agregar tramo
+                      </button>
+                    }
                   </div>
                 }
 
@@ -616,32 +869,48 @@ function emptyTier(tierNumber: number): TierDraft {
                     @if (requiresPurchase()) {
                       <div class="wizard-tier-editor-head">
                         <h3>Tramo {{ t.tier }}</h3>
-                        <button uiButton variant="secondary" (click)="duplicateTier()">
-                          Duplicar tramo
-                        </button>
-                      </div>
-                      <div class="wizard-tier-editor-from">
-                        @if (measureType() === 'AMOUNT') {
-                          <ui-field
-                            label="Desde"
-                            type="number"
-                            prefix="S/"
-                            [(value)]="tierThresholdModel"
-                          />
-                        } @else {
-                          <ui-field
-                            label="Desde"
-                            type="number"
-                            [hasSuffix]="true"
-                            [(value)]="tierThresholdModel"
-                          >
-                            <span fieldSuffix class="wizard-field-suffix">unidades</span>
-                          </ui-field>
+                        @if (!subgroupsMode()) {
+                          <button uiButton variant="secondary" (click)="duplicateTier()">
+                            Duplicar tramo
+                          </button>
                         }
-                        <span class="wizard-total-text"
-                          >de compra en los productos que cuentan</span
-                        >
                       </div>
+                      @if (subgroupsMode()) {
+                        <div class="wizard-tier-editor-from">
+                          <div class="wizard-tier-locked">
+                            <span class="wizard-tier-locked-label">Desde 🔒</span>
+                            <span class="wizard-tier-locked-value"
+                              >{{ quantityText(subgroupsThresholdDisplay()) }} unidades</span
+                            >
+                          </div>
+                          <span class="wizard-total-text wizard-side-muted"
+                            >({{ subgroupsGainJoined() }})</span
+                          >
+                        </div>
+                      } @else {
+                        <div class="wizard-tier-editor-from">
+                          @if (measureType() === 'AMOUNT') {
+                            <ui-field
+                              label="Desde"
+                              type="number"
+                              prefix="S/"
+                              [(value)]="tierThresholdModel"
+                            />
+                          } @else {
+                            <ui-field
+                              label="Desde"
+                              type="number"
+                              [hasSuffix]="true"
+                              [(value)]="tierThresholdModel"
+                            >
+                              <span fieldSuffix class="wizard-field-suffix">unidades</span>
+                            </ui-field>
+                          }
+                          <span class="wizard-total-text"
+                            >de compra en los productos que cuentan</span
+                          >
+                        </div>
+                      }
                       @if (t.thresholdMismatch) {
                         <div class="wizard-save-error">Revisa el mínimo de este tramo.</div>
                       }
@@ -884,6 +1153,9 @@ function emptyTier(tierNumber: number): TierDraft {
                               }}</ui-badge
                             >
                           }
+                          @if (subgroupsMode()) {
+                            <ui-badge tone="neutral">Por subgrupos</ui-badge>
+                          }
                         </h3>
                       </div>
                       <button type="button" class="wizard-card-edit" (click)="goToStep(1)">
@@ -892,6 +1164,7 @@ function emptyTier(tierNumber: number): TierDraft {
                     </div>
                     <app-promo-conditions-table
                       [conditions]="conditionsAsViews()"
+                      [conditionGroups]="conditionGroupsAsViews()"
                       [promoType]="requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST'"
                     />
                     @if (requiresPurchase()) {
@@ -962,7 +1235,9 @@ function emptyTier(tierNumber: number): TierDraft {
                       Simula un pedido para confirmar que la promoción se aplica como esperas antes
                       de encenderla.
                     </p>
-                    @if (combineTiers()) {
+                    @if (subgroupsMode()) {
+                      <p class="wizard-activate-text">{{ subgroupsSimSuggestionText() }}</p>
+                    } @else if (combineTiers()) {
                       <p class="wizard-activate-text">
                         Pruebe con una cantidad que pase el tramo más alto{{
                           combineTiersSimSuggestion()
@@ -1200,6 +1475,10 @@ function emptyTier(tierNumber: number): TierDraft {
       .wizard-mode-card.selected {
         border: 2px solid var(--accent);
       }
+      .wizard-mode-card-disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
       .wizard-mode-eyebrow {
         font-size: 11px;
         letter-spacing: 0.1em;
@@ -1264,6 +1543,85 @@ function emptyTier(tierNumber: number): TierDraft {
       }
       .wizard-condition-required ui-field {
         width: 150px;
+      }
+      .wizard-sum-mode-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        margin: 0 0 10px;
+      }
+      .wizard-subgroups-layout {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 32px;
+        align-items: start;
+      }
+      .wizard-subgroups-main {
+        display: grid;
+        gap: 22px;
+        min-width: 0;
+      }
+      .wizard-subgroup-card {
+        border: 1px solid var(--divider);
+        border-left: 3px solid var(--accent);
+        padding: 18px;
+      }
+      .wizard-subgroup-head {
+        display: flex;
+        align-items: flex-end;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .wizard-subgroup-title {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+        font-weight: 800;
+        flex: none;
+        align-self: center;
+      }
+      .wizard-subgroup-head ui-field:nth-of-type(1) {
+        flex: 1 1 220px;
+      }
+      .wizard-subgroup-head ui-field:nth-of-type(2) {
+        width: 150px;
+        flex: none;
+      }
+      .wizard-subgroups-side {
+        position: sticky;
+        top: var(--sp-6);
+      }
+      .wizard-subgroups-tip {
+        margin-top: 16px;
+        border-left: 3px solid var(--hairline);
+        padding-left: 12px;
+      }
+      .wizard-duplicate-error {
+        margin: 8px 0 0;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--status-danger);
+      }
+      .wizard-condition-help-error {
+        color: var(--status-danger);
+        font-weight: 700;
+      }
+      .wizard-tier-locked {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .wizard-tier-locked-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .wizard-tier-locked-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--ink);
       }
       .wizard-condition-help {
         margin: 10px 0 0;
@@ -1677,6 +2035,10 @@ function emptyTier(tierNumber: number): TierDraft {
         color: var(--accent-ink);
         font-size: 13px;
       }
+      .wizard-save-error-top {
+        margin-top: 0;
+        margin-bottom: 20px;
+      }
       .wizard-sim-line {
         display: grid;
         grid-template-columns: 1fr 96px;
@@ -1708,10 +2070,12 @@ function emptyTier(tierNumber: number): TierDraft {
         .wizard-step1-grid,
         .wizard-2col-wide,
         .wizard-audience-grid,
-        .wizard-tramos-grid {
+        .wizard-tramos-grid,
+        .wizard-subgroups-layout {
           grid-template-columns: 1fr;
         }
-        .wizard-tramos-side {
+        .wizard-tramos-side,
+        .wizard-subgroups-side {
           position: static;
         }
       }
@@ -1797,6 +2161,11 @@ export class PromoWizardPage {
   protected requiresPurchase = signal(true); // No → CUSTOMER_LIST
   protected mode = signal<'surtido' | 'ambito'>('surtido');
   protected conditions = signal<ConditionDraft[]>([]);
+  // — Subgrupos de compra — doc 90 —
+  protected subgroupsMode = signal(false);
+  protected conditionGroups = signal<ConditionGroupDraft[]>([]);
+  /** Mensaje "Ya está en el Subgrupo N" al elegir una línea repetida (sección 3.4). */
+  protected duplicateLineError = signal<{ groupKey: number; message: string } | null>(null);
   protected ambitoSelected = signal<UiLookupItem | null>(null);
   protected ambitoProducts = signal<LookupItem[] | null>(null);
   protected ambitoProductsExpanded = signal(false);
@@ -1845,6 +2214,7 @@ export class PromoWizardPage {
   protected audienceSearch = (q: string) => this.combinedAudienceSearch(q);
 
   protected String = String;
+  protected quantityText = quantityText;
 
   constructor() {
     this.lookupSvc.salesChannels().subscribe((items) => {
@@ -2022,6 +2392,13 @@ export class PromoWizardPage {
     if (c.required && (!c.minQuantity || c.minQuantity <= 0)) {
       return 'Indique la cantidad mínima, mayor a cero';
     }
+    // doc 90, sección 3.4: obligatorio mayor que el mínimo de su subgrupo.
+    if (c.required && c.minQuantity && this.subgroupsMode()) {
+      const group = this.groupOf(c);
+      if (group?.minQuantity != null && c.minQuantity > group.minQuantity) {
+        return `No puede pedir más que el mínimo del subgrupo (${quantityText(group.minQuantity)}).`;
+      }
+    }
     return '';
   }
 
@@ -2029,8 +2406,235 @@ export class PromoWizardPage {
     return this.conditions().length > 0 && this.conditions().every((c) => !!c.required);
   }
 
+  // — Subgrupos de compra — doc 90. `ConditionDraft.groupKey` referencia la
+  // identidad estable del subgrupo (`ConditionGroupDraft.key`), no su
+  // posición: así mover/quitar/reordenar subgrupos nunca exige remapear las
+  // líneas. La numeración 1..n que ve el usuario y la que se envía al
+  // guardar sale siempre de la posición actual en `conditionGroups()`.
+
+  protected groupPosition(g: ConditionGroupDraft): number {
+    return this.conditionGroups().indexOf(g) + 1;
+  }
+
+  protected groupDisplayName(g: ConditionGroupDraft): string {
+    return subgroupName({ groupNumber: this.groupPosition(g), name: g.name });
+  }
+
+  protected groupOf(c: ConditionDraft): ConditionGroupDraft | undefined {
+    return this.conditionGroups().find((g) => g.key === c.groupKey);
+  }
+
+  protected groupLines(g: ConditionGroupDraft): ConditionDraft[] {
+    return this.conditions().filter((c) => c.groupKey === g.key);
+  }
+
+  /** "Todo junto" ⇄ "Por subgrupos" — doc 90, sección 3.2. */
+  protected setSubgroupsMode(on: boolean) {
+    if (on === this.subgroupsMode()) return;
+    if (on) {
+      const existing = this.conditions();
+      if (existing.length > 0) {
+        const g1 = emptySubgroup();
+        const g2 = emptySubgroup();
+        this.conditions.set(existing.map((c) => ({ ...c, groupKey: g1.key })));
+        this.conditionGroups.set([g1, g2]);
+        this.toast.info(
+          'Tus productos quedaron en el Subgrupo 1. Arma el Subgrupo 2 con los demás.',
+        );
+      } else {
+        this.conditionGroups.set([emptySubgroup(), emptySubgroup()]);
+      }
+      this.subgroupsMode.set(true);
+      this.measureType.set('QUANTITY');
+      this.combineTiers.set(false);
+      if (this.tiers().length > 1) this.tiers.set([this.tiers()[0]]);
+      return;
+    }
+    const groupCount = this.conditionGroups().length;
+    const lineCount = this.conditions().length;
+    this.dialog
+      .confirm({
+        title: 'Volver a "Todo junto"',
+        message: `Se juntarán los ${lineCount} producto${lineCount === 1 ? '' : 's'} en una sola lista y se perderán los mínimos de ${groupCount === 1 ? 'su subgrupo' : 'cada subgrupo'}. ¿Continuar?`,
+        confirmLabel: 'Continuar',
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.conditions.update((list) => list.map((c) => ({ ...c, groupKey: undefined })));
+        this.conditionGroups.set([]);
+        this.subgroupsMode.set(false);
+        this.duplicateLineError.set(null);
+      });
+  }
+
+  protected addSubgroup() {
+    this.conditionGroups.update((list) => [...list, emptySubgroup()]);
+  }
+
+  protected removeSubgroup(g: ConditionGroupDraft) {
+    const lines = this.groupLines(g);
+    const doRemove = () => {
+      this.conditionGroups.update((list) => list.filter((x) => x !== g));
+      this.conditions.update((list) => list.filter((c) => c.groupKey !== g.key));
+      this.duplicateLineError.set(null);
+    };
+    if (lines.length === 0) {
+      doRemove();
+      return;
+    }
+    this.dialog
+      .confirm({
+        title: 'Quitar subgrupo',
+        message: `¿Quitar el subgrupo ${this.groupDisplayName(g)} y sus ${lines.length} producto${lines.length === 1 ? '' : 's'}?`,
+        confirmLabel: 'Quitar',
+        destructive: true,
+      })
+      .subscribe((confirmed) => {
+        if (confirmed) doRemove();
+      });
+  }
+
+  protected moveSubgroupUp(g: ConditionGroupDraft) {
+    this.conditionGroups.update((list) => {
+      const i = list.indexOf(g);
+      if (i <= 0) return list;
+      const copy = [...list];
+      [copy[i - 1], copy[i]] = [copy[i], copy[i - 1]];
+      return copy;
+    });
+  }
+
+  protected moveSubgroupDown(g: ConditionGroupDraft) {
+    this.conditionGroups.update((list) => {
+      const i = list.indexOf(g);
+      if (i < 0 || i >= list.length - 1) return list;
+      const copy = [...list];
+      [copy[i + 1], copy[i]] = [copy[i], copy[i + 1]];
+      return copy;
+    });
+  }
+
+  protected setGroupName(g: ConditionGroupDraft, raw: string) {
+    g.name = raw.slice(0, 60);
+    this.conditionGroups.update((list) => [...list]);
+  }
+
+  protected setGroupMinQuantity(g: ConditionGroupDraft, raw: string) {
+    g.minQuantity = raw === '' ? null : this.numberOr(g.minQuantity ?? 0, raw);
+    this.conditionGroups.update((list) => [...list]);
+  }
+
+  protected groupMinQuantityError(g: ConditionGroupDraft): string {
+    if (!this.errorSteps().includes(1)) return '';
+    return !g.minQuantity || g.minQuantity <= 0 ? 'Indica el mínimo, mayor a cero.' : '';
+  }
+
+  protected groupNameError(g: ConditionGroupDraft): string {
+    if (!this.errorSteps().includes(1)) return '';
+    return g.name.length > 60 ? 'Hasta 60 caracteres.' : '';
+  }
+
+  protected groupEmptyError(g: ConditionGroupDraft): string {
+    if (!this.errorSteps().includes(1)) return '';
+    return this.groupLines(g).length === 0
+      ? 'Agrega al menos un producto, familia o marca a este subgrupo.'
+      : '';
+  }
+
+  /** Banner de la cabecera del paso 2 — doc 90, sección 3.4 (solo lo que no se ve en el campo). */
+  protected subgroupsStepBannerError(): string {
+    if (!this.errorSteps().includes(1) || !this.subgroupsMode()) return '';
+    if (this.conditionGroups().length < 2) {
+      return 'Con subgrupos se necesitan al menos dos. Con uno solo, usa una línea obligatoria.';
+    }
+    return '';
+  }
+
+  protected addConditionToGroup(item: UiLookupItem, g: ConditionGroupDraft) {
+    this.duplicateLineError.set(null);
+    const scope = (
+      item.extraInfo === 'Marca' ? 'BRAND' : item.extraInfo === 'Familia' ? 'FAMILY' : 'PRODUCT'
+    ) as 'PRODUCT' | 'FAMILY' | 'BRAND';
+    const existing = this.conditions().find((c) => c.name === item.name && c.scope === scope);
+    if (existing) {
+      const existingGroup = this.groupOf(existing);
+      const label = existingGroup ? this.groupDisplayName(existingGroup) : '';
+      this.duplicateLineError.set({ groupKey: g.key, message: `Ya está en el ${label}.` });
+      return;
+    }
+    const draft: ConditionDraft = { scope, name: item.name, groupKey: g.key };
+    if (scope === 'PRODUCT') {
+      draft.productId = item.id;
+      draft.code = item.code ?? undefined;
+    }
+    if (scope === 'FAMILY') draft.familyId = item.id;
+    if (scope === 'BRAND') draft.brandId = item.id;
+    this.conditions.update((list) => [...list, draft]);
+  }
+
+  protected moveConditionToGroup(c: ConditionDraft, g: ConditionGroupDraft) {
+    c.groupKey = g.key;
+    this.duplicateLineError.set(null);
+    this.conditions.update((list) => [...list]);
+  }
+
+  /** Subgrupos de `c` para el menú "Mover a →" — todos menos el suyo propio. */
+  protected otherGroups(c: ConditionDraft): ConditionGroupDraft[] {
+    return this.conditionGroups().filter((g) => g.key !== c.groupKey);
+  }
+
+  /** "6 de Doffi 1 kg" por subgrupo, para el recuadro "Para ganar" (sección 3.3). */
+  protected subgroupsGainLines = computed(() =>
+    this.conditionGroups()
+      .filter((g) => g.minQuantity != null)
+      .map((g, i) => ({
+        key: g.key,
+        text: subgroupGainLineText({
+          groupNumber: this.groupPosition(g),
+          name: g.name,
+          minQuantity: g.minQuantity!,
+        }),
+        isFirst: i === 0,
+      })),
+  );
+
+  protected subgroupsThresholdDisplay = computed(() =>
+    subgroupsThresholdSum(
+      this.conditionGroups()
+        .filter((g) => g.minQuantity != null)
+        .map((g) => ({
+          groupNumber: this.groupPosition(g),
+          name: g.name,
+          minQuantity: g.minQuantity!,
+        })),
+    ),
+  );
+
+  protected subgroupsGainJoined = computed(() =>
+    subgroupsGainJoinedText(
+      this.conditionGroups()
+        .filter((g) => g.minQuantity != null)
+        .map((g) => ({
+          groupNumber: this.groupPosition(g),
+          name: g.name,
+          minQuantity: g.minQuantity!,
+        })),
+    ),
+  );
+
   protected setAmbito(item: UiLookupItem) {
     this.ambitoSelected.set(item);
+  }
+
+  /** Los subgrupos (doc 90) solo existen en modo "surtido" — se limpian al pasar a "ambito". */
+  protected setMode(mode: 'surtido' | 'ambito') {
+    if (mode === 'ambito' && this.subgroupsMode()) {
+      this.subgroupsMode.set(false);
+      this.conditionGroups.set([]);
+      this.conditions.update((list) => list.map((c) => ({ ...c, groupKey: undefined })));
+      this.duplicateLineError.set(null);
+    }
+    this.mode.set(mode);
   }
 
   protected addAudience(item: UiLookupItem) {
@@ -2080,6 +2684,10 @@ export class PromoWizardPage {
   }
 
   protected whatCountsPhrase(): string {
+    if (this.subgroupsMode()) {
+      const n = this.conditionGroups().length;
+      return `${n} subgrupo${n === 1 ? '' : 's'} de productos`;
+    }
     return whatCountsText(
       this.effectiveConditionsForText(),
       this.requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST',
@@ -2087,6 +2695,9 @@ export class PromoWizardPage {
   }
 
   protected measureModePhrase(): string {
+    if (this.subgroupsMode()) {
+      return 'Cada subgrupo debe llegar a su mínimo, en cualquier mezcla de sus productos. Con 10 de Doffi 1 kg y 2 de Doffi 4 kg no se gana, aunque sumen 12';
+    }
     return measureModeText(
       this.measureType() || 'QUANTITY',
       this.effectiveConditionsForText(),
@@ -2100,6 +2711,7 @@ export class PromoWizardPage {
    * soles que en unidades.
    */
   protected selectMeasureType(value: 'QUANTITY' | 'AMOUNT') {
+    if (value === 'AMOUNT' && this.subgroupsMode()) return; // doc 90: subgrupos siempre en unidades
     if (this.measureType() === value) return;
     const hasThresholds = this.tiers().some((t) => t.threshold != null);
     if (!hasThresholds) {
@@ -2173,6 +2785,7 @@ export class PromoWizardPage {
 
   /** "S/ 190.00" · "10" — valor corto para la escalera de tramos y el panel lateral. */
   protected tierThresholdShort(t: TierDraft): string {
+    if (this.subgroupsMode()) return quantityText(this.subgroupsThresholdDisplay());
     if (t.threshold == null) return '—';
     return this.measureType() === 'AMOUNT' ? formatSoles(t.threshold) : quantityText(t.threshold);
   }
@@ -2288,11 +2901,13 @@ export class PromoWizardPage {
   }
 
   protected addTier() {
+    if (this.subgroupsMode()) return; // doc 90, sección 4: un solo tramo con subgrupos
     this.tiers.update((list) => [...list, emptyTier(list.length + 1)]);
     this.selectedTier.set(this.tiers().length - 1);
   }
 
   protected duplicateTier() {
+    if (this.subgroupsMode()) return;
     const t = this.currentTier();
     if (!t) return;
     const clone: TierDraft = {
@@ -2311,7 +2926,9 @@ export class PromoWizardPage {
 
   /** Mensaje de validación del tramo (sección 6.3) — vacío si el tramo está bien armado. */
   protected tierValidationError(t: TierDraft, index: number): string {
-    if (this.requiresPurchase()) {
+    // Con subgrupos el "desde" lo calcula el backend (suma de mínimos) — doc
+    // 90, sección 2.2: nunca se valida ni se edita acá.
+    if (this.requiresPurchase() && !this.subgroupsMode()) {
       if (t.threshold == null) return 'Indica desde cuánto se gana este tramo.';
       if (t.threshold <= 0) return 'El mínimo debe ser mayor a cero.';
       const prev = this.tiers()[index - 1];
@@ -2379,6 +2996,18 @@ export class PromoWizardPage {
 
   /** Frase del tramo en vivo, al pie de su editor — doc 47, sección 5.4 y 6.3; doc 57, sección 6.4. */
   protected tierPhrase(t: TierDraft): string {
+    if (this.subgroupsMode()) {
+      return subgroupsTierPhraseText({
+        groups: this.conditionGroups()
+          .filter((g) => g.minQuantity != null)
+          .map((g) => ({
+            groupNumber: this.groupPosition(g),
+            name: g.name,
+            minQuantity: g.minQuantity!,
+          })),
+        benefits: t.benefitGroups.flatMap((g) => g.benefits),
+      });
+    }
     return tierPhraseText({
       promoType: this.requiresPurchase() ? 'TIERED' : 'CUSTOMER_LIST',
       measureType: this.measureType() || 'QUANTITY',
@@ -2487,22 +3116,42 @@ export class PromoWizardPage {
         },
       ];
     }
-    return this.conditions().map((c, i) => ({
-      lineNumber: i + 1,
-      scope: c.scope,
-      scopeName: this.scopeLabel(c.scope),
-      productId: c.productId,
-      productName: c.scope === 'PRODUCT' ? c.name : undefined,
-      productCode: c.code,
-      familyId: c.familyId,
-      familyName: c.scope === 'FAMILY' ? c.name : undefined,
-      brandId: c.brandId,
-      brandName: c.scope === 'BRAND' ? c.name : undefined,
-      required: !!c.required,
-      minQuantity: c.required ? (c.minQuantity ?? null) : null,
-      requiredText: c.required && c.minQuantity ? requiredConditionText(c.minQuantity) : null,
-    }));
+    return this.conditions().map((c, i) => {
+      const group = this.groupOf(c);
+      return {
+        lineNumber: i + 1,
+        scope: c.scope,
+        scopeName: this.scopeLabel(c.scope),
+        productId: c.productId,
+        productName: c.scope === 'PRODUCT' ? c.name : undefined,
+        productCode: c.code,
+        familyId: c.familyId,
+        familyName: c.scope === 'FAMILY' ? c.name : undefined,
+        brandId: c.brandId,
+        brandName: c.scope === 'BRAND' ? c.name : undefined,
+        required: !!c.required,
+        minQuantity: c.required ? (c.minQuantity ?? null) : null,
+        requiredText: c.required && c.minQuantity ? requiredConditionText(c.minQuantity) : null,
+        groupNumber: group ? this.groupPosition(group) : null,
+        groupName: group?.name || null,
+      };
+    });
   });
+
+  /** Doc 90, sección 5: `ConditionGroupView.text` tal cual, para el resumen del paso 5. */
+  protected conditionGroupsAsViews = computed((): ConditionGroupView[] =>
+    this.conditionGroups().map((g) => {
+      const groupNumber = this.groupPosition(g);
+      const minQuantity = g.minQuantity ?? 0;
+      return {
+        groupNumber,
+        name: g.name || null,
+        minQuantity,
+        lineCount: this.groupLines(g).length,
+        text: `${subgroupName({ groupNumber, name: g.name })}: al menos ${quantityText(minQuantity)} unidad${minQuantity === 1 ? '' : 'es'}`,
+      };
+    }),
+  );
 
   protected tiersAsViews = computed((): TierView[] =>
     this.tiers().map((t) => ({
@@ -2637,6 +3286,17 @@ export class PromoWizardPage {
 
   protected repeatsHelpText(): string {
     const tope = this.numberOr(3, this.maxRepeatsPerOrder());
+    if (this.subgroupsMode()) {
+      const groups = this.conditionGroups().filter((g) => !!g.minQuantity && g.minQuantity > 0);
+      if (groups.length < 2) {
+        return `Gana tantas veces como alcance el subgrupo que menos alcanza. Nunca más de ${tope} veces por pedido.`;
+      }
+      const [g1, g2] = groups;
+      const n1 = this.groupDisplayName(g1);
+      const n2 = this.groupDisplayName(g2);
+      const double = (n: number) => quantityText(n * 2);
+      return `Con ${double(g1.minQuantity!)} de ${n1} y ${double(g2.minQuantity!)} de ${n2} se gana 2 veces. Con ${double(g1.minQuantity!)} y ${quantityText(g2.minQuantity!)}, una sola vez. Nunca más de ${tope} veces por pedido.`;
+    }
     if (this.combineTiers()) {
       return `Se cuentan todas las veces de todos los tramos juntos. Nunca más de ${tope} veces por pedido.`;
     }
@@ -2653,6 +3313,7 @@ export class PromoWizardPage {
   // — Sumar tramos — doc 57, secciones 6.2 y 10.2 —
 
   protected combineTiersDisabledReason(): string {
+    if (this.subgroupsMode()) return 'No se combina con subgrupos.';
     if (this.tiers().length < 2) return 'Agregue al menos dos tramos para sumarlos.';
     const hasPercent = this.tiers().some((t) =>
       t.benefitGroups.some((g) => g.benefits.some((b) => b.benefitType === 'DISCOUNT_PERCENT')),
@@ -2711,6 +3372,17 @@ export class PromoWizardPage {
     return `Ej.: ${totalText} → ${ba.quantity} × ${nameOf(ba)} + ${bb.quantity} × ${nameOf(bb)}.`;
   }
 
+  /** "Prueba: 6 + 6 (gana)…" — doc 90, sección 5: casos de prueba con los mínimos del formulario. */
+  protected subgroupsSimSuggestionText(): string {
+    const mins = this.conditionGroups()
+      .map((g) => g.minQuantity)
+      .filter((n): n is number => n != null && n > 0);
+    if (mins.length < 2) return 'Arma los subgrupos para ver los casos de prueba sugeridos.';
+    const [a, b] = mins;
+    const under = Math.max(0, b - Math.ceil(b / 3));
+    return `Prueba: ${quantityText(a)} + ${quantityText(b)} (gana), ${quantityText(a * 2)} + ${quantityText(b * 2)} (gana el doble si se repite), ${quantityText(a)} + ${quantityText(under)} (no gana).`;
+  }
+
   /** Cantidad sugerida para "Simular pedido" (paso 5) — doc 57, sección 7: suma de los dos tramos más altos. */
   protected combineTiersSimSuggestion(): string {
     const sorted = [...this.tiers()]
@@ -2725,6 +3397,18 @@ export class PromoWizardPage {
     if (n === 0) return !!this.name().trim() && !this.dateRangeError();
     if (n === 1) {
       if (!this.requiresPurchase()) return true;
+      if (this.mode() === 'surtido' && this.subgroupsMode()) {
+        if (this.conditionGroups().length < 2) return false;
+        if (this.conditionGroups().some((g) => this.groupLines(g).length === 0)) return false;
+        if (this.conditionGroups().some((g) => !g.minQuantity || g.minQuantity <= 0)) return false;
+        if (this.conditionGroups().some((g) => g.name.length > 60)) return false;
+        const requiredExceeds = this.conditions().some((c) => {
+          if (!c.required || !c.minQuantity) return false;
+          const group = this.groupOf(c);
+          return group?.minQuantity != null && c.minQuantity > group.minQuantity;
+        });
+        return !requiredExceeds;
+      }
       const hasCondition =
         this.mode() === 'ambito' ? !!this.ambitoSelected() : this.conditions().length > 0;
       const requiredLinesValid =
@@ -2785,17 +3469,24 @@ export class PromoWizardPage {
    * enviar — `tiers()` ya está ordenado por umbral (ver `resortTiers`).
    */
   private buildTiersCommand() {
-    const source = this.requiresPurchase() ? this.tiers() : this.tiers().slice(0, 1);
+    // Con subgrupos hay un solo tramo y el "desde" lo calcula el backend
+    // (suma de mínimos) — doc 90, sección 2.2: se manda null en las dos
+    // columnas, nunca el valor local (que ni siquiera se edita).
+    const source = this.subgroupsMode()
+      ? this.tiers().slice(0, 1)
+      : this.requiresPurchase()
+        ? this.tiers()
+        : this.tiers().slice(0, 1);
     return source
       .filter((t) => t.benefitGroups.some((g) => g.benefits.length > 0))
       .map((t, ti) => ({
         tier: ti + 1,
         fromQuantity:
-          this.requiresPurchase() && this.measureType() === 'QUANTITY'
+          this.requiresPurchase() && this.measureType() === 'QUANTITY' && !this.subgroupsMode()
             ? (t.threshold ?? undefined)
             : undefined,
         fromAmount:
-          this.requiresPurchase() && this.measureType() === 'AMOUNT'
+          this.requiresPurchase() && this.measureType() === 'AMOUNT' && !this.subgroupsMode()
             ? (t.threshold ?? undefined)
             : undefined,
         benefitGroups: t.benefitGroups
@@ -2825,7 +3516,7 @@ export class PromoWizardPage {
       }));
   }
 
-  private buildConditionsCommand() {
+  private buildConditionsCommand(): ConditionCommand[] {
     if (!this.requiresPurchase()) return [];
     if (this.mode() === 'ambito' && this.ambitoSelected()) {
       const sel = this.ambitoSelected()!;
@@ -2834,13 +3525,27 @@ export class PromoWizardPage {
         ? [{ scope: 'FAMILY' as const, familyId: sel.id }]
         : [{ scope: 'BRAND' as const, brandId: sel.id }];
     }
-    return this.conditions().map((c) => ({
-      scope: c.scope,
-      productId: c.productId,
-      familyId: c.familyId,
-      brandId: c.brandId,
-      required: !!c.required,
-      minQuantity: c.required ? (c.minQuantity ?? 1) : undefined,
+    return this.conditions().map((c) => {
+      const group = this.subgroupsMode() ? this.groupOf(c) : undefined;
+      return {
+        scope: c.scope,
+        productId: c.productId,
+        familyId: c.familyId,
+        brandId: c.brandId,
+        required: !!c.required,
+        minQuantity: c.required ? (c.minQuantity ?? 1) : undefined,
+        groupNumber: group ? this.groupPosition(group) : null,
+      };
+    });
+  }
+
+  /** Doc 90, sección 2.2: numerados 1, 2, 3… en el orden en que aparecen en pantalla. */
+  private buildConditionGroupsCommand(): ConditionGroupCommand[] {
+    if (!this.subgroupsMode()) return [];
+    return this.conditionGroups().map((g, i) => ({
+      groupNumber: i + 1,
+      name: g.name || null,
+      minQuantity: g.minQuantity ?? 0,
     }));
   }
 
@@ -2866,6 +3571,7 @@ export class PromoWizardPage {
       startDate: this.startDate() || undefined,
       endDate: this.endDate() || undefined,
       conditions: this.buildConditionsCommand(),
+      conditionGroups: this.buildConditionGroupsCommand(),
       tiers: this.buildTiersCommand(),
       featured: this.featured(),
       combineTiers: this.requiresPurchase() && this.combineTiers(),
@@ -2891,6 +3597,7 @@ export class PromoWizardPage {
       startDate: this.startDate() || undefined,
       endDate: this.endDate() || undefined,
       conditions: this.buildConditionsCommand(),
+      conditionGroups: this.buildConditionGroupsCommand(),
       tiers: this.buildTiersCommand(),
       combineTiers: this.requiresPurchase() && this.combineTiers(),
     };
@@ -2939,6 +3646,8 @@ export class PromoWizardPage {
       );
       if (brandCond) {
         this.mode.set('ambito');
+        this.subgroupsMode.set(false);
+        this.conditionGroups.set([]);
         this.ambitoSelected.set({
           id: (brandCond.brandId ?? brandCond.familyId)!,
           name: brandCond.brandName ?? brandCond.familyName ?? '',
@@ -2946,6 +3655,25 @@ export class PromoWizardPage {
         });
       } else {
         this.mode.set('surtido');
+        // Doc 90, sección 6: con subgrupos, cada `ConditionGroupDraft` nace
+        // con una clave estable propia; `groupNumber` del backend (1..n, en
+        // el orden en que vino) se traduce a esa clave para enlazar las
+        // líneas, igual que al editar en pantalla.
+        const hasGroups = (p.conditionGroups ?? []).length > 0;
+        this.subgroupsMode.set(hasGroups);
+        const keyByBackendNumber = new Map<number, number>();
+        if (hasGroups) {
+          const groups = (p.conditionGroups ?? []).map((g) => {
+            const draft = emptySubgroup();
+            draft.name = g.name ?? '';
+            draft.minQuantity = g.minQuantity ?? null;
+            keyByBackendNumber.set(g.groupNumber, draft.key);
+            return draft;
+          });
+          this.conditionGroups.set(groups);
+        } else {
+          this.conditionGroups.set([]);
+        }
         this.conditions.set(
           (p.conditions ?? []).map((c) => ({
             scope: (c.scope as 'PRODUCT' | 'FAMILY' | 'BRAND') ?? 'PRODUCT',
@@ -2956,6 +3684,7 @@ export class PromoWizardPage {
             code: c.productCode ?? undefined,
             required: !!c.required,
             minQuantity: c.required ? (c.minQuantity ?? 1) : undefined,
+            groupKey: c.groupNumber != null ? keyByBackendNumber.get(c.groupNumber) : undefined,
           })),
         );
       }
@@ -3036,6 +3765,14 @@ export class PromoWizardPage {
   } {
     const detail: string = err?.error?.detail ?? '';
     if (err?.status === 409) {
+      // Doc 90, sección 7: todos los errores de subgrupos se muestran en la
+      // cabecera del paso 2 (índice 1), con el `detail` del backend tal
+      // cual — antes de los genéricos de abajo, porque algunas frases
+      // (p. ej. "lleva un solo tramo", "se mide en unidades") se parecen a
+      // mensajes de tramos/medida que van al paso 3.
+      if (/subgrupo/i.test(detail)) {
+        return { message: detail, step: 1 };
+      }
       if (
         /se mide en soles|se mide en unidades|está repetido|debe pedir más que el tramo|lleva un solo tramo/i.test(
           detail,
@@ -3072,6 +3809,9 @@ export class PromoWizardPage {
       return { message: detail || 'No se pudo completar la operación. Intenta de nuevo.', step: 2 };
     }
     if (err?.status === 400) {
+      if (/subgrupo|groupNumber|conditionGroups/i.test(detail)) {
+        return { message: detail || 'Revisa los subgrupos.', step: 1 };
+      }
       if (/maxRepeatsPerOrder/i.test(detail) && /solo aplica cuando/i.test(detail)) {
         return { message: 'El tope por pedido solo se usa si la promoción se repite.', step: 2 };
       }
