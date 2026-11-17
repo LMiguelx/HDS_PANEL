@@ -178,6 +178,13 @@ export const NAV: NavItem[] = [
     group: 'Reparto y facturación',
   },
   {
+    label: 'Picking',
+    icon: 'move_to_inbox',
+    route: '/reparto/picking',
+    anyOf: ['picking.view', 'picking.store'],
+    group: 'Reparto y facturación',
+  },
+  {
     label: 'Validación de pedidos',
     icon: 'fact_check',
     route: '/validacion-facturacion',

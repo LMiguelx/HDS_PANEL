@@ -101,7 +101,18 @@ export const routes: Routes = [
       // reparto ve todas las planillas y asigna equipo, sin liquidar.
       {
         path: 'reparto',
-        canActivate: [permissionGuard('delivery.deliver', 'delivery.settle', 'delivery.manage')],
+        // `picking.view`/`picking.store` (doc 89): deja pasar a quien solo
+        // tiene Picking, aunque no tenga ningún `delivery.*`. El guard fino
+        // de cada ruta hija (`delivery.routes.ts`) decide qué ve.
+        canActivate: [
+          permissionGuard(
+            'delivery.deliver',
+            'delivery.settle',
+            'delivery.manage',
+            'picking.view',
+            'picking.store',
+          ),
+        ],
         loadChildren: () =>
           import('./features/delivery/delivery.routes').then((m) => m.DELIVERY_ROUTES),
       },

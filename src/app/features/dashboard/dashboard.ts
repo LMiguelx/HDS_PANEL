@@ -517,30 +517,11 @@ interface PendingCardVM {
           <p class="home-dash-footer">Datos al {{ d.date }}.</p>
         }
       } @else if (isLogisticsHome()) {
-        <div class="home-logistics">
-          <p class="home-logistics-note">
-            El inicio de logística está en camino. Por ahora, entra directo a tus pantallas desde el
-            menú.
-          </p>
-          <div class="home-logistics-grid">
-            <a class="home-logistics-card" routerLink="/reportes-ventas">
-              <span class="material-icons" aria-hidden="true">bar_chart</span>
-              <span>Reportes de ventas</span>
-            </a>
-            <a class="home-logistics-card" routerLink="/recepcion-mercaderia">
-              <span class="material-icons" aria-hidden="true">move_to_inbox</span>
-              <span>Recepción de mercadería</span>
-            </a>
-            <a class="home-logistics-card" routerLink="/inventario">
-              <span class="material-icons" aria-hidden="true">inventory</span>
-              <span>Inventario</span>
-            </a>
-            <a class="home-logistics-card" routerLink="/precios">
-              <span class="material-icons" aria-hidden="true">sell</span>
-              <span>Productos</span>
-            </a>
-          </div>
-        </div>
+        <div
+          class="home-logistics-redirect"
+          role="status"
+          aria-label="Redirigiendo a Picking"
+        ></div>
       }
     </section>
   `,
@@ -562,45 +543,10 @@ interface PendingCardVM {
         gap: 20px;
         flex-wrap: wrap;
       }
-      .home-logistics {
+      .home-logistics-redirect {
         margin-top: 28px;
-      }
-      .home-logistics-note {
-        margin: 0 0 20px;
-        font-size: 13px;
-        color: var(--ink-muted);
-        max-width: 560px;
-      }
-      .home-logistics-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-      }
-      .home-logistics-card {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        padding: 24px 12px;
-        border: 1px solid var(--hairline);
-        background: var(--bg);
-        color: var(--ink);
-        text-decoration: none;
-        font-size: 13px;
-        font-weight: 700;
-        text-align: center;
-      }
-      .home-logistics-card:hover {
-        border-color: var(--accent);
-      }
-      .home-logistics-card .material-icons {
-        font-size: 26px;
-        color: var(--ink-muted);
-      }
-      @media (max-width: 900px) {
-        .home-logistics-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
+        height: 160px;
+        background: var(--faint);
       }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
@@ -1522,6 +1468,20 @@ export class DashboardPage {
   });
 
   constructor() {
+    const router = inject(Router);
+
+    // Doc 89, sección 1.2/5: mientras no exista el Inicio de logística, el
+    // Jefe de Logística entra directo a Picking del día, con "Solo
+    // pendientes" encendido. Reemplaza la navegación en el historial para
+    // que "atrás" no vuelva a un Inicio vacío.
+    if (this.isLogisticsHome()) {
+      router.navigate(['/reparto/picking'], {
+        queryParams: { onlyPending: true, date: todayIso() },
+        replaceUrl: true,
+      });
+      return;
+    }
+
     this.lookupSvc.salesChannels().subscribe((items) => {
       this.channelOptions.set([
         { value: '', label: 'Todos' },
@@ -1530,8 +1490,6 @@ export class DashboardPage {
     });
 
     if (!this.showDashboard()) return;
-
-    const router = inject(Router);
 
     /**
      * Un solo flujo de recarga alimenta las dos cards — doc 70, sección 3.2.
