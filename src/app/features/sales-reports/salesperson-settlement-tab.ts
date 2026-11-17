@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { map } from 'rxjs/operators';
+import { AuthService } from '../../core/auth/auth';
 import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiOptionCard } from '../../shared/ui/option-card/option-card';
@@ -58,6 +59,10 @@ export class SalespersonSettlementTab {
   private exporter = inject(TableExporter);
   private toast = inject(ToastService);
   private router = inject(Router);
+  private auth = inject(AuthService);
+
+  /** Sin `order.view_all` la fila no abre nada (doc 88, sección 6.5). */
+  protected canOpenOrders = computed(() => this.auth.hasAny('order.view_all'));
 
   protected dateText = dateText;
   protected timeText = timeText;
@@ -228,6 +233,7 @@ export class SalespersonSettlementTab {
   }
 
   protected openOrders(row: SalespersonSettlementRow) {
+    if (!this.canOpenOrders()) return;
     const r = this.report();
     if (!r) return;
     this.router.navigate(['/pedidos'], {

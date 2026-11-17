@@ -74,7 +74,9 @@ export const routes: Routes = [
       // sección 12): supervisión de facturación sin los otros dos permisos.
       {
         path: 'reportes-ventas',
-        canActivate: [permissionGuard('order.view_all', 'report.view', 'order.send_to_billing')],
+        canActivate: [
+          permissionGuard('order.view_all', 'report.view', 'order.send_to_billing', 'report.sales'),
+        ],
         loadChildren: () =>
           import('./features/sales-reports/sales-reports.routes').then(
             (m) => m.SALES_REPORTS_ROUTES,

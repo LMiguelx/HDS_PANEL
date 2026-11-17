@@ -82,14 +82,19 @@ export class ShellSidebar {
     this.auth.isTelesalesMode() ? TELEVENTAS_NAV : NAV,
   );
 
+  /** Ítem visible: tiene algún permiso de `anyOf` y ninguno de los de `noneOf` (evita duplicados). */
+  private isItemVisible(i: NavItem): boolean {
+    return this.auth.hasAny(...i.anyOf) && !(i.noneOf && this.auth.hasAny(...i.noneOf));
+  }
+
   /** Ítems sin grupo (hoy solo "Inicio"): enlace directo, sin flecha ni ícono de grupo. */
   readonly directItems = computed(() =>
-    this.navSource().filter((i) => !i.group && this.auth.hasAny(...i.anyOf)),
+    this.navSource().filter((i) => !i.group && this.isItemVisible(i)),
   );
 
   /** Ítems agrupados visibles por permiso, con el ícono fijo de su grupo. */
   readonly groups = computed<NavGroupVm[]>(() => {
-    const visible = this.navSource().filter((i) => i.group && this.auth.hasAny(...i.anyOf));
+    const visible = this.navSource().filter((i) => i.group && this.isItemVisible(i));
     const byGroup = new Map<string, NavItem[]>();
     for (const item of visible) {
       const key = item.group!;

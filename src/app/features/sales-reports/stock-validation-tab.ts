@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { AuthService } from '../../core/auth/auth';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField } from '../../shared/ui/field/field';
 import { UiWarehouseSelect } from '../../shared/ui/warehouse-select/warehouse-select';
@@ -174,7 +175,7 @@ const CARDS: CardDef[] = [
                   >{{ a.icon }}</span
                 >
                 <span class="svt-alert-text">{{ a.text }} <span [uiInfoTip]="a.tip"></span></span>
-                @if (a.actionLabel) {
+                @if (a.actionLabel && canShowAlertAction(a.key)) {
                   <button type="button" class="svt-alert-action" (click)="onAlertAction(a.key)">
                     {{ a.actionLabel }}
                   </button>
@@ -760,6 +761,7 @@ export class StockValidationTab {
   private router = inject(Router);
   private exporter = inject(TableExporter);
   private toast = inject(ToastService);
+  private auth = inject(AuthService);
 
   protected quantityText = quantityText;
   protected dateTimeText = dateTimeText;
@@ -932,6 +934,17 @@ export class StockValidationTab {
       if (this.subTab() === 'negativos') this.loadNegatives();
       else this.load();
     });
+  }
+
+  /**
+   * Las acciones de "Pedidos sin respuesta del ERP" y "Abiertos de días
+   * anteriores" abren pedidos individuales (doc 88, sección 6.5): sin
+   * `order.view_all` no tiene sentido mostrarlas. "Negativos del día" solo
+   * manda a Inventario, sin ese permiso.
+   */
+  protected canShowAlertAction(key: AlertKey): boolean {
+    if (key === 'negativeStockProducts') return true;
+    return this.auth.hasAny('order.view_all');
   }
 
   /** Acción de cada aviso de la franja — doc 87, sección 4.2. */

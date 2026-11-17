@@ -14,6 +14,7 @@ import { UiButton } from '../../shared/ui/button/button';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiExportMenu } from '../../shared/ui/export-menu/export-menu';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { SalesReportAdminService } from './sales-report-admin';
 import { ProductOrderRow, ProductSalesReport } from '../../shared/models/sales-report.models';
 import { orderStatusName } from '../orders/order-format';
@@ -35,7 +36,7 @@ const EXPORT_MAX_ROWS = 50000;
  */
 @Component({
   selector: 'app-product-sales-detail',
-  imports: [RouterLink, UiButton, UiStatus, UiEmpty, UiExportMenu],
+  imports: [RouterLink, UiButton, UiStatus, UiEmpty, UiExportMenu, HasPermissionDirective],
   template: `
     <section class="psd-page">
       @if (loading()) {
@@ -136,6 +137,7 @@ const EXPORT_MAX_ROWS = 50000;
                   <td class="psd-cell-strong">{{ formatSoles(o.netAmount) }}</td>
                   <td class="psd-row-action">
                     <button
+                      *hasPermission="'order.view_all'"
                       uiButton
                       variant="ghost"
                       size="sm"

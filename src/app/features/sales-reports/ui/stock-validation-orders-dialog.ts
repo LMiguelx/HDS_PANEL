@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiEmpty } from '../../../shared/ui/empty/empty';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { SalesReportAdminService } from '../sales-report-admin';
 import {
@@ -36,7 +37,7 @@ function isToday(iso: string): boolean {
  */
 @Component({
   selector: 'app-stock-validation-orders-dialog',
-  imports: [UiButton, UiEmpty],
+  imports: [UiButton, UiEmpty, HasPermissionDirective],
   template: `
     <div class="svo">
       @if (loading()) {
@@ -125,7 +126,13 @@ function isToday(iso: string): boolean {
                     <td class="svo-muted">{{ orderStatusText(o) }}</td>
                     <td>
                       @if (o.editable) {
-                        <button uiButton variant="secondary" size="sm" (click)="editOrder(o)">
+                        <button
+                          *hasPermission="'order.manage'"
+                          uiButton
+                          variant="secondary"
+                          size="sm"
+                          (click)="editOrder(o)"
+                        >
                           Editar
                         </button>
                       }

@@ -112,7 +112,11 @@
           </thead>
           <tbody>
             @for (row of r.rows; track row.salespersonId + '-' + (row.date ?? ''); let i = $index) {
-              <tr class="sst-row" (click)="openOrders(row)">
+              <tr
+                class="sst-row"
+                [class.sst-row-static]="!canOpenOrders()"
+                (click)="openOrders(row)"
+              >
                 @for (col of columns(); track col.key) {
                   <td
                     [class.sst-col-right]="col.type !== 'text' && col.type !== 'code'"

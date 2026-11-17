@@ -162,6 +162,14 @@
   background: var(--faint);
 }
 
+.sst-row-static {
+  cursor: default;
+}
+
+.sst-row-static:hover {
+  background: none;
+}
+
 .sst-cell-strong {
   font-weight: 800;
   white-space: nowrap;

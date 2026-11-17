@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { permissionGuard } from '../../core/auth/permission-guard';
 
 export const INVENTORY_ROUTES: Routes = [
   {
@@ -11,6 +12,9 @@ export const INVENTORY_ROUTES: Routes = [
   },
   {
     path: 'ajuste',
+    // Solo quien administra ajustes de stock — doc 88, sección 7: "Ajuste de
+    // stock no aparece" para quien solo tiene `report.view`.
+    canActivate: [permissionGuard('config.edit')],
     loadComponent: () => import('./stock-adjustment').then((m) => m.StockAdjustmentPage),
   },
   {

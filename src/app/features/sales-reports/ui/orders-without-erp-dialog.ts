@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiModal } from '../../../shared/ui/modal/modal';
 import { UiEmpty } from '../../../shared/ui/empty/empty';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { SalesReportAdminService } from '../sales-report-admin';
 import {
@@ -23,7 +24,7 @@ export interface OrdersWithoutErpDialogData {
  */
 @Component({
   selector: 'app-orders-without-erp-dialog',
-  imports: [UiButton, UiModal, UiEmpty],
+  imports: [UiButton, UiModal, UiEmpty, HasPermissionDirective],
   template: `
     <ui-modal
       title="Pedidos sin respuesta del ERP"
@@ -59,7 +60,7 @@ export interface OrdersWithoutErpDialogData {
                   <th>Cliente</th>
                   <th>Vendedor</th>
                   <th>Monto</th>
-                  <th></th>
+                  <th *hasPermission="'order.view_all'"></th>
                 </tr>
               </thead>
               <tbody>
@@ -71,7 +72,7 @@ export interface OrdersWithoutErpDialogData {
                     <td>{{ o.customerName }}</td>
                     <td class="owe-muted">{{ o.salespersonName }}</td>
                     <td class="owe-num">{{ formatSoles(o.netAmount) }}</td>
-                    <td>
+                    <td *hasPermission="'order.view_all'">
                       <button uiButton variant="ghost" size="sm" (click)="openOrder(o)">Ver</button>
                     </td>
                   </tr>

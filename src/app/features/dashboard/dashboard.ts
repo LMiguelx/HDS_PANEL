@@ -516,6 +516,31 @@ interface PendingCardVM {
 
           <p class="home-dash-footer">Datos al {{ d.date }}.</p>
         }
+      } @else if (isLogisticsHome()) {
+        <div class="home-logistics">
+          <p class="home-logistics-note">
+            El inicio de logística está en camino. Por ahora, entra directo a tus pantallas desde el
+            menú.
+          </p>
+          <div class="home-logistics-grid">
+            <a class="home-logistics-card" routerLink="/reportes-ventas">
+              <span class="material-icons" aria-hidden="true">bar_chart</span>
+              <span>Reportes de ventas</span>
+            </a>
+            <a class="home-logistics-card" routerLink="/recepcion-mercaderia">
+              <span class="material-icons" aria-hidden="true">move_to_inbox</span>
+              <span>Recepción de mercadería</span>
+            </a>
+            <a class="home-logistics-card" routerLink="/inventario">
+              <span class="material-icons" aria-hidden="true">inventory</span>
+              <span>Inventario</span>
+            </a>
+            <a class="home-logistics-card" routerLink="/precios">
+              <span class="material-icons" aria-hidden="true">sell</span>
+              <span>Productos</span>
+            </a>
+          </div>
+        </div>
       }
     </section>
   `,
@@ -536,6 +561,46 @@ interface PendingCardVM {
         justify-content: space-between;
         gap: 20px;
         flex-wrap: wrap;
+      }
+      .home-logistics {
+        margin-top: 28px;
+      }
+      .home-logistics-note {
+        margin: 0 0 20px;
+        font-size: 13px;
+        color: var(--ink-muted);
+        max-width: 560px;
+      }
+      .home-logistics-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .home-logistics-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 24px 12px;
+        border: 1px solid var(--hairline);
+        background: var(--bg);
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 700;
+        text-align: center;
+      }
+      .home-logistics-card:hover {
+        border-color: var(--accent);
+      }
+      .home-logistics-card .material-icons {
+        font-size: 26px;
+        color: var(--ink-muted);
+      }
+      @media (max-width: 900px) {
+        .home-logistics-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
       }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
@@ -1299,7 +1364,20 @@ export class DashboardPage {
   readonly user = this.auth.currentUser;
 
   protected formatSoles = formatSoles;
-  protected showDashboard = computed(() => this.auth.hasAny('report.view'));
+  /**
+   * Doc 88, sección 5: con `picking.store` y sin `order.view_all` el Inicio
+   * de ventas no es lo que necesita logística, aunque `report.view` haga
+   * que el endpoint responda. Mientras no exista el Inicio de logística
+   * (doc 88, sección 10), se muestra un aviso provisional en vez del
+   * resumen de ventas — nunca se llama a `/api/admin/dashboard/today` para
+   * este caso.
+   */
+  protected isLogisticsHome = computed(
+    () => this.auth.hasAny('picking.store') && !this.auth.hasAny('order.view_all'),
+  );
+  protected showDashboard = computed(
+    () => this.auth.hasAny('report.view') && !this.isLogisticsHome(),
+  );
   /** Doc 50, sección 5.1: también tiene reparto (p. ej. el Administrador) — acceso directo a su inicio. */
   protected canGoToReparto = computed(() => this.auth.hasAny('delivery.manage'));
   protected canSeeOrders = computed(() =>

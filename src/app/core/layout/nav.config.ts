@@ -8,6 +8,8 @@ export interface NavItem {
   icon: string;
   route: string;
   anyOf: string[]; // basta tener uno
+  /** Si tiene alguno de estos, el ítem NO se muestra (evita duplicados con otro ítem que cubra el mismo caso). */
+  noneOf?: string[];
   group?: string; // agrupador visual
   /** Módulo todavía no rediseñado: se muestra apagado con «Próximamente». */
   comingSoon?: boolean;
@@ -126,7 +128,7 @@ export const NAV: NavItem[] = [
     label: 'Reportes de ventas',
     icon: 'bar_chart',
     route: '/reportes-ventas',
-    anyOf: ['order.view_all'],
+    anyOf: ['order.view_all', 'report.sales'],
     group: 'Ventas',
   },
 
@@ -222,11 +224,14 @@ export const NAV: NavItem[] = [
   // Acceso a Reportes de ventas para quien solo tiene `report.view` (p. ej.
   // Jefe de reparto) — doc 50, sección 4: no tiene `order.view_all`, así que
   // no ve la entrada de "Ventas", pero sí puede consultar estos reportes.
+  // `noneOf` evita el duplicado con el ítem de "Ventas" para quien también
+  // tiene `order.view_all` o `report.sales` (doc 88, sección 4).
   {
     label: 'Reportes',
     icon: 'bar_chart',
     route: '/reportes-ventas',
     anyOf: ['report.view'],
+    noneOf: ['order.view_all', 'report.sales'],
     group: 'Administración',
   },
   {

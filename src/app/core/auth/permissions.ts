@@ -30,6 +30,8 @@ export const PERMISSIONS = {
   PRICE_VIEW: 'price.view',
   PRODUCT_EDIT: 'product.edit',
   REPORT_VIEW: 'report.view',
+  REPORT_SALES: 'report.sales',
+  PICKING_STORE: 'picking.store',
   CONFIG_EDIT: 'config.edit',
   STOCK_ADVANCE: 'stock.advance',
   USER_MANAGE: 'user.manage',

@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiField } from '../../shared/ui/field/field';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { SalesReportModuleTabs } from './ui/module-tabs';
 import { OrderAdminService } from '../orders/order-admin';
 import { GlobalDailyOrderSummaryView } from '../../shared/models/order.models';
@@ -20,7 +21,7 @@ function todayIso(): string {
  */
 @Component({
   selector: 'app-daily-summary-tab',
-  imports: [UiButton, UiField, UiEmpty, SalesReportModuleTabs],
+  imports: [UiButton, UiField, UiEmpty, HasPermissionDirective, SalesReportModuleTabs],
   template: `
     <app-sales-report-module-tabs />
     <section class="dst-page">
@@ -63,7 +64,7 @@ function todayIso(): string {
           </div>
         </div>
 
-        <div class="dst-actions">
+        <div class="dst-actions" *hasPermission="'order.view_all'">
           <button uiButton variant="secondary" (click)="viewOrders()">Ver pedidos del día</button>
         </div>
 

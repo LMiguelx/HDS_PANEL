@@ -18,7 +18,7 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
       <a
         routerLink="/reportes-ventas/validacion-stock"
         routerLinkActive="active"
-        *hasPermission="['order.view_all', 'order.send_to_billing']"
+        *hasPermission="['order.view_all', 'order.send_to_billing', 'report.sales']"
         >Validación de stock</a
       >
     </nav>
