@@ -1,6 +1,5 @@
-// Producción. Cambia las URLs cuando tengas el host real.
 export const environment = {
   production: true,
-  apiUrl: 'http://localhost:8080/api',
-  wsUrl: 'http://localhost:8080/ws',
+  apiUrl: 'http://161.132.41.192:8081/api',
+  wsUrl: 'http://161.132.41.192:8081/ws',
 };

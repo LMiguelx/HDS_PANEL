@@ -1,0 +1,80 @@
+<section class="mo-page">
+  <div class="mo-head">
+    <div>
+      <p class="mo-eyebrow">Televentas</p>
+      <h1>Mis pedidos</h1>
+    </div>
+  </div>
+
+  @if (loading() && rows().length === 0) {
+    <div class="mo-skeleton" role="status" aria-label="Cargando"></div>
+  } @else if (error()) {
+    <ui-empty
+      variant="error"
+      title="No pudimos cargar tus pedidos"
+      body="Intenta de nuevo en unos segundos."
+      actionLabel="Reintentar"
+      (action)="retry()"
+    />
+  } @else if (rows().length === 0) {
+    <ui-empty title="Sin pedidos" body="Todavía no registraste pedidos." />
+  } @else {
+    <table class="ui-table-grid mo-table">
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+          <th>Origen</th>
+          <th>Reparto</th>
+          <th class="mo-num">Neto</th>
+          <th class="mo-num">Bonificadas</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (o of rows(); track o.orderId) {
+          <tr class="mo-row" (click)="goToOrder(o.orderId)">
+            <td>{{ o.customerName }}</td>
+            <td class="mo-muted">{{ dateTimeText(o.orderDate) }}</td>
+            <td><ui-status [label]="orderStatusName(o.statusCode)" /></td>
+            <td>
+              @if (o.originCode === 'COUNTER' || o.originCode === 'TELESALES') {
+                <span
+                  class="mo-origin-tag"
+                  [class.mo-origin-telesales]="o.originCode === 'TELESALES'"
+                  >{{ originName(o.originCode) }}</span
+                >
+              }
+            </td>
+            <td class="mo-muted">{{ deliveryColumnText(o.statusCode, o.deliveryStatusCode) }}</td>
+            <td class="mo-num">
+              {{ formatSoles(o.netAmount) }}
+              @if (o.discountAmount > 0) {
+                <span class="mo-discount">−{{ formatSoles(o.discountAmount) }}</span>
+              }
+            </td>
+            <td class="mo-num">{{ o.bonusLines || '—' }}</td>
+            <td class="mo-row-action">Ver detalle</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <div class="mo-pager">
+      <button uiButton variant="secondary" size="sm" [disabled]="page() === 0" (click)="prevPage()">
+        Anterior
+      </button>
+      <span class="mo-pager-label">Página {{ page() + 1 }} de {{ totalPages() || 1 }}</span>
+      <button
+        uiButton
+        variant="secondary"
+        size="sm"
+        [disabled]="page() + 1 >= totalPages()"
+        (click)="nextPage()"
+      >
+        Siguiente
+      </button>
+    </div>
+  }
+</section>

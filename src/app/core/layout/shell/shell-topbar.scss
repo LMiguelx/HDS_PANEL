@@ -1,0 +1,286 @@
+// ---- Cabecera ----
+:host {
+  display: contents;
+}
+.topbar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 var(--sp-6);
+  height: 64px;
+  flex: none;
+  background: var(--topbar-bg);
+  color: var(--topbar-ink);
+  // La barra es oscura fija (no cambia con el tema): redefine las variables
+  // de tinta/borde solo dentro de ella, para que botones/menús ya
+  // existentes (que leen --ink/--divider/--faint) queden legibles sin
+  // duplicar sus estilos.
+  --ink: var(--topbar-ink);
+  --ink-muted: var(--topbar-ink-muted);
+  --divider: rgba(255, 255, 255, 0.2);
+  --hairline: rgba(255, 255, 255, 0.14);
+  --faint: rgba(255, 255, 255, 0.1);
+}
+.brand-zone {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.menu-btn {
+  margin-left: calc(var(--sp-3) * -1);
+}
+.menu-btn .material-icons {
+  font-size: 22px;
+}
+.brand {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.brand-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--divider);
+}
+.brand-sub {
+  font-size: var(--fs-meta);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.nav-history {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--sp-2, 4px);
+}
+.nav-history button[disabled] {
+  opacity: 0.35;
+}
+.nav-history .material-icons {
+  font-size: 18px;
+}
+
+@media (max-width: 767px) {
+  .nav-history {
+    display: none;
+  }
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.maintenance-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--status-warn);
+  border: 1px solid var(--status-warn);
+  padding: 4px 10px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.maintenance-chip:hover {
+  background: color-mix(in srgb, var(--status-warn) 12%, transparent);
+}
+.maintenance-chip .material-icons {
+  font-size: 15px;
+}
+.jornada-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  padding: 4px 10px;
+  border: 1px solid var(--divider);
+  white-space: nowrap;
+}
+.jornada-open {
+  color: var(--st-sent-to-billing);
+  border-color: var(--st-sent-to-billing);
+}
+.jornada-icon {
+  font-size: 14px;
+}
+.jornada-loading {
+  opacity: 0.6;
+}
+
+.bell-btn {
+  flex: none;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: 50%;
+}
+.bell-btn:hover {
+  background: var(--faint);
+}
+.bell-btn .material-icons {
+  font-size: 20px;
+}
+
+// ---- Chip y menú del usuario ----
+.user-menu-wrap {
+  position: relative;
+}
+.user-chip {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: 6px 8px;
+  color: var(--ink);
+  border-radius: var(--radius-control);
+}
+.user-chip:hover {
+  background: var(--faint);
+}
+.user-avatar {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+.user-avatar-lg {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+}
+.user-name {
+  font-size: 13px;
+  color: var(--ink-muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-chip-caret {
+  font-size: 18px;
+  color: var(--ink-muted);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.user-chip-caret.open {
+  transform: rotate(180deg);
+}
+
+.user-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elev-menu);
+  padding: var(--sp-2);
+  z-index: 20;
+  // Dentro del menú el texto vuelve a leerse con los tokens normales de
+  // la página (la barra los sobrescribe para sí misma más arriba).
+  --ink: light-dark(#16181d, #f3f2f2);
+  --ink-muted: light-dark(#5f6672, #a09b98);
+  --divider: light-dark(#cbced4, rgba(243, 242, 242, 0.26));
+  --hairline: light-dark(#dde0e4, rgba(243, 242, 242, 0.14));
+  --faint: light-dark(rgba(22, 24, 29, 0.05), rgba(243, 242, 242, 0.06));
+}
+.user-menu-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+.user-menu-head-text {
+  min-width: 0;
+}
+.user-menu-fullname {
+  margin: 0;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.user-menu-meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  box-sizing: border-box;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 10px var(--sp-3);
+  min-height: var(--touch-min);
+  cursor: pointer;
+  border-radius: var(--radius-control);
+}
+.user-menu-item:hover {
+  background: var(--faint);
+}
+.user-menu-item .material-icons {
+  font-size: 19px;
+  color: var(--ink-muted);
+  flex: none;
+}
+.user-menu-toggle {
+  cursor: default;
+}
+.user-menu-toggle:hover {
+  background: transparent;
+}
+.user-menu-toggle-label {
+  flex: 1;
+}
+.user-menu-sep {
+  height: 1px;
+  background: var(--hairline);
+  margin: var(--sp-2) var(--sp-3);
+}
+.user-menu-danger {
+  color: var(--status-danger);
+}
+.user-menu-danger .material-icons {
+  color: var(--status-danger);
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    padding: 0 var(--sp-4);
+    gap: var(--sp-2);
+  }
+  .jornada-text {
+    display: none;
+  }
+}

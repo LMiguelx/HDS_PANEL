@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { decodeJwt } from './jwt.util';
 import { Session, TokenResponse } from '../../shared/models/auth.models';
+import { ListRouteReuseStrategy } from '../routing/list-route-reuse-strategy';
 
 const ACCESS_KEY = 'hds.access';
 const REFRESH_KEY = 'hds.refresh';
@@ -12,6 +13,7 @@ const REFRESH_KEY = 'hds.refresh';
 export class AuthService {
   private http = inject(HttpClient);
   private router = inject(Router);
+  private listReuse = inject(ListRouteReuseStrategy);
 
   private accessToken = signal<string | null>(null);
   private sessionSig = signal<Session | null>(null);
@@ -19,6 +21,13 @@ export class AuthService {
   readonly currentUser = this.sessionSig.asReadonly();
   readonly isAuthenticated = computed(() => this.sessionSig() !== null);
   readonly permissions = computed(() => this.sessionSig()?.permissions ?? []);
+  /**
+   * Modo televentas (doc 42, sección 1.1): rol VENDEDOR sin permisos de
+   * supervisión. Decide el menú, la pantalla de inicio y el guard de rutas.
+   */
+  readonly isTelesalesMode = computed(
+    () => this.hasRole('VENDEDOR') && !this.hasAny('order.view_all', 'order.manage'),
+  );
 
   constructor() {
     this.restoreFromStorage();
@@ -71,6 +80,9 @@ export class AuthService {
     this.sessionSig.set(null);
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    // Si otro usuario entra después en la misma pestaña, que no herede los
+    // listados (con sus filtros y datos) que este dejó en caché.
+    this.listReuse.clear();
     void this.router.navigateByUrl('/login');
   }
 
