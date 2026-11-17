@@ -1,16 +1,33 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { of } from 'rxjs';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiModal } from '../../../shared/ui/modal/modal';
 import { UiField, UiFieldOption } from '../../../shared/ui/field/field';
+import { UiTypeahead, UiLookupItem } from '../../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../../shared/ui/empty/empty';
+import { LocationPicker } from '../../../shared/ui/location-picker/location-picker';
 import { UI_DIALOG_DATA, UiDialogRef, UiDialogService } from '../../../shared/ui/dialog/dialog';
 import { ToastService } from '../../../core/ui/toast';
 import { CustomerService } from '../customer';
+import { CatalogLookupService } from '../../catalog/catalog-lookup';
 import {
   CustomerDetail,
   CustomerEditOptions,
   EditCustomerCommand,
 } from '../../../shared/models/customer.models';
+import { UbigeoView } from '../../../shared/models/customer-request.models';
+import { flattenUbigeoTree, ubigeoText } from '../../../shared/utils/ubigeo';
+
+function normalize(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/** Mismo redondeo que `location-picker` — comparar coordenadas "por valor" (doc 83, sección 1.1). */
+function round8(n: number): number {
+  return Math.round(n * 1e8) / 1e8;
+}
+
+const MAX_PHONE_LENGTH = 20;
 
 export interface EditCustomerDialogData {
   customer: CustomerDetail;
@@ -25,11 +42,12 @@ const MAX_NAME_LENGTH = 150;
  */
 @Component({
   selector: 'app-edit-customer-dialog',
-  imports: [UiButton, UiModal, UiField, UiEmpty],
+  imports: [UiButton, UiModal, UiField, UiTypeahead, UiEmpty, LocationPicker],
   template: `
     <ui-modal
       title="Editar datos del cliente"
       [subtitle]="data.customer.code + ' · ' + data.customer.businessName"
+      [wide]="true"
       (close)="onClose()"
     >
       <div class="ecd">
@@ -54,83 +72,137 @@ const MAX_NAME_LENGTH = 150;
         } @else if (!options()) {
           <div class="ecd-skeleton" role="status" aria-label="Cargando"></div>
         } @else {
-          <div class="ecd-field">
-            <label>Código</label>
-            <div class="ecd-readonly">{{ data.customer.code }}</div>
-          </div>
+          <div class="ecd-cols">
+            <div class="ecd-col">
+              <div class="ecd-col-title">Datos</div>
+              <div class="ecd-field">
+                <label>Código</label>
+                <div class="ecd-readonly">{{ data.customer.code }}</div>
+              </div>
 
-          <ui-field
-            label="Razón social"
-            [value]="businessName()"
-            (valueChange)="onNameChange($event)"
-            [hint]="nameError() ? '' : businessName().length + '/' + maxNameLength"
-            [error]="nameError()"
-          />
+              <ui-field
+                label="Razón social"
+                [value]="businessName()"
+                (valueChange)="onNameChange($event)"
+                [hint]="nameError() ? '' : businessName().length + '/' + maxNameLength"
+                [error]="nameError()"
+              />
 
-          <div class="ecd-doc-row">
-            <ui-field
-              label="Tipo de documento"
-              type="select"
-              [value]="documentTypeIdStr()"
-              (valueChange)="onDocTypeChange($event)"
-              [options]="docTypeOptions()"
-              [error]="docTypeError()"
-            />
-            <ui-field
-              label="Número de documento"
-              [value]="documentNumber()"
-              (valueChange)="onDocNumberChange($event)"
-              [hint]="docNumberFieldError() ? '' : docNumberHint()"
-              [error]="docNumberFieldError()"
-            />
-          </div>
+              <div class="ecd-doc-row">
+                <ui-field
+                  label="Tipo de documento"
+                  type="select"
+                  [value]="documentTypeIdStr()"
+                  (valueChange)="onDocTypeChange($event)"
+                  [options]="docTypeOptions()"
+                  [error]="docTypeError()"
+                />
+                <ui-field
+                  label="Número de documento"
+                  [value]="documentNumber()"
+                  (valueChange)="onDocNumberChange($event)"
+                  [hint]="docNumberFieldError() ? '' : docNumberHint()"
+                  [error]="docNumberFieldError()"
+                />
+              </div>
 
-          <ui-field
-            label="Tipo de cliente"
-            type="select"
-            [value]="customerTypeIdStr()"
-            (valueChange)="onCustomerTypeChange($event)"
-            [options]="customerTypeOptions()"
-          />
+              <ui-field
+                label="Tipo de cliente"
+                type="select"
+                [value]="customerTypeIdStr()"
+                (valueChange)="onCustomerTypeChange($event)"
+                [options]="customerTypeOptions()"
+              />
 
-          @if (hasCustomerTypeChange()) {
-            <div class="ecd-warn-banner">
-              El tipo de cliente define los precios. Los pedidos nuevos usarán los precios de
-              {{ customerTypeAfterText() }}; los pedidos abiertos conservan sus precios hasta que se
-              recalculen.
-            </div>
-          }
-          @if (hasDocTypeChange()) {
-            <div class="ecd-warn-banner">
-              El tipo de documento define si se emite boleta o factura. Cámbialo también en el ERP
-              antes de facturar.
-            </div>
-          }
+              <ui-field
+                label="Teléfono"
+                [value]="phone()"
+                (valueChange)="onPhoneChange($event)"
+                [hint]="phoneFieldError() ? '' : phone().length + '/' + maxPhoneLength"
+                [error]="phoneFieldError()"
+              />
 
-          @if (hasAnyChange()) {
-            <div class="ecd-summary">
-              <div class="ecd-summary-title">Resumen de cambios</div>
-              @if (hasNameChange()) {
-                <div class="ecd-summary-row">
-                  Razón social: <span class="ecd-before">{{ data.customer.businessName }}</span> →
-                  {{ businessName() }}
-                </div>
-              }
-              @if (hasDocumentChange()) {
-                <div class="ecd-summary-row">
-                  Documento: <span class="ecd-before">{{ documentBeforeText() }}</span> →
-                  {{ documentAfterText() }}
-                </div>
-              }
               @if (hasCustomerTypeChange()) {
-                <div class="ecd-summary-row">
-                  Tipo de cliente:
-                  <span class="ecd-before">{{ data.customer.customerTypeName || '—' }}</span> →
-                  {{ customerTypeAfterText() }}
+                <div class="ecd-warn-banner">
+                  El tipo de cliente define los precios. Los pedidos nuevos usarán los precios de
+                  {{ customerTypeAfterText() }}; los pedidos abiertos conservan sus precios hasta
+                  que se recalculen.
+                </div>
+              }
+              @if (hasDocTypeChange()) {
+                <div class="ecd-warn-banner">
+                  El tipo de documento define si se emite boleta o factura. Cámbialo también en el
+                  ERP antes de facturar.
+                </div>
+              }
+
+              @if (hasAnyChange()) {
+                <div class="ecd-summary">
+                  <div class="ecd-summary-title">Resumen de cambios</div>
+                  @if (hasNameChange()) {
+                    <div class="ecd-summary-row">
+                      Razón social:
+                      <span class="ecd-before">{{ data.customer.businessName }}</span> →
+                      {{ businessName() }}
+                    </div>
+                  }
+                  @if (hasDocumentChange()) {
+                    <div class="ecd-summary-row">
+                      Documento: <span class="ecd-before">{{ documentBeforeText() }}</span> →
+                      {{ documentAfterText() }}
+                    </div>
+                  }
+                  @if (hasCustomerTypeChange()) {
+                    <div class="ecd-summary-row">
+                      Tipo de cliente:
+                      <span class="ecd-before">{{ data.customer.customerTypeName || '—' }}</span>
+                      → {{ customerTypeAfterText() }}
+                    </div>
+                  }
+                  @if (hasPhoneChange()) {
+                    <div class="ecd-summary-row">
+                      Teléfono: <span class="ecd-before">{{ data.customer.phone || '—' }}</span> →
+                      {{ phone() }}
+                    </div>
+                  }
+                  @if (hasUbigeoChange()) {
+                    <div class="ecd-summary-row">
+                      Ubigeo:
+                      <span class="ecd-before">{{ ubigeoText(data.customer.ubigeo) }}</span> →
+                      {{ ubigeo()?.name }}
+                    </div>
+                  }
                 </div>
               }
             </div>
-          }
+
+            <div class="ecd-col">
+              <div class="ecd-col-title">Ubicación</div>
+              <app-location-picker
+                [(latitude)]="latitude"
+                [(longitude)]="longitude"
+                [(address)]="address"
+                [referenceLatitude]="data.customer.latitude"
+                [referenceLongitude]="data.customer.longitude"
+                [addressReadonly]="true"
+              />
+              @if (latLngError()) {
+                <div class="ecd-error-banner">{{ latLngError() }}</div>
+              }
+
+              <div class="ecd-field">
+                <ui-typeahead
+                  label="Ubigeo"
+                  placeholder="Distrito · Provincia · Departamento"
+                  [clearOnPick]="false"
+                  [search]="ubigeoSearch"
+                  [selected]="ubigeo()"
+                  (selectedChange)="onUbigeoChange($event)"
+                  [error]="ubigeoError()"
+                />
+              </div>
+            </div>
+          </div>
         }
       </div>
 
@@ -180,6 +252,24 @@ const MAX_NAME_LENGTH = 150;
       .ecd-skeleton {
         height: 220px;
         background: var(--faint);
+      }
+      .ecd-cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
+        align-items: start;
+      }
+      .ecd-col {
+        display: grid;
+        gap: 16px;
+        min-width: 0;
+      }
+      .ecd-col-title {
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        font-weight: 800;
       }
       .ecd-field {
         display: grid;
@@ -235,6 +325,13 @@ const MAX_NAME_LENGTH = 150;
         text-decoration: line-through;
       }
 
+      @media (max-width: 860px) {
+        .ecd-cols {
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+      }
+
       @media (max-width: 599px) {
         .ecd-doc-row {
           flex-direction: column;
@@ -251,10 +348,13 @@ export class EditCustomerDialog {
   protected data = inject<EditCustomerDialogData>(UI_DIALOG_DATA);
   protected ref = inject(UiDialogRef<CustomerDetail | null>);
   private customerSvc = inject(CustomerService);
+  private catalogSvc = inject(CatalogLookupService);
   private toast = inject(ToastService);
   private dialog = inject(UiDialogService);
 
   protected maxNameLength = MAX_NAME_LENGTH;
+  protected maxPhoneLength = MAX_PHONE_LENGTH;
+  protected ubigeoText = ubigeoText;
 
   protected options = signal<CustomerEditOptions | null>(null);
   protected optionsError = signal(false);
@@ -263,12 +363,29 @@ export class EditCustomerDialog {
   protected documentTypeIdStr = signal(String(this.data.customer.documentTypeId ?? ''));
   protected documentNumber = signal(this.data.customer.documentNumber ?? '');
   protected customerTypeIdStr = signal(String(this.data.customer.customerTypeId ?? ''));
+  protected phone = signal(this.data.customer.phone ?? '');
+  protected latitude = signal(this.data.customer.latitude);
+  protected longitude = signal(this.data.customer.longitude);
+  protected address = signal(this.data.customer.address ?? '');
+  protected ubigeo = signal<UiLookupItem | null>(
+    this.data.customer.ubigeo
+      ? {
+          id: 0,
+          code: this.data.customer.ubigeo.ubigeoCode,
+          name: ubigeoText(this.data.customer.ubigeo),
+        }
+      : null,
+  );
+  private ubigeoDistricts = signal<UbigeoView[]>([]);
 
   protected saving = signal(false);
   protected banner = signal('');
   protected nameError = signal('');
   protected docTypeError = signal('');
   protected docNumberApiError = signal('');
+  protected phoneApiError = signal('');
+  protected latLngError = signal('');
+  protected ubigeoError = signal('');
 
   protected docTypeOptions = computed<UiFieldOption[]>(() =>
     (this.options()?.documentTypes ?? []).map((t) => ({
@@ -336,13 +453,55 @@ export class EditCustomerDialog {
   protected hasCustomerTypeChange = computed(
     () => this.customerTypeId() !== this.data.customer.customerTypeId,
   );
+
+  protected hasPhoneChange = computed(
+    () => this.phone().trim() !== (this.data.customer.phone ?? '').trim(),
+  );
+  /** "No puede quedar vacío" — doc 83, sección 1.1: solo bloquea si se tocó el teléfono. */
+  protected phoneLiveError = computed(() =>
+    this.hasPhoneChange() && !this.phone().trim() ? 'El teléfono no puede quedar vacío' : '',
+  );
+  protected phoneFieldError = computed(() => this.phoneApiError() || this.phoneLiveError());
+
+  /** Latitud y longitud van siempre juntas — doc 83, sección 1.1. */
+  protected hasLocationChange = computed(() => {
+    const lat = this.latitude();
+    const lng = this.longitude();
+    if (lat == null || lng == null) return false;
+    const refLat = this.data.customer.latitude;
+    const refLng = this.data.customer.longitude;
+    if (refLat == null || refLng == null) return true;
+    return round8(lat) !== round8(refLat) || round8(lng) !== round8(refLng);
+  });
+
+  protected hasUbigeoChange = computed(() => {
+    const code = this.ubigeo()?.code;
+    return !!code && code !== this.data.customer.ubigeo?.ubigeoCode;
+  });
+
   protected hasAnyChange = computed(
     () =>
       this.hasNameChange() ||
       this.hasDocTypeChange() ||
       this.hasDocNumberChange() ||
-      this.hasCustomerTypeChange(),
+      this.hasCustomerTypeChange() ||
+      this.hasPhoneChange() ||
+      this.hasLocationChange() ||
+      this.hasUbigeoChange(),
   );
+
+  /** Filtra en memoria la lista ya aplanada — doc 74, sección 2.3.1: el árbol se pide una sola vez. */
+  protected ubigeoSearch = (q: string) => of(this.filterUbigeos(q));
+
+  private filterUbigeos(q: string): UiLookupItem[] {
+    const needle = normalize(q.trim());
+    const matches = this.ubigeoDistricts().filter((u) =>
+      normalize(`${u.district} ${u.province} ${u.department}`).includes(needle),
+    );
+    return matches
+      .slice(0, 20)
+      .map((u, i): UiLookupItem => ({ id: i, code: u.ubigeoCode, name: ubigeoText(u) }));
+  }
 
   protected documentBeforeText = computed(() =>
     `${this.data.customer.documentTypeName ?? '—'} ${this.data.customer.documentNumber ?? ''}`.trim(),
@@ -357,11 +516,20 @@ export class EditCustomerDialog {
   );
 
   protected canSubmit = computed(
-    () => this.hasAnyChange() && !this.docNumberLiveError() && !this.saving() && !!this.options(),
+    () =>
+      this.hasAnyChange() &&
+      !this.docNumberLiveError() &&
+      !this.phoneLiveError() &&
+      !this.saving() &&
+      !!this.options(),
   );
 
   constructor() {
     this.loadOptions();
+    this.catalogSvc.ubigeoTree().subscribe({
+      next: (tree) => this.ubigeoDistricts.set(flattenUbigeoTree(tree)),
+      error: () => this.ubigeoDistricts.set([]),
+    });
   }
 
   protected loadOptions() {
@@ -391,6 +559,16 @@ export class EditCustomerDialog {
     this.customerTypeIdStr.set(v);
   }
 
+  protected onPhoneChange(v: string) {
+    this.phone.set(v.slice(0, MAX_PHONE_LENGTH));
+    this.phoneApiError.set('');
+  }
+
+  protected onUbigeoChange(item: UiLookupItem | null) {
+    this.ubigeo.set(item);
+    this.ubigeoError.set('');
+  }
+
   protected onClose() {
     if (!this.hasAnyChange()) {
       this.ref.close(null);
@@ -413,13 +591,25 @@ export class EditCustomerDialog {
       cmd.documentNumber = this.documentNumber().trim();
     }
     if (this.hasCustomerTypeChange()) cmd.customerTypeId = this.customerTypeId()!;
+    if (this.hasPhoneChange()) cmd.phone = this.phone().trim();
+    if (this.hasLocationChange()) {
+      cmd.latitude = this.latitude()!;
+      cmd.longitude = this.longitude()!;
+    }
+    if (this.hasUbigeoChange()) cmd.ubigeoCode = this.ubigeo()!.code!;
     return cmd;
   }
 
-  /** Ubica el mensaje del backend bajo el campo correcto — doc 70, sección 1.4 (doc 74, sección 4: ya no hay 409 de solicitud pendiente). */
+  /**
+   * Ubica el mensaje del backend bajo el campo correcto — doc 70, sección
+   * 1.4 (doc 74, sección 4: ya no hay 409 de solicitud pendiente); doc 83,
+   * sección 1.4: teléfono/latitud/longitud/ubigeo. "Envía la latitud y la
+   * longitud juntas" no debería pasar si el panel arma bien el body — va a
+   * la banda general, no bajo un campo (por eso se revisa antes).
+   */
   private placeError(message: string) {
     const m = message.toLowerCase();
-    if (m.includes('no existe') || m.includes('no hay cambios')) {
+    if (m.includes('no existe') || m.includes('no hay cambios') || m.includes('juntas')) {
       this.banner.set(message);
       return;
     }
@@ -429,6 +619,18 @@ export class EditCustomerDialog {
     }
     if (m.includes('elige el tipo de documento')) {
       this.docTypeError.set(message);
+      return;
+    }
+    if (m.includes('teléfono') || m.includes('telefono')) {
+      this.phoneApiError.set(message);
+      return;
+    }
+    if (m.includes('latitud') || m.includes('longitud')) {
+      this.latLngError.set(message);
+      return;
+    }
+    if (m.includes('ubigeo')) {
+      this.ubigeoError.set(message);
       return;
     }
     if (m.includes('documento')) {
@@ -445,6 +647,9 @@ export class EditCustomerDialog {
     this.nameError.set('');
     this.docTypeError.set('');
     this.docNumberApiError.set('');
+    this.phoneApiError.set('');
+    this.latLngError.set('');
+    this.ubigeoError.set('');
     this.customerSvc.update(this.data.customer.customerId, this.buildCommand()).subscribe({
       next: (detail) => {
         this.saving.set(false);

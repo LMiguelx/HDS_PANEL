@@ -135,12 +135,20 @@ export interface CustomerEditOptions {
   customerTypes: EditCustomerCustomerTypeOption[];
 }
 
-/** PATCH /admin/customers/{id} (doc 70, sección 1.1) — solo se envían los campos que cambiaron. */
+/**
+ * PATCH /admin/customers/{id} (doc 70, sección 1.1; doc 83, sección 1.1)
+ * — solo se envían los campos que cambiaron. `latitude`/`longitude` van
+ * SIEMPRE juntas si la ubicación cambió, aunque solo se haya movido una.
+ */
 export interface EditCustomerCommand {
   businessName?: string;
   documentTypeId?: number;
   documentNumber?: string;
   customerTypeId?: number;
+  phone?: string;
+  latitude?: number;
+  longitude?: number;
+  ubigeoCode?: string;
 }
 
 /** POST /admin/customers (doc 74, sección 2.2) — asignación inicial, opcional. */

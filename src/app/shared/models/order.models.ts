@@ -36,6 +36,10 @@ export interface AdminOrderSummary extends OrderSummary {
   sentToBillingAt: string | null;
   erpUploaded: boolean;
   erpUploadedAt: string | null;
+  /** NUEVO (doc 83, sección 2.1) — dirección del cliente; null si no tiene. */
+  customerAddress: string | null;
+  /** NUEVO (doc 83, sección 2.1) — distrito del ubigeo del cliente; null si no tiene ubigeo. */
+  customerDistrict: string | null;
 }
 
 export interface OrderListFilters {

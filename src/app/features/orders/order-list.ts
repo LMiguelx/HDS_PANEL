@@ -15,6 +15,7 @@ import { AdminOrderSummary } from '../../shared/models/order.models';
 import {
   ORDER_ORIGIN_OPTIONS,
   ORDER_STATUS_OPTIONS,
+  customerLocationText,
   deliveryColumnText,
   orderStatusName,
   originName,
@@ -189,7 +190,16 @@ function lastDayOfMonth(month: string): string {
           <tbody>
             @for (o of rows(); track o.orderId) {
               <tr>
-                <td class="ord-cell-strong">{{ o.customerName }}</td>
+                <td class="ord-customer-cell">
+                  <div class="ord-cell-strong">{{ o.customerName }}</div>
+                  <div
+                    class="ord-address"
+                    [class.ord-address-empty]="!o.customerAddress && !o.customerDistrict"
+                    [title]="customerLocationText(o)"
+                  >
+                    {{ customerLocationText(o) }}
+                  </div>
+                </td>
                 <td class="ord-muted">
                   {{ o.salespersonName }}
                   @if (o.createdByName !== o.salespersonName) {
@@ -238,6 +248,13 @@ function lastDayOfMonth(month: string): string {
               <div class="ord-card-mobile-head">
                 <span class="ord-card-mobile-name">{{ o.customerName }}</span>
                 <ui-status [label]="statusName(o.statusCode)" />
+              </div>
+              <div
+                class="ord-address"
+                [class.ord-address-empty]="!o.customerAddress && !o.customerDistrict"
+                [title]="customerLocationText(o)"
+              >
+                {{ customerLocationText(o) }}
               </div>
               <div class="ord-muted">
                 {{ o.salespersonName }} · {{ dateTimeText(o.orderDate) }}
@@ -367,8 +384,25 @@ function lastDayOfMonth(month: string): string {
       .ord-clear-link:hover {
         text-decoration: underline;
       }
+      .ord-customer-cell {
+        min-width: 280px;
+        max-width: 360px;
+      }
       .ord-cell-strong {
         font-weight: 800;
+      }
+      .ord-address {
+        margin-top: 3px;
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--ink-muted);
+        max-width: 320px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ord-address-empty {
+        opacity: 0.6;
       }
       .ord-muted {
         color: var(--ink-muted);
@@ -400,6 +434,10 @@ function lastDayOfMonth(month: string): string {
       }
       .ord-row-action {
         text-align: right;
+      }
+      /* Todas las columnas centradas respecto del bloque de dos líneas del cliente — doc 83, sección 2.2. */
+      .ord-table-desktop td {
+        vertical-align: middle;
       }
       .ord-pager {
         display: flex;
@@ -483,6 +521,7 @@ export class OrderListPage {
   protected statusName = orderStatusName;
   protected originName = originName;
   protected deliveryColumnText = deliveryColumnText;
+  protected customerLocationText = customerLocationText;
   protected statusOptions = STATUS_FILTER_OPTIONS;
   protected originOptions = ORIGIN_FILTER_OPTIONS;
 

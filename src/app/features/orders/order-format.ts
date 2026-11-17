@@ -69,6 +69,16 @@ export function deliveryColumnText(
   return statusCode === 'COUNTER_DELIVERED' ? 'Entregado en mostrador' : '—';
 }
 
+/** "dirección · distrito" bajo el cliente del listado — doc 83, sección 2.2. */
+export function customerLocationText(
+  o: { customerAddress: string | null; customerDistrict: string | null } | null | undefined,
+): string {
+  const address = o?.customerAddress?.trim() || '';
+  const district = o?.customerDistrict?.trim() || '';
+  if (address && district) return `${address} · ${district}`;
+  return address || district || 'Sin dirección';
+}
+
 /**
  * Tipo de línea del pedido — doc 36, sección 3.1. No llega como campo: se
  * deduce de `bonus`/`allocationId`.

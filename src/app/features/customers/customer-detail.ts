@@ -716,7 +716,7 @@ export class CustomerDetailPage {
     this.dialog
       .open<EditCustomerDialog, EditCustomerDialogData, CustomerDetail | null>(EditCustomerDialog, {
         data: { customer: c },
-        width: '560px',
+        width: 'min(1100px, 94vw)',
         disableClose: true,
       })
       .afterClosed()
