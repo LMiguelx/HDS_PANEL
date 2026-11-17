@@ -4,6 +4,7 @@ import { environment } from '../../../environments/environment';
 import {
   BrandSalesReport,
   NegativeStockReport,
+  OrdersWithoutErpReport,
   ProductSalesReport,
   SalespersonSettlementReport,
   SettlementGroupBy,
@@ -72,6 +73,16 @@ export class SalesReportAdminService {
     let params = new HttpParams().set('warehouseId', warehouseId);
     if (onlyIssues !== undefined) params = params.set('onlyIssues', String(onlyIssues));
     return this.http.get<StockValidationReport>(`${this.base}/stock-validation`, { params });
+  }
+
+  /** "Pedidos sin respuesta del ERP" — doc 87, sección 4.3. Hasta 500, de los últimos 31 días. */
+  ordersWithoutErp(warehouseId: number) {
+    return this.http.get<OrdersWithoutErpReport>(
+      `${this.base}/stock-validation/orders-without-erp`,
+      {
+        params: { warehouseId },
+      },
+    );
   }
 
   /** Panel "Pedidos de un producto" — doc 56, sección 7. */

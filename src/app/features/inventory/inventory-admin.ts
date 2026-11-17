@@ -15,6 +15,7 @@ import {
   ProcessUploadsResult,
   ReconciliationRow,
   ReleaseStockAdvanceCommand,
+  ResyncResult,
   StockAdvanceListFilters,
   StockAdvancePreviewResult,
   StockAdvanceView,
@@ -150,5 +151,13 @@ export class InventoryAdminService {
       `${this.base}/stock-reconciliations/syncs/products`,
       { params: paramsFrom(filters) },
     );
+  }
+
+  /**
+   * "Re-cuadrar ahora" — doc 87, sección 5.4: el mismo re-cuadre del
+   * temporizador de las 00:30, lanzado a mano. Sin body. `stock.advance`.
+   */
+  resync() {
+    return this.http.post<ResyncResult>(`${this.base}/stock-reconciliations/resync`, {});
   }
 }

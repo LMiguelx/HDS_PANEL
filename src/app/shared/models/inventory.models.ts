@@ -223,9 +223,19 @@ export type ReconciliationStatusCode = 'APPLIED' | 'FAILED' | 'SUPERSEDED';
 /** Motivo de una subida fallida — doc 35, sección 3.4. Solo si statusCode = FAILED. */
 export type ReconciliationFailureCode = 'WAREHOUSE_NOT_FOUND' | 'UNEXPECTED_ERROR';
 
-/** Filtro por resultado del listado de cuadres — doc 35, sección 3.6; `SUPERSEDED` — doc 67, sección 3.3. */
+/**
+ * Filtro por resultado del listado de cuadres — doc 35, sección 3.6;
+ * `SUPERSEDED` — doc 67, sección 3.3; `RESYNC` — doc 87, sección 5.2.
+ */
 export type ReconciliationResultFilter =
-  'DIFFERENCE' | 'MATCHED' | 'INCREASED' | 'DECREASED' | 'SHORTFALL' | 'FAILED' | 'SUPERSEDED';
+  | 'DIFFERENCE'
+  | 'MATCHED'
+  | 'INCREASED'
+  | 'DECREASED'
+  | 'SHORTFALL'
+  | 'FAILED'
+  | 'SUPERSEDED'
+  | 'RESYNC';
 
 export interface StockReconciliationSummary {
   from: string;
@@ -240,6 +250,10 @@ export interface StockReconciliationSummary {
   decreasedCount: number;
   shortfallCount: number;
   supersededCount: number; // NUEVO — doc 67, sección 4.1: reemplazadas del período
+  /** NUEVO (doc 87, sección 5.3). `null` = el re-cuadre nocturno nunca corrió. */
+  lastResyncAt: string | null;
+  /** NUEVO (doc 87, sección 5.3) — productos que corrigió ese último re-cuadre. */
+  lastResyncAdjusted: number;
 }
 
 export interface StockReconciliationView {
@@ -259,8 +273,10 @@ export interface StockReconciliationView {
   appliedDelta: number | null;
   stockAfter: number | null;
   shortfall: number | null;
-  uploadedAt: string;
-  processedAt: string;
+  uploadedAt: string; // de un re-cuadre: la hora de la subida ORIGINAL del ERP
+  processedAt: string; // de un re-cuadre: la hora del re-cuadre
+  /** NUEVO (doc 87, sección 5.1). `null` = subida real del ERP; con valor = re-cuadre nocturno (o manual). */
+  resyncOfUploadId: number | null;
 }
 
 export interface StockReconciliationListFilters {
@@ -296,6 +312,13 @@ export interface StockReconciliationDetail {
 export interface ProcessUploadsResult {
   processed: number; // subidas cuadradas (aplicadas o fallidas) en TODA la llamada — doc 67, sección 4.4
   superseded: number; // NUEVO — subidas cerradas como reemplazadas en esta llamada
+}
+
+/** "Re-cuadrar ahora" — doc 87, sección 5.4. */
+export interface ResyncResult {
+  enqueued: number; // productos encolados contra su última subida del ERP
+  processed: number; // procesados en esta misma llamada
+  superseded: number; // subidas viejas cerradas porque había otra más nueva
 }
 
 // ───────────────────── Cuadre con el ERP (rediseño) — doc 56, sección 9 ─────────────────────

@@ -78,6 +78,11 @@ export function reconciliationResultTone(row: StockReconciliationView): BadgeTon
   return RESULT_LABEL[reconciliationResult(row)].tone;
 }
 
+/** Insignia "Re-cuadre" — doc 87, sección 5.1. Se agrega junto al resultado, no lo reemplaza. */
+export function isResync(row: StockReconciliationView): boolean {
+  return row.resyncOfUploadId != null;
+}
+
 const FAILURE_TEXT: Record<string, string> = {
   WAREHOUSE_NOT_FOUND: 'El almacén de la subida no existe o está inactivo',
   UNEXPECTED_ERROR: 'Ocurrió un error al procesar la subida',
@@ -97,6 +102,7 @@ export const RECONCILIATION_RESULT_OPTIONS: UiFieldOption[] = [
   { value: 'SHORTFALL', label: 'Ventas sin respaldo' },
   { value: 'FAILED', label: 'Fallidas' },
   { value: 'SUPERSEDED', label: 'Reemplazadas' },
+  { value: 'RESYNC', label: 'Re-cuadres' },
 ];
 
 export function resultFilterLabel(value: ReconciliationResultFilter | ''): string {

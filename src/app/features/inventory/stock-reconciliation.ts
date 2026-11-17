@@ -7,6 +7,7 @@ import { UiField, UiFieldOption } from '../../shared/ui/field/field';
 import { UiTypeahead, UiLookupItem } from '../../shared/ui/typeahead/typeahead';
 import { UiEmpty } from '../../shared/ui/empty/empty';
 import { UiInfoTip } from '../../shared/ui/info-tip/info-tip';
+import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { InventoryModuleTabs } from './ui/module-tabs';
 import { InventoryAdminService } from './inventory-admin';
 import { ProductAdminService } from '../catalog/product-admin';
@@ -20,6 +21,7 @@ import {
 import { dateTimeText } from '../assignments/assignment-format';
 import { quantityText } from '../sales-reports/sales-report-format';
 import { toProductLookup } from './inventory-format';
+import { ResyncListDialog } from './ui/resync-list-dialog';
 
 const AUTO_REFRESH_MS = 60_000;
 
@@ -103,9 +105,14 @@ const CARDS: SummaryCard[] = [
           <p class="esl-status-line">{{ statusLine() }}</p>
         </div>
         <div class="esl-head-actions">
-          @if (canManage() && summary()?.pendingUploads) {
-            <button uiButton variant="secondary" [loading]="processing()" (click)="processNow()">
-              {{ processing() ? 'Procesando…' : 'Procesar ahora' }}
+          @if (canManage()) {
+            @if (summary()?.pendingUploads) {
+              <button uiButton variant="secondary" [loading]="processing()" (click)="processNow()">
+                {{ processing() ? 'Procesando…' : 'Procesar ahora' }}
+              </button>
+            }
+            <button uiButton variant="secondary" [loading]="resyncing()" (click)="resyncNow()">
+              {{ resyncing() ? 'Re-cuadrando…' : 'Re-cuadrar ahora' }}
             </button>
           }
           <button uiButton variant="ghost" (click)="refresh()" [loading]="loadingSummary()">
@@ -135,6 +142,30 @@ const CARDS: SummaryCard[] = [
               </div>
               <span class="esl-card-label">{{ c.label }}</span>
             </div>
+          }
+        </div>
+
+        <div class="esl-resync-card" [class.esl-resync-stale]="resyncStale(s)">
+          <div>
+            <div class="esl-resync-title">
+              Re-cuadre nocturno
+              @if (resyncStale(s)) {
+                <span
+                  class="material-icons esl-resync-stale-icon"
+                  aria-hidden="true"
+                  [uiInfoTip]="
+                    'El re-cuadre no corre desde el ' +
+                    dateTimeText(s.lastResyncAt!) +
+                    '. Avise a sistemas.'
+                  "
+                  >error</span
+                >
+              }
+            </div>
+            <div class="esl-resync-text">{{ resyncText(s) }}</div>
+          </div>
+          @if (s.lastResyncAt && s.lastResyncAdjusted > 0) {
+            <button uiButton variant="ghost" size="sm" (click)="openResyncList(s)">Ver</button>
           }
         </div>
       }
@@ -270,6 +301,38 @@ const CARDS: SummaryCard[] = [
       .esl-card-muted .esl-card-label {
         font-size: 11px;
       }
+      .esl-resync-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        max-width: 420px;
+        margin: 0 0 20px;
+        border: 1px solid var(--hairline);
+        background: var(--bg);
+        padding: 12px 14px;
+      }
+      .esl-resync-stale {
+        border-color: var(--st-mismatch);
+      }
+      .esl-resync-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .esl-resync-stale-icon {
+        font-size: 16px;
+        color: var(--st-mismatch);
+        cursor: help;
+      }
+      .esl-resync-text {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
       .esl-card {
         border: 1px solid var(--hairline);
         background: var(--bg);
@@ -389,6 +452,7 @@ export class StockReconciliationPage {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private toast = inject(ToastService);
+  private dialog = inject(UiDialogService);
 
   protected dateTimeText = dateTimeText;
   protected quantityText = quantityText;
@@ -399,6 +463,7 @@ export class StockReconciliationPage {
   protected summary = signal<StockReconciliationSummary | null>(null);
   protected loadingSummary = signal(true);
   protected processing = signal(false);
+  protected resyncing = signal(false);
 
   protected filterWarehouseId = signal('');
   protected filterFrom = signal(todayIso());
@@ -558,5 +623,58 @@ export class StockReconciliationPage {
     if (processed > 0) return `${processed} subidas cuadradas`;
     if (superseded > 0) return `${superseded} subidas reemplazadas por una más nueva`;
     return 'No había subidas en cola';
+  }
+
+  /** Tarjeta "Re-cuadre nocturno" — doc 87, sección 5.3. */
+  protected resyncText(s: StockReconciliationSummary): string {
+    if (!s.lastResyncAt) return 'aún no corrió';
+    const when = dateTimeText(s.lastResyncAt);
+    return s.lastResyncAdjusted > 0
+      ? `${when} · ${s.lastResyncAdjusted} corregidos`
+      : `${when} · todo cuadraba`;
+  }
+
+  protected resyncStale(s: StockReconciliationSummary): boolean {
+    if (!s.lastResyncAt) return false;
+    return Date.now() - new Date(s.lastResyncAt).getTime() > 24 * 60 * 60 * 1000;
+  }
+
+  protected openResyncList(s: StockReconciliationSummary) {
+    if (!s.lastResyncAt) return;
+    this.dialog.open(ResyncListDialog, {
+      data: { date: s.lastResyncAt.slice(0, 10) },
+      width: 'min(760px, 94vw)',
+    });
+  }
+
+  protected resyncNow() {
+    if (this.resyncing()) return;
+    this.dialog
+      .confirm({
+        title: '¿Re-cuadrar ahora?',
+        message:
+          'Se vuelve a cuadrar cada producto contra su última subida del ERP, con los pedidos como están ahora. No cubre adelantos. Puede tardar hasta un minuto.',
+        confirmLabel: 'Re-cuadrar',
+        destructive: false,
+      })
+      .subscribe((confirmed) => {
+        if (!confirmed || this.resyncing()) return;
+        this.resyncing.set(true);
+        this.inventorySvc.resync().subscribe({
+          next: (result) => {
+            this.resyncing.set(false);
+            let message = `Re-cuadre listo: ${result.processed} de ${result.enqueued} productos procesados.`;
+            if (result.processed < result.enqueued) {
+              message += ' El resto se procesa en el próximo minuto.';
+            }
+            this.toast.success(message);
+            this.refresh();
+          },
+          error: (err) => {
+            this.resyncing.set(false);
+            this.toast.error(err?.error?.detail || 'No pudimos lanzar el re-cuadre.');
+          },
+        });
+      });
   }
 }

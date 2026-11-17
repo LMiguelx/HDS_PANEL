@@ -21,10 +21,15 @@ import {
 import { dateText, dateTimeText } from '../assignments/assignment-format';
 import { quantityText } from './sales-report-format';
 import { StockValidationOrdersDialog } from './ui/stock-validation-orders-dialog';
+import { OrdersWithoutErpDialog } from './ui/orders-without-erp-dialog';
 import {
+  ALERT_SEVERITY_TONE_VAR,
+  AlertKey,
   BADGE_TONE_VAR,
   BadgeTone,
+  StockValidationAlertItem,
   TIP,
+  alertItems,
   erpUploadScreenText,
   statusLabel,
   statusTone,
@@ -158,6 +163,38 @@ const CARDS: CardDef[] = [
           }
         }
 
+        @if (visibleAlerts().length > 0) {
+          <div class="svt-alerts">
+            @for (a of shownAlerts(); track a.key) {
+              <div class="svt-alert" [style.borderLeftColor]="toneVarOf(a)">
+                <span
+                  class="material-icons svt-alert-icon"
+                  [style.color]="toneVarOf(a)"
+                  aria-hidden="true"
+                  >{{ a.icon }}</span
+                >
+                <span class="svt-alert-text">{{ a.text }} <span [uiInfoTip]="a.tip"></span></span>
+                @if (a.actionLabel) {
+                  <button type="button" class="svt-alert-action" (click)="onAlertAction(a.key)">
+                    {{ a.actionLabel }}
+                  </button>
+                }
+              </div>
+            }
+            @if (visibleAlerts().length > 3) {
+              <button
+                type="button"
+                class="svt-alerts-toggle"
+                (click)="alertsExpanded.set(!alertsExpanded())"
+              >
+                {{
+                  alertsExpanded() ? 'Ver menos' : 'Ver ' + (visibleAlerts().length - 3) + ' más'
+                }}
+              </button>
+            }
+          </div>
+        }
+
         <div class="svt-toolbar">
           <ui-warehouse-select
             mode="sale"
@@ -176,7 +213,7 @@ const CARDS: CardDef[] = [
           <ui-empty
             variant="error"
             title="No pudimos cargar la información."
-            body="Inténtalo de nuevo."
+            [body]="errorDetail() || 'Inténtalo de nuevo.'"
             actionLabel="Reintentar"
             (action)="load()"
           />
@@ -491,6 +528,59 @@ const CARDS: CardDef[] = [
         background: var(--faint);
         color: var(--ink-muted);
       }
+      .svt-alerts {
+        display: grid;
+        gap: 6px;
+        margin-top: 12px;
+      }
+      .svt-alert {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        color: var(--ink);
+        background: var(--faint);
+        border-left: 3px solid var(--hairline);
+      }
+      .svt-alert-icon {
+        font-size: 18px;
+        flex: none;
+      }
+      .svt-alert-text {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .svt-alert-action {
+        appearance: none;
+        border: 0;
+        background: none;
+        flex: none;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--accent-ink);
+        padding: 0;
+      }
+      .svt-alert-action:hover {
+        text-decoration: underline;
+      }
+      .svt-alerts-toggle {
+        justify-self: start;
+        appearance: none;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--ink-muted);
+        padding: 2px 0;
+      }
+      .svt-alerts-toggle:hover {
+        color: var(--ink);
+      }
       .svt-toolbar {
         display: flex;
         align-items: flex-end;
@@ -683,10 +773,12 @@ export class StockValidationTab {
   protected warehouseId = signal(this.route.snapshot.queryParamMap.get('warehouseId') || '');
   protected onlyIssues = signal(true);
   protected activeCard = signal<CardKey | null>(null);
+  protected alertsExpanded = signal(false);
 
   protected report = signal<StockValidationReport | null>(null);
   protected loading = signal(false);
   protected error = signal(false);
+  protected errorDetail = signal('');
 
   // — Negativos del día — doc 63, sección 6 —
   protected subTab = signal<SubTab>(
@@ -727,6 +819,15 @@ export class StockValidationTab {
     const def = this.cards.find((c) => c.key === card)!;
     return r.rows.filter(def.predicate);
   });
+
+  protected visibleAlerts = computed<StockValidationAlertItem[]>(() =>
+    alertItems(this.report()?.alerts ?? null),
+  );
+  protected shownAlerts = computed(() =>
+    this.alertsExpanded() ? this.visibleAlerts() : this.visibleAlerts().slice(0, 3),
+  );
+  protected toneVarOf = (a: StockValidationAlertItem) =>
+    `var(${ALERT_SEVERITY_TONE_VAR[a.severity]})`;
 
   private loadEffect = effect(() => {
     this.warehouseId();
@@ -795,16 +896,19 @@ export class StockValidationTab {
     if (!warehouseId) return;
     this.loading.set(true);
     this.error.set(false);
+    this.errorDetail.set('');
     this.activeCard.set(null);
+    this.alertsExpanded.set(false);
     this.reportSvc.stockValidation(warehouseId, this.onlyIssues()).subscribe({
       next: (result) => {
         this.report.set(result);
         this.loading.set(false);
         this.maybeOpenFromQueryParam();
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
         this.error.set(true);
+        this.errorDetail.set(err?.status === 404 ? err?.error?.detail || '' : '');
       },
     });
   }
@@ -829,4 +933,38 @@ export class StockValidationTab {
       else this.load();
     });
   }
+
+  /** Acción de cada aviso de la franja — doc 87, sección 4.2. */
+  protected onAlertAction(key: AlertKey) {
+    const warehouseId = Number(this.warehouseId());
+    switch (key) {
+      case 'ordersWithoutErpResponse':
+        this.dialog.open(OrdersWithoutErpDialog, {
+          data: { warehouseId },
+          width: 'min(900px, 94vw)',
+        });
+        break;
+      case 'openPreviousDaysOrders':
+        this.goToOpenPreviousDaysOrders();
+        break;
+      case 'negativeStockProducts':
+        this.router.navigate(['/inventario']);
+        break;
+    }
+  }
+
+  /** "Abiertos de días anteriores" — doc 87, sección 4.2: pedidos OPEN hasta ayer. */
+  private goToOpenPreviousDaysOrders() {
+    const today = new Date();
+    const yesterday = addDaysIso(today, -1);
+    const from = addDaysIso(today, -60);
+    this.router.navigate(['/pedidos'], {
+      queryParams: { statusCode: 'OPEN', from, to: yesterday },
+    });
+  }
+}
+
+function addDaysIso(date: Date, delta: number): string {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

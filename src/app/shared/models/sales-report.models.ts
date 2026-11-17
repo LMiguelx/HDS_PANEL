@@ -144,6 +144,43 @@ export interface StockValidationReport {
   appExcessCount: number;
   advanceNotBackedCount: number;
   rows: StockValidationRow[];
+  /** NUEVO (doc 87, sección 4.1). `null` con un backend viejo: no mostrar la franja de avisos. */
+  alerts: StockValidationAlerts | null;
+}
+
+/** Avisos de la franja de Validación de stock — doc 87, sección 4.1. Ninguno bloquea. */
+export interface StockValidationAlerts {
+  windowDays: number; // ventana de facturación (3)
+  lookbackDays: number; // hasta cuántos días atrás se buscan (31)
+  ordersWithoutErpResponse: number; // enviados sin respuesta del ERP, fuera de la ventana
+  oldestWithoutErpResponse: string | null; // ISO, el más antiguo de esos
+  sentNotBilledOrders: number; // enviados antes de hoy, aún sin marca (dentro de la ventana)
+  openPreviousDaysOrders: number; // abiertos de días anteriores
+  negativeStockProducts: number; // productos con stock negativo en el app
+  ordersMarkedAfterLastUpload: number; // marcados por el ERP después de su última subida
+}
+
+/** Pedidos enviados sin respuesta del ERP, fuera de la ventana — doc 87, sección 4.3. */
+export interface OrderWithoutErpRow {
+  orderId: number;
+  orderDate: string; // ISO
+  statusCode: 'SENT_TO_BILLING' | 'COUNTER_DELIVERED';
+  customerId: number; // NO mostrar
+  customerName: string;
+  salespersonId: number; // NO mostrar
+  salespersonName: string;
+  netAmount: number;
+}
+
+export interface OrdersWithoutErpReport {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  windowDays: number; // 3
+  windowStart: string; // ISO: anteriores a esta fecha y hora = sin respuesta
+  lookbackStart: string; // ISO: desde cuándo se busca
+  total: number; // cuántos son en total
+  limit: number; // 500
+  orders: OrderWithoutErpRow[];
 }
 
 // ─────────────────────── Reporte de negativos — doc 63, sección 4 ───────────────────────

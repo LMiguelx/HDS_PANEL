@@ -13,6 +13,7 @@ import { dateTimeText } from '../assignments/assignment-format';
 import {
   BADGE_TONE_VAR,
   RECONCILIATION_RESULT_OPTIONS,
+  isResync,
   reconciliationResultLabel,
   reconciliationResultTone,
 } from './inventory-format';
@@ -102,6 +103,9 @@ const RESULT_OPTIONS = RECONCILIATION_RESULT_OPTIONS.filter((o) => o.value !== '
                   <span class="eph-badge" [style.color]="'var(' + toneOf(row) + ')'">{{
                     resultLabel(row)
                   }}</span>
+                  @if (isResync(row)) {
+                    <span class="eph-badge eph-badge-resync">Re-cuadre</span>
+                  }
                 </td>
                 <td class="eph-muted">{{ dateTimeText(row.processedAt) }}</td>
               </tr>
@@ -198,6 +202,10 @@ const RESULT_OPTIONS = RECONCILIATION_RESULT_OPTIONS.filter((o) => o.value !== '
         text-transform: uppercase;
         letter-spacing: var(--ls-label);
       }
+      .eph-badge-resync {
+        margin-left: 6px;
+        color: var(--ink-muted);
+      }
       .eph-pager {
         display: flex;
         align-items: center;
@@ -232,6 +240,7 @@ export class StockReconciliationProductHistoryPage {
   protected dateTimeText = dateTimeText;
   protected resultOptions = RESULT_OPTIONS;
   protected resultLabel = reconciliationResultLabel;
+  protected isResync = isResync;
   protected toneOf = (row: StockReconciliationView) =>
     BADGE_TONE_VAR[reconciliationResultTone(row)];
 

@@ -13,6 +13,7 @@ import { dateTimeText } from '../assignments/assignment-format';
 import {
   BADGE_TONE_VAR,
   failureReasonText,
+  isResync,
   movementReference,
   reasonLabel,
   reasonTone,
@@ -57,6 +58,14 @@ import {
             </p>
           </div>
         </div>
+
+        @if (isResync(d.reconciliation)) {
+          <p class="erd-resync-note">
+            Re-cuadre del {{ dateTimeText(d.reconciliation.processedAt) }}: misma subida del ERP del
+            {{ dateTimeText(d.reconciliation.uploadedAt) }}, cuadrada de nuevo con los pedidos de
+            ese momento.
+          </p>
+        }
 
         @if (d.reconciliation.statusCode === 'FAILED') {
           <div class="erd-fail-box">
@@ -316,6 +325,14 @@ import {
         color: var(--ink-muted);
         font-size: 13px;
       }
+      .erd-resync-note {
+        margin: 10px 0 0;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--ink-muted);
+        background: var(--faint);
+        max-width: 640px;
+      }
       .erd-skeleton {
         height: 240px;
         background: var(--faint);
@@ -464,6 +481,7 @@ export class StockReconciliationDetailPage {
   protected dateTimeText = dateTimeText;
   protected reasonLabel = reasonLabel;
   protected failureText = failureReasonText;
+  protected isResync = isResync;
   protected canManage = computed(() => this.auth.hasAny('stock.advance'));
   protected toneVar = (d: StockReconciliationDetail) =>
     BADGE_TONE_VAR[reasonTone(d.explanation.reason)];
