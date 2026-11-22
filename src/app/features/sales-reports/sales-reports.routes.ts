@@ -20,6 +20,18 @@ export const SALES_REPORTS_ROUTES: Routes = [
     loadComponent: () => import('./product-sales-detail').then((m) => m.ProductSalesDetailPage),
   },
   {
+    path: 'marcas-por-mes',
+    loadComponent: () =>
+      import('./pages/brand-monthly/brand-monthly.page').then((m) => m.BrandMonthlyPage),
+  },
+  {
+    path: 'marcas-por-mes/:brandId',
+    loadComponent: () =>
+      import('./pages/brand-monthly-detail/brand-monthly-detail.page').then(
+        (m) => m.BrandMonthlyDetailPage,
+      ),
+  },
+  {
     path: 'validacion-stock',
     loadComponent: () => import('./stock-validation-tab').then((m) => m.StockValidationTab),
   },

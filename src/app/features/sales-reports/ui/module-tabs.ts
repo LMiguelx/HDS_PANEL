@@ -16,6 +16,12 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
         >Marcas y productos</a
       >
       <a
+        routerLink="/reportes-ventas/marcas-por-mes"
+        routerLinkActive="active"
+        *hasPermission="['order.view_all', 'report.sales']"
+        >Marcas por mes</a
+      >
+      <a
         routerLink="/reportes-ventas/validacion-stock"
         routerLinkActive="active"
         *hasPermission="['order.view_all', 'order.send_to_billing', 'report.sales']"

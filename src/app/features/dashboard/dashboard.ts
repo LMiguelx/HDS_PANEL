@@ -21,6 +21,7 @@ import {
 import { BATCH_STATUS_COLOR_VAR, BATCH_STATUS_OPTIONS } from '../delivery/delivery-format';
 import { LookupService } from '../promos/lookup';
 import { formatSoles } from '../../shared/pipes/money';
+import { LogisticsHomePage } from '../logistics';
 
 const TOP_LIMIT_OPTIONS: UiFieldOption[] = [
   { value: '3', label: 'Top 3' },
@@ -67,7 +68,7 @@ interface PendingCardVM {
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, UiField, UiEmpty, UiButton],
+  imports: [RouterLink, UiField, UiEmpty, UiButton, LogisticsHomePage],
   template: `
     <section class="home-page">
       <div class="home-head">
@@ -517,11 +518,11 @@ interface PendingCardVM {
           <p class="home-dash-footer">Datos al {{ d.date }}.</p>
         }
       } @else if (isLogisticsHome()) {
-        <div
-          class="home-logistics-redirect"
-          role="status"
-          aria-label="Redirigiendo a Picking"
-        ></div>
+        <app-logistics-home />
+      } @else {
+        <div class="home-welcome">
+          <p class="home-welcome-text">Bienvenido al panel de HDS.</p>
+        </div>
       }
     </section>
   `,
@@ -543,10 +544,16 @@ interface PendingCardVM {
         gap: 20px;
         flex-wrap: wrap;
       }
-      .home-logistics-redirect {
+      .home-welcome {
         margin-top: 28px;
-        height: 160px;
-        background: var(--faint);
+        padding: 48px 32px;
+        border: 1px solid var(--hairline);
+        text-align: center;
+      }
+      .home-welcome-text {
+        margin: 0;
+        font-size: 15px;
+        color: var(--ink-muted);
       }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
@@ -1311,15 +1318,16 @@ export class DashboardPage {
 
   protected formatSoles = formatSoles;
   /**
-   * Doc 88, sección 5: con `picking.store` y sin `order.view_all` el Inicio
-   * de ventas no es lo que necesita logística, aunque `report.view` haga
-   * que el endpoint responda. Mientras no exista el Inicio de logística
-   * (doc 88, sección 10), se muestra un aviso provisional en vez del
-   * resumen de ventas — nunca se llama a `/api/admin/dashboard/today` para
-   * este caso.
+   * Doc 93, sección 1.2: reemplaza al Inicio provisional del doc 88. Quien
+   * tiene `picking.store`, `goods_receipt.view` o `report.sales` y no
+   * `order.view_all` (ni `delivery.manage`, interceptado antes por
+   * `repartoHomeRouteGuard`) ve el Inicio de logística real en vez del de
+   * ventas — nunca se llama a `/api/admin/dashboard/today` para este caso.
    */
   protected isLogisticsHome = computed(
-    () => this.auth.hasAny('picking.store') && !this.auth.hasAny('order.view_all'),
+    () =>
+      this.auth.hasAny('picking.store', 'goods_receipt.view', 'report.sales') &&
+      !this.auth.hasAny('order.view_all'),
   );
   protected showDashboard = computed(
     () => this.auth.hasAny('report.view') && !this.isLogisticsHome(),
@@ -1470,17 +1478,9 @@ export class DashboardPage {
   constructor() {
     const router = inject(Router);
 
-    // Doc 89, sección 1.2/5: mientras no exista el Inicio de logística, el
-    // Jefe de Logística entra directo a Picking del día, con "Solo
-    // pendientes" encendido. Reemplaza la navegación en el historial para
-    // que "atrás" no vuelva a un Inicio vacío.
-    if (this.isLogisticsHome()) {
-      router.navigate(['/reparto/picking'], {
-        queryParams: { onlyPending: true, date: todayIso() },
-        replaceUrl: true,
-      });
-      return;
-    }
+    // Doc 93, sección 1.2: el Inicio de logística se renderiza inline (ver
+    // template); no hay nada que pedir para el Inicio de ventas en ese caso.
+    if (this.isLogisticsHome()) return;
 
     this.lookupSvc.salesChannels().subscribe((items) => {
       this.channelOptions.set([

@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
+  BrandMonthlyDetail,
+  BrandMonthlyReport,
   BrandSalesReport,
   NegativeStockReport,
   OrdersWithoutErpReport,
@@ -103,5 +105,20 @@ export class SalesReportAdminService {
     return this.http.get<NegativeStockReport>(`${this.base}/stock-validation/negatives`, {
       params,
     });
+  }
+
+  /** Ranking de marcas mes a mes — doc 93, sección 3.4. `year` sin enviar = año actual; `top` sin enviar = todas. */
+  brandMonthly(year?: number, top?: number) {
+    let params = new HttpParams();
+    if (year) params = params.set('year', year);
+    if (top) params = params.set('top', top);
+    return this.http.get<BrandMonthlyReport>(`${this.base}/brand-monthly`, { params });
+  }
+
+  /** Detalle de una marca mes a mes, con sus productos — doc 93, sección 3.4. */
+  brandMonthlyDetail(brandId: number, year?: number) {
+    let params = new HttpParams();
+    if (year) params = params.set('year', year);
+    return this.http.get<BrandMonthlyDetail>(`${this.base}/brand-monthly/${brandId}`, { params });
   }
 }

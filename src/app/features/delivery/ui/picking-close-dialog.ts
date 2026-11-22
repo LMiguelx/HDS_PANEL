@@ -122,7 +122,7 @@ export class PickingCloseDialog {
   protected quantityText = quantityText;
 
   protected shortfallProducts = computed<PickingProductConsolidatedView[]>(() =>
-    this.data.detail.products.filter(
+    this.data.detail.consolidatedByProduct.filter(
       (p) => p.pickingStatus === 'SHORT' || p.pickingStatus === 'NOT_LOADED',
     ),
   );

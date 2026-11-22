@@ -1,9 +1,6 @@
-// Contratos de Picking (armado de carga por planilla) — doc 89.
-// Backend ya en producción (PickingController, docs 23 y 25); solo los
-// campos de la sección 3 están confirmados contra la documentación. El
-// resto (cabecera del listado, desglose por comprobante, nombre de quien
-// cerró) se tipa con la mejor información disponible — si al probar contra
-// el backend real algún campo no viene así, ajustar aquí.
+// Contratos de Picking (armado de carga por planilla) — doc 89, corregidos
+// contra el backend real por doc 93, sección 4.1-4.2 (invoices/lines,
+// consolidatedByProduct, vehiclePlate/driverName).
 
 export interface PickingStatusCounts {
   complete: number;
@@ -53,19 +50,23 @@ export interface PickingProductConsolidatedView {
   confirmedAt: string | null;
 }
 
-/** Línea de un comprobante — desglose de solo consulta. */
-export interface PickingVoucherLineView {
+/** Línea de un comprobante — desglose de solo consulta (doc 93, sección 4.1). */
+export interface PickingLineView {
   productId: number;
-  productCode: string;
-  productName: string;
+  productCode: string | null;
+  productName: string | null;
+  familyName: string | null;
+  unitOfMeasure: string | null;
+  unitsPerPackage: number | null;
+  weightKg: number | null;
   quantity: number;
-  bonusQuantity: number;
+  bonus: boolean;
 }
 
-export interface PickingVoucherView {
+export interface PickingInvoiceView {
   invoiceId: string;
-  customerName: string;
-  lines: PickingVoucherLineView[];
+  customerName: string | null;
+  lines: PickingLineView[];
 }
 
 /** Detalle de la planilla (`GET /api/deliveries/picking/{batchId}`). */
@@ -79,8 +80,8 @@ export interface PickingDetail {
   statusCode: string;
   pickingConfirmedAt: string | null;
   pickingConfirmedByName?: string | null;
-  products: PickingProductConsolidatedView[];
-  vouchers?: PickingVoucherView[];
+  invoices: PickingInvoiceView[];
+  consolidatedByProduct: PickingProductConsolidatedView[];
   pickingCounts: PickingStatusCounts;
 }
 

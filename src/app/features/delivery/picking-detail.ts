@@ -105,6 +105,11 @@ interface ProductRowVm {
             }
             . Solo lectura.
           </div>
+          @if (legacyClosed()) {
+            <div class="pkd-banner pkd-banner-info">
+              Picking cerrado con el sistema anterior: no tiene la carga declarada por producto.
+            </div>
+          }
         } @else {
           <div class="pkd-banner pkd-banner-open">
             Picking en curso — {{ reviewedText(d.pickingCounts) }}
@@ -295,7 +300,7 @@ interface ProductRowVm {
               [(value)]="voucherSearch"
             />
           </div>
-          @if (!d.vouchers || d.vouchers.length === 0) {
+          @if ((d.invoices ?? []).length === 0) {
             <ui-empty
               title="Sin comprobantes"
               body="No hay desglose por comprobante para esta planilla."
@@ -310,26 +315,30 @@ interface ProductRowVm {
               @for (v of visibleVouchers(); track v.invoiceId) {
                 <details class="pkd-voucher">
                   <summary>
-                    <strong>{{ v.invoiceId }}</strong> — {{ v.customerName }} ·
-                    {{ v.lines.length }} producto{{ v.lines.length === 1 ? '' : 's' }}
+                    <strong>{{ v.invoiceId }}</strong> — {{ v.customerName ?? '—' }} ·
+                    {{ (v.lines ?? []).length }} producto{{
+                      (v.lines ?? []).length === 1 ? '' : 's'
+                    }}
                   </summary>
                   <table class="ui-table-grid pkd-voucher-table">
                     <thead>
                       <tr>
                         <th>Código</th>
                         <th>Producto</th>
+                        <th>Familia</th>
                         <th>Cantidad</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      @for (line of v.lines; track line.productId) {
+                      @for (line of v.lines ?? []; track line.productId) {
                         <tr>
-                          <td class="pkd-muted">{{ line.productCode }}</td>
-                          <td>{{ line.productName }}</td>
+                          <td class="pkd-muted">{{ line.productCode ?? '—' }}</td>
+                          <td>{{ line.productName ?? '—' }}</td>
+                          <td class="pkd-muted">{{ line.familyName ?? '—' }}</td>
                           <td class="pkd-num">{{ quantityText(line.quantity) }}</td>
                           <td>
-                            @if (line.bonusQuantity > 0) {
+                            @if (line.bonus) {
                               <span class="pkd-bonus-chip">Bonif.</span>
                             }
                           </td>
@@ -692,7 +701,7 @@ export class PickingDetailPage {
     const d = this.detail();
     if (!d) return [];
     const drafts = this.drafts();
-    return d.products.map((p) => {
+    return (d.consolidatedByProduct ?? []).map((p) => {
       const draft = drafts[p.productId];
       const effectiveLoaded = draft ? draft.loadedQuantity : p.loadedQuantity;
       const effectiveNote = draft ? draft.shortNote : (p.shortNote ?? '');
@@ -730,11 +739,20 @@ export class PickingDetailPage {
 
   protected visibleVouchers = computed(() => {
     const q = this.voucherSearch().trim().toLowerCase();
-    const vouchers = this.detail()?.vouchers ?? [];
-    if (!q) return vouchers;
-    return vouchers.filter(
-      (v) => v.invoiceId.toLowerCase().includes(q) || v.customerName.toLowerCase().includes(q),
+    const invoices = this.detail()?.invoices ?? [];
+    if (!q) return invoices;
+    return invoices.filter(
+      (v) =>
+        v.invoiceId.toLowerCase().includes(q) || (v.customerName ?? '').toLowerCase().includes(q),
     );
+  });
+
+  /** Doc 93, sección 4.4: planillas cerradas con el modelo anterior, sin carga declarada por producto. */
+  protected legacyClosed = computed(() => {
+    const d = this.detail();
+    if (!d?.pickingConfirmedAt) return false;
+    const c = d.pickingCounts;
+    return c.complete === 0 && c.shortLoaded === 0 && c.notLoaded === 0 && c.pending > 0;
   });
 
   protected pendingVisibleCount = computed(

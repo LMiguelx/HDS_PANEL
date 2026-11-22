@@ -200,4 +200,14 @@
   --map-status-closed: #475569;
   --map-status-idle: #cbd5e1; // vista global: sin actividad hoy
   --map-off-plan: #6d28d9; // contorno de "fuera de plan"
+
+  /* — Series de gráficos (doc 93) — paleta categórica para shared/ui/line-chart.
+     A diferencia del mapa (fijo), cada serie trae su variante clara para
+     fondo oscuro: legible en los dos temas. */
+  --chart-series-1: light-dark(#2563eb, #7fb4ff); // azul
+  --chart-series-2: light-dark(#e07d1a, #ffb865); // naranja
+  --chart-series-3: light-dark(#16a34a, #5ed98a); // verde
+  --chart-series-4: light-dark(#be123c, #ff8a80); // rojo/rosado
+  --chart-series-5: light-dark(#7c3aed, #c4a2ff); // violeta
+  --chart-series-6: light-dark(#0e7490, #67e8f9); // cian
 }

@@ -236,3 +236,68 @@ export interface StockValidationProductDetail {
   product: StockValidationRow; // cabecera del panel
   orders: StockValidationOrderRow[]; // del más antiguo al más nuevo
 }
+
+// ─────────────────────── "Marcas por mes" — doc 93, sección 3 ───────────────────────
+// Mes CON información y sin ventas de la marca → 0. Mes SIN información
+// (futuro o anterior al histórico, agosto 2025) → null. El front nunca
+// calcula participación, picos ni totales: vienen del backend.
+
+export interface MonthAmount {
+  month: number; // 1-12
+  netAmount: number | null; // null = mes sin información
+  previousYearNetAmount: number | null; // mismo mes del año anterior; null = sin información
+}
+
+export interface BrandMonthlyRow {
+  rank: number;
+  brandId: number; // NO mostrar; para navegar al detalle
+  brandName: string;
+  totalNet: number;
+  share: number; // % del total del año, 1 decimal
+  peakMonth: number | null; // 1-12; null si no vendió
+  peakNetAmount: number | null;
+  previousYearTotalNet: number | null;
+  months: MonthAmount[]; // siempre 12, de enero a diciembre
+}
+
+export interface BrandMonthlyReport {
+  year: number;
+  top: number | null; // el top pedido (null = todas)
+  brandCount: number; // marcas que vendieron en el año (antes de aplicar top)
+  totalNet: number; // venta neta de TODAS las marcas del año
+  previousYearTotalNet: number | null; // null = sin información del año anterior
+  brands: BrandMonthlyRow[]; // ordenadas por venta del año (rank 1 = la que más vendió)
+}
+
+export interface ProductMonthAmount {
+  month: number;
+  units: number | null; // null = mes sin información
+  netAmount: number | null;
+  bonusUnits: number | null;
+}
+
+export interface ProductMonthlyRow {
+  productId: number; // NO mostrar
+  productCode: string;
+  productName: string;
+  totalUnits: number;
+  totalNet: number;
+  totalBonusUnits: number;
+  peakMonth: number | null; // mes de MÁS UNIDADES vendidas; null si solo tuvo bonificación
+  peakUnits: number | null;
+  months: ProductMonthAmount[]; // siempre 12
+}
+
+export interface BrandMonthlyDetail {
+  year: number;
+  brandId: number; // NO mostrar
+  brandName: string;
+  totalNet: number;
+  previousYearTotalNet: number | null;
+  totalUnits: number; // unidades vendidas (sin bonificaciones)
+  totalBonusUnits: number; // unidades bonificadas, aparte
+  peakMonth: number | null;
+  peakNetAmount: number | null;
+  months: MonthAmount[]; // 12 meses de la marca
+  products: ProductMonthlyRow[]; // del que más vendió (S/) al que menos
+}
