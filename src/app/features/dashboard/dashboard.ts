@@ -70,461 +70,471 @@ interface PendingCardVM {
   selector: 'app-dashboard',
   imports: [RouterLink, UiField, UiEmpty, UiButton, LogisticsHomePage],
   template: `
-    <section class="home-page">
-      <div class="home-head">
-        <div>
-          <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
-          <p class="home-sub">Resumen del día de un vistazo.</p>
-        </div>
-        @if (showDashboard()) {
-          <div class="home-toolbar">
-            <ui-field label="Fecha" type="date" [(value)]="date" />
-            <div class="home-status-row">
-              @if (isToday()) {
-                <span class="home-status-flag">A hoy</span>
-              } @else {
-                <span class="home-status-flag home-status-flag-muted">Histórico</span>
-              }
-              @if (updateError()) {
-                <button type="button" class="home-update-error" (click)="refreshNow()">
-                  No se pudo actualizar · reintentar
-                </button>
-              } @else if (updatedAt(); as u) {
-                <span class="home-status-updated"
-                  >Actualizado
-                  {{ u.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) }}
-                  @if (isToday()) {
-                    · se actualiza cada 2 min
-                  }
-                </span>
-              }
-              <button
-                uiButton
-                variant="ghost"
-                size="sm"
-                [loading]="refreshing()"
-                (click)="refreshNow()"
-              >
-                <span class="material-icons" aria-hidden="true">refresh</span>
-                Actualizar
-              </button>
-            </div>
-            @if (canGoToReparto()) {
-              <button
-                uiButton
-                variant="secondary"
-                routerLink="/inicio-reparto"
-                class="home-reparto-link"
-              >
-                Ir al reparto del día
-              </button>
-            }
+    @if (isLogisticsHome()) {
+      <app-logistics-home />
+    } @else {
+      <section class="home-page">
+        <div class="home-head">
+          <div>
+            <h1>Bienvenido{{ user()?.fullName ? ', ' + user()?.fullName : '' }}</h1>
+            <p class="home-sub">Resumen del día de un vistazo.</p>
           </div>
-        }
-      </div>
-
-      @if (showDashboard()) {
-        @if (refreshing() && (data() || pendingData())) {
-          <div class="home-refresh-bar" role="progressbar" aria-label="Actualizando"></div>
-        }
-
-        <!-- Pendientes de gestión -->
-        <div class="home-block">
-          <h2 class="home-block-title">Pendientes de gestión</h2>
-
-          @if (pendingLoading() && !pendingData()) {
-            <div class="home-pending-skeleton" role="status" aria-label="Cargando"></div>
-          } @else if (pendingError() && !pendingData()) {
-            <ui-empty
-              variant="error"
-              title="No pudimos cargar los pendientes de gestión"
-              actionLabel="Reintentar"
-              (action)="refreshNow()"
-            />
-          } @else {
-            <div class="home-pending-grid">
-              @for (card of pendingCards(); track card.key) {
-                <a
-                  class="home-pending-card"
-                  [class.home-pending-disabled]="!card.route"
-                  [class.home-pending-accent]="card.value > 0 && card.tone === 'accent'"
-                  [class.home-pending-warn]="card.value > 0 && card.tone === 'warn'"
-                  [class.home-pending-danger]="card.value > 0 && card.tone === 'danger'"
-                  [routerLink]="card.route"
-                  [queryParams]="card.queryParams ?? null"
-                  [attr.tabindex]="card.route ? 0 : -1"
+          @if (showDashboard()) {
+            <div class="home-toolbar">
+              <ui-field label="Fecha" type="date" [(value)]="date" />
+              <div class="home-status-row">
+                @if (isToday()) {
+                  <span class="home-status-flag">A hoy</span>
+                } @else {
+                  <span class="home-status-flag home-status-flag-muted">Histórico</span>
+                }
+                @if (updateError()) {
+                  <button type="button" class="home-update-error" (click)="refreshNow()">
+                    No se pudo actualizar · reintentar
+                  </button>
+                } @else if (updatedAt(); as u) {
+                  <span class="home-status-updated"
+                    >Actualizado
+                    {{ u.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) }}
+                    @if (isToday()) {
+                      · se actualiza cada 2 min
+                    }
+                  </span>
+                }
+                <button
+                  uiButton
+                  variant="ghost"
+                  size="sm"
+                  [loading]="refreshing()"
+                  (click)="refreshNow()"
                 >
-                  <span class="home-pending-value">{{ card.value }}</span>
-                  <span class="home-pending-label">{{ card.label }}</span>
-                  <span class="home-pending-detail">{{
-                    card.value === 0 ? 'Al día' : card.detail
-                  }}</span>
-                </a>
+                  <span class="material-icons" aria-hidden="true">refresh</span>
+                  Actualizar
+                </button>
+              </div>
+              @if (canGoToReparto()) {
+                <button
+                  uiButton
+                  variant="secondary"
+                  routerLink="/inicio-reparto"
+                  class="home-reparto-link"
+                >
+                  Ir al reparto del día
+                </button>
               }
             </div>
           }
         </div>
 
-        @if (loading() && !data()) {
-          <div class="home-dash-skeleton" role="status" aria-label="Cargando"></div>
-        } @else if (error() && !data()) {
-          <ui-empty
-            variant="error"
-            title="No pudimos cargar el resumen del día"
-            body="Intenta de nuevo en unos segundos."
-            actionLabel="Reintentar"
-            (action)="refreshNow()"
-          />
-        } @else if (data(); as d) {
-          <!-- Pedidos del día -->
+        @if (showDashboard()) {
+          @if (refreshing() && (data() || pendingData())) {
+            <div class="home-refresh-bar" role="progressbar" aria-label="Actualizando"></div>
+          }
+
+          <!-- Pendientes de gestión -->
           <div class="home-block">
-            <h2 class="home-block-title">Pedidos del día</h2>
-            <p class="home-block-sub">{{ d.date }} · sin contar anulados</p>
+            <h2 class="home-block-title">Pendientes de gestión</h2>
 
-            <div class="home-orders-grid">
-              <div class="home-orders-summary">
-                <a class="home-orders-total" routerLink="/pedidos" [queryParams]="dayParams()">
-                  <span class="home-orders-total-value">{{ d.orders.totalOrders }}</span>
-                  <span class="home-orders-total-label">pedidos</span>
-                </a>
-                <div class="home-orders-net">
-                  <span class="home-orders-net-value">{{ formatSoles(d.orders.netAmount) }}</span>
-                  <span class="home-orders-net-label">neto</span>
+            @if (pendingLoading() && !pendingData()) {
+              <div class="home-pending-skeleton" role="status" aria-label="Cargando"></div>
+            } @else if (pendingError() && !pendingData()) {
+              <ui-empty
+                variant="error"
+                title="No pudimos cargar los pendientes de gestión"
+                actionLabel="Reintentar"
+                (action)="refreshNow()"
+              />
+            } @else {
+              <div class="home-pending-grid">
+                @for (card of pendingCards(); track card.key) {
+                  <a
+                    class="home-pending-card"
+                    [class.home-pending-disabled]="!card.route"
+                    [class.home-pending-accent]="card.value > 0 && card.tone === 'accent'"
+                    [class.home-pending-warn]="card.value > 0 && card.tone === 'warn'"
+                    [class.home-pending-danger]="card.value > 0 && card.tone === 'danger'"
+                    [routerLink]="card.route"
+                    [queryParams]="card.queryParams ?? null"
+                    [attr.tabindex]="card.route ? 0 : -1"
+                  >
+                    <span class="home-pending-value">{{ card.value }}</span>
+                    <span class="home-pending-label">{{ card.label }}</span>
+                    <span class="home-pending-detail">{{
+                      card.value === 0 ? 'Al día' : card.detail
+                    }}</span>
+                  </a>
+                }
+              </div>
+            }
+          </div>
+
+          @if (loading() && !data()) {
+            <div class="home-dash-skeleton" role="status" aria-label="Cargando"></div>
+          } @else if (error() && !data()) {
+            <ui-empty
+              variant="error"
+              title="No pudimos cargar el resumen del día"
+              body="Intenta de nuevo en unos segundos."
+              actionLabel="Reintentar"
+              (action)="refreshNow()"
+            />
+          } @else if (data(); as d) {
+            <!-- Pedidos del día -->
+            <div class="home-block">
+              <h2 class="home-block-title">Pedidos del día</h2>
+              <p class="home-block-sub">{{ d.date }} · sin contar anulados</p>
+
+              <div class="home-orders-grid">
+                <div class="home-orders-summary">
+                  <a class="home-orders-total" routerLink="/pedidos" [queryParams]="dayParams()">
+                    <span class="home-orders-total-value">{{ d.orders.totalOrders }}</span>
+                    <span class="home-orders-total-label">pedidos</span>
+                  </a>
+                  <div class="home-orders-net">
+                    <span class="home-orders-net-value">{{ formatSoles(d.orders.netAmount) }}</span>
+                    <span class="home-orders-net-label">neto</span>
+                  </div>
+                  <p class="home-orders-gross">Bruto {{ formatSoles(d.orders.totalAmount) }}</p>
+
+                  <div class="home-brand-box">
+                    <span class="home-brand-label">Marca más vendida</span>
+                    @if (d.orders.topBrandName) {
+                      <span class="home-brand-name" [title]="d.orders.topBrandName">{{
+                        d.orders.topBrandName
+                      }}</span>
+                      <span class="home-brand-amount">{{
+                        formatSoles(d.orders.topBrandAmount!)
+                      }}</span>
+                    } @else {
+                      <span class="home-brand-name home-muted">—</span>
+                    }
+                  </div>
                 </div>
-                <p class="home-orders-gross">Bruto {{ formatSoles(d.orders.totalAmount) }}</p>
 
-                <div class="home-brand-box">
-                  <span class="home-brand-label">Marca más vendida</span>
-                  @if (d.orders.topBrandName) {
-                    <span class="home-brand-name" [title]="d.orders.topBrandName">{{
-                      d.orders.topBrandName
-                    }}</span>
-                    <span class="home-brand-amount">{{
-                      formatSoles(d.orders.topBrandAmount!)
-                    }}</span>
-                  } @else {
-                    <span class="home-brand-name home-muted">—</span>
+                <div class="home-orders-status">
+                  <span class="home-orders-col-title">Por estado</span>
+                  <div class="home-status-bar">
+                    @for (s of d.orders.byStatus; track s.statusCode) {
+                      @if (s.count > 0) {
+                        <span
+                          class="home-status-bar-seg"
+                          [style.width.%]="statusBarPct(d.orders, s)"
+                          [style.background]="'var(' + statusTone(s.statusCode) + ')'"
+                        ></span>
+                      }
+                    }
+                  </div>
+                  <div class="home-status-legend">
+                    @for (s of d.orders.byStatus; track s.statusCode) {
+                      <a
+                        class="home-legend-row"
+                        [class.home-legend-disabled]="!canSeeOrders()"
+                        [routerLink]="canSeeOrders() ? ['/pedidos'] : null"
+                        [queryParams]="orderStatusParams(s.statusCode)"
+                      >
+                        <span
+                          class="home-legend-dot"
+                          [style.background]="'var(' + statusTone(s.statusCode) + ')'"
+                        ></span>
+                        <span class="home-legend-name">{{ s.statusName }}</span>
+                        <span class="home-legend-value">{{ s.count }}</span>
+                        @if (s.statusCode !== 'CANCELLED') {
+                          <span class="home-legend-amount">{{ formatSoles(s.netAmount) }}</span>
+                        }
+                      </a>
+                    }
+                  </div>
+
+                  @if (erpFacturadosLine(d.orders); as erp) {
+                    <div class="home-erp-line">
+                      <div class="home-erp-head">
+                        <span>Facturados por el ERP</span>
+                        <span>{{ erp.uploaded }} de {{ erp.sent }} enviados</span>
+                      </div>
+                      <div class="home-erp-track">
+                        <div class="home-erp-fill" [style.width.%]="erp.pct"></div>
+                      </div>
+                    </div>
                   }
+                </div>
+
+                <div class="home-orders-side">
+                  <div class="home-orders-origin">
+                    <span class="home-orders-col-title">Por origen</span>
+                    <div class="home-origin-list">
+                      @for (o of visibleOrigins(d.orders); track o.originCode) {
+                        <a
+                          class="home-origin-row"
+                          [class.home-legend-disabled]="!canSeeOrders()"
+                          [routerLink]="canSeeOrders() ? ['/pedidos'] : null"
+                          [queryParams]="orderOriginParams(o.originCode)"
+                        >
+                          <span class="home-origin-name">{{ o.originName }}</span>
+                          <div class="home-origin-track">
+                            <div
+                              class="home-origin-fill"
+                              [style.width.%]="originBarPct(d.orders, o.count)"
+                            ></div>
+                          </div>
+                          <span class="home-origin-value">{{ o.count }}</span>
+                        </a>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="home-bonus-box">
+                    <span class="home-orders-col-title">Bonificaciones</span>
+                    <p class="home-bonus-line">
+                      {{ d.orders.totalBonusLines }} línea{{
+                        d.orders.totalBonusLines === 1 ? '' : 's'
+                      }}
+                      · {{ d.orders.totalBonusUnits }} u.
+                    </p>
+                    @if (d.orders.pendingStockBonusLines > 0) {
+                      <a
+                        class="home-bonus-warn"
+                        [class.home-legend-disabled]="!canManageBonusTray()"
+                        [routerLink]="
+                          canManageBonusTray() ? ['/pedidos/bonificaciones-sin-stock'] : null
+                        "
+                      >
+                        ⚠ {{ d.orders.pendingStockBonusLines }} sin stock ({{
+                          d.orders.pendingStockBonusUnits
+                        }}
+                        u.)
+                      </a>
+                    }
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <div class="home-orders-status">
-                <span class="home-orders-col-title">Por estado</span>
-                <div class="home-status-bar">
-                  @for (s of d.orders.byStatus; track s.statusCode) {
-                    @if (s.count > 0) {
-                      <span
-                        class="home-status-bar-seg"
-                        [style.width.%]="statusBarPct(d.orders, s)"
-                        [style.background]="'var(' + statusTone(s.statusCode) + ')'"
-                      ></span>
-                    }
-                  }
-                </div>
-                <div class="home-status-legend">
-                  @for (s of d.orders.byStatus; track s.statusCode) {
-                    <a
-                      class="home-legend-row"
-                      [class.home-legend-disabled]="!canSeeOrders()"
-                      [routerLink]="canSeeOrders() ? ['/pedidos'] : null"
-                      [queryParams]="orderStatusParams(s.statusCode)"
+            <!-- Clientes del día + En jornada hoy -->
+            <div class="home-side-grid">
+              <a
+                class="home-block home-customers-block"
+                [class.home-block-disabled]="!canSeeAssignments()"
+                [routerLink]="canSeeAssignments() ? ['/asignaciones/mapa'] : null"
+                [queryParams]="{ date: d.customers.date }"
+              >
+                <h2 class="home-block-title">Clientes del día</h2>
+                @if (d.customers.scheduled === 0) {
+                  <p class="home-block-empty">No hay clientes programados para esta fecha</p>
+                } @else {
+                  <p class="home-customers-scheduled">{{ d.customers.scheduled }} programados</p>
+                  <div class="home-customers-bar">
+                    <div
+                      class="home-customers-bar-fill"
+                      [style.width.%]="d.customers.visitPercentage"
+                    ></div>
+                  </div>
+                  <p class="home-customers-bar-label">
+                    {{ d.customers.visitPercentage }}% visitados
+                  </p>
+                  <div class="home-customers-breakdown">
+                    <span class="home-customers-ok"
+                      >Con pedido {{ d.customers.ordered }} ({{
+                        d.customers.orderPercentage
+                      }}%)</span
                     >
-                      <span
-                        class="home-legend-dot"
-                        [style.background]="'var(' + statusTone(s.statusCode) + ')'"
-                      ></span>
-                      <span class="home-legend-name">{{ s.statusName }}</span>
-                      <span class="home-legend-value">{{ s.count }}</span>
-                      @if (s.statusCode !== 'CANCELLED') {
-                        <span class="home-legend-amount">{{ formatSoles(s.netAmount) }}</span>
-                      }
-                    </a>
-                  }
-                </div>
+                    <span class="home-customers-warn">Sin compra {{ d.customers.noOrder }}</span>
+                    <span class="home-customers-muted">Cerrados {{ d.customers.closed }}</span>
+                    <span class="home-customers-neutral">Pendientes {{ d.customers.pending }}</span>
+                  </div>
+                }
+              </a>
 
-                @if (erpFacturadosLine(d.orders); as erp) {
-                  <div class="home-erp-line">
-                    <div class="home-erp-head">
-                      <span>Facturados por el ERP</span>
-                      <span>{{ erp.uploaded }} de {{ erp.sent }} enviados</span>
-                    </div>
-                    <div class="home-erp-track">
-                      <div class="home-erp-fill" [style.width.%]="erp.pct"></div>
-                    </div>
+              <div class="home-block">
+                <h2 class="home-block-title">En jornada hoy</h2>
+                <p class="home-block-sub">
+                  Abrieron jornada en la fecha · clic para ver en Usuarios
+                </p>
+                @if (d.activeUsers.byRole.length === 0) {
+                  <p class="home-block-empty">Nadie abrió jornada en esta fecha</p>
+                } @else {
+                  <div class="home-roles-grid">
+                    @for (r of d.activeUsers.byRole; track r.roleCode; let i = $index) {
+                      <a
+                        class="home-role-card"
+                        [class.home-role-disabled]="!canManageUsers()"
+                        [routerLink]="canManageUsers() ? ['/usuarios'] : null"
+                        [queryParams]="{ roleCode: r.roleCode, onRouteToday: 'true' }"
+                      >
+                        <span class="home-role-avatar" [style.background]="roleColor(i)">{{
+                          r.roleName.charAt(0)
+                        }}</span>
+                        <span class="home-role-count">{{ r.activeCount }}</span>
+                        <span class="home-role-name">{{ r.roleName }}</span>
+                      </a>
+                    }
                   </div>
                 }
               </div>
+            </div>
 
-              <div class="home-orders-side">
-                <div class="home-orders-origin">
-                  <span class="home-orders-col-title">Por origen</span>
-                  <div class="home-origin-list">
-                    @for (o of visibleOrigins(d.orders); track o.originCode) {
-                      <a
-                        class="home-origin-row"
-                        [class.home-legend-disabled]="!canSeeOrders()"
-                        [routerLink]="canSeeOrders() ? ['/pedidos'] : null"
-                        [queryParams]="orderOriginParams(o.originCode)"
-                      >
-                        <span class="home-origin-name">{{ o.originName }}</span>
-                        <div class="home-origin-track">
+            <!-- Reparto -->
+            <div class="home-block home-block-compact">
+              <h2 class="home-block-title">Reparto</h2>
+              <div class="home-reparto-grid">
+                <div class="home-reparto-bars">
+                  <div class="home-amount-row">
+                    <span class="home-amount-label">Monto definido</span>
+                    <div class="home-amount-track">
+                      <div
+                        class="home-amount-fill"
+                        style="width: 100%; background: var(--st-open)"
+                      ></div>
+                    </div>
+                    <span class="home-amount-value">{{ formatSoles(d.delivery.totalAmount) }}</span>
+                  </div>
+                  <div class="home-amount-row">
+                    <span class="home-amount-label">Devoluciones</span>
+                    <div class="home-amount-track">
+                      <div
+                        class="home-amount-fill"
+                        [style.width.%]="
+                          amountPct(d.delivery.returnedAmount, d.delivery.totalAmount)
+                        "
+                        style="background: var(--status-danger)"
+                      ></div>
+                    </div>
+                    <span class="home-amount-value">{{
+                      formatSoles(d.delivery.returnedAmount)
+                    }}</span>
+                  </div>
+                  <div class="home-amount-row">
+                    <span class="home-amount-label">Monto neto</span>
+                    <div class="home-amount-track">
+                      <div
+                        class="home-amount-fill"
+                        [style.width.%]="amountPct(d.delivery.netAmount, d.delivery.totalAmount)"
+                        style="background: var(--status-ok)"
+                      ></div>
+                    </div>
+                    <span class="home-amount-value">{{ formatSoles(d.delivery.netAmount) }}</span>
+                  </div>
+
+                  <div class="home-progress">
+                    <div class="home-progress-head">
+                      <span>Avance de comprobantes</span>
+                      <span class="home-progress-pct">{{ deliveryProgressPct(d.delivery) }}%</span>
+                    </div>
+                    <div class="home-progress-track">
+                      <div
+                        class="home-progress-fill"
+                        [style.width.%]="deliveryProgressPct(d.delivery)"
+                      ></div>
+                    </div>
+                    <span class="home-progress-note"
+                      >{{ d.delivery.totalItems - d.delivery.itemStatusCounts.pending }} de
+                      {{ d.delivery.totalItems }} comprobantes conciliados</span
+                    >
+                  </div>
+                </div>
+
+                <div class="home-donut-wrap">
+                  <span class="home-donut-title">Planillas por estado</span>
+                  <div class="home-donut" [style.background]="donutGradient(d.delivery)">
+                    <div class="home-donut-hole">
+                      <span class="home-donut-value">{{ d.delivery.totalBatches }}</span>
+                      <span class="home-donut-label">planillas</span>
+                    </div>
+                  </div>
+                  <div class="home-donut-legend">
+                    @for (row of batchStatusSegments(d.delivery); track row.code) {
+                      @if (row.count > 0) {
+                        <a
+                          class="home-legend-row"
+                          routerLink="/reparto"
+                          [queryParams]="{ estado: row.code }"
+                        >
+                          <span class="home-legend-dot" [style.background]="row.colorVar"></span>
+                          <span class="home-legend-name">{{ row.name }}</span>
+                          <span class="home-legend-value">{{ row.count }} · {{ row.pct }}%</span>
+                        </a>
+                      }
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mejores ventas + Producto en mejor movimiento -->
+            <div class="home-double-grid">
+              <div class="home-block">
+                <div class="home-block-head">
+                  <h2 class="home-block-title">Mejores ventas del día</h2>
+                  <div class="home-block-controls">
+                    <ui-field
+                      label="Top"
+                      type="select"
+                      [(value)]="topLimitStr"
+                      [options]="topLimitOptions"
+                    />
+                    <ui-field
+                      label="Canal"
+                      type="select"
+                      [(value)]="topChannelIdStr"
+                      [options]="channelOptions()"
+                    />
+                  </div>
+                </div>
+                @if (topLoading()) {
+                  <div class="home-top-skeleton" role="status" aria-label="Cargando"></div>
+                } @else if (displayedTopSalespeople().length === 0) {
+                  <p class="home-block-empty">{{ topEmptyText() }}</p>
+                } @else {
+                  <ol class="home-rank-list">
+                    @for (s of displayedTopSalespeople(); track s.userId; let i = $index) {
+                      <li class="home-rank-row">
+                        <span class="home-rank-num">{{ i + 1 }}</span>
+                        <span class="home-rank-body">
+                          <span class="home-rank-name">{{ s.fullName }}</span>
+                          <span class="home-rank-meta"
+                            >{{ s.branchName || '—'
+                            }}{{ topChannelIdStr() ? '' : ' · ' + s.salesChannelName }}</span
+                          >
+                        </span>
+                        <span class="home-rank-amount">{{ formatSoles(s.netAmount) }}</span>
+                      </li>
+                    }
+                  </ol>
+                }
+              </div>
+
+              <div class="home-block">
+                <h2 class="home-block-title">Producto en mejor movimiento</h2>
+                @if (d.topProducts.length === 0) {
+                  <p class="home-block-empty">Todavía no hay unidades despachadas hoy.</p>
+                } @else {
+                  <div class="home-product-bars">
+                    @for (p of d.topProducts; track p.productId) {
+                      <div class="home-product-row">
+                        <span class="home-product-name">{{ p.productName }}</span>
+                        <div class="home-product-track">
                           <div
-                            class="home-origin-fill"
-                            [style.width.%]="originBarPct(d.orders, o.count)"
+                            class="home-product-fill"
+                            [style.width.%]="productBarPct(d.topProducts, p.totalQuantity)"
                           ></div>
                         </div>
-                        <span class="home-origin-value">{{ o.count }}</span>
-                      </a>
-                    }
-                  </div>
-                </div>
-
-                <div class="home-bonus-box">
-                  <span class="home-orders-col-title">Bonificaciones</span>
-                  <p class="home-bonus-line">
-                    {{ d.orders.totalBonusLines }} línea{{
-                      d.orders.totalBonusLines === 1 ? '' : 's'
-                    }}
-                    · {{ d.orders.totalBonusUnits }} u.
-                  </p>
-                  @if (d.orders.pendingStockBonusLines > 0) {
-                    <a
-                      class="home-bonus-warn"
-                      [class.home-legend-disabled]="!canManageBonusTray()"
-                      [routerLink]="
-                        canManageBonusTray() ? ['/pedidos/bonificaciones-sin-stock'] : null
-                      "
-                    >
-                      ⚠ {{ d.orders.pendingStockBonusLines }} sin stock ({{
-                        d.orders.pendingStockBonusUnits
-                      }}
-                      u.)
-                    </a>
-                  }
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Clientes del día + En jornada hoy -->
-          <div class="home-side-grid">
-            <a
-              class="home-block home-customers-block"
-              [class.home-block-disabled]="!canSeeAssignments()"
-              [routerLink]="canSeeAssignments() ? ['/asignaciones/mapa'] : null"
-              [queryParams]="{ date: d.customers.date }"
-            >
-              <h2 class="home-block-title">Clientes del día</h2>
-              @if (d.customers.scheduled === 0) {
-                <p class="home-block-empty">No hay clientes programados para esta fecha</p>
-              } @else {
-                <p class="home-customers-scheduled">{{ d.customers.scheduled }} programados</p>
-                <div class="home-customers-bar">
-                  <div
-                    class="home-customers-bar-fill"
-                    [style.width.%]="d.customers.visitPercentage"
-                  ></div>
-                </div>
-                <p class="home-customers-bar-label">{{ d.customers.visitPercentage }}% visitados</p>
-                <div class="home-customers-breakdown">
-                  <span class="home-customers-ok"
-                    >Con pedido {{ d.customers.ordered }} ({{ d.customers.orderPercentage }}%)</span
-                  >
-                  <span class="home-customers-warn">Sin compra {{ d.customers.noOrder }}</span>
-                  <span class="home-customers-muted">Cerrados {{ d.customers.closed }}</span>
-                  <span class="home-customers-neutral">Pendientes {{ d.customers.pending }}</span>
-                </div>
-              }
-            </a>
-
-            <div class="home-block">
-              <h2 class="home-block-title">En jornada hoy</h2>
-              <p class="home-block-sub">Abrieron jornada en la fecha · clic para ver en Usuarios</p>
-              @if (d.activeUsers.byRole.length === 0) {
-                <p class="home-block-empty">Nadie abrió jornada en esta fecha</p>
-              } @else {
-                <div class="home-roles-grid">
-                  @for (r of d.activeUsers.byRole; track r.roleCode; let i = $index) {
-                    <a
-                      class="home-role-card"
-                      [class.home-role-disabled]="!canManageUsers()"
-                      [routerLink]="canManageUsers() ? ['/usuarios'] : null"
-                      [queryParams]="{ roleCode: r.roleCode, onRouteToday: 'true' }"
-                    >
-                      <span class="home-role-avatar" [style.background]="roleColor(i)">{{
-                        r.roleName.charAt(0)
-                      }}</span>
-                      <span class="home-role-count">{{ r.activeCount }}</span>
-                      <span class="home-role-name">{{ r.roleName }}</span>
-                    </a>
-                  }
-                </div>
-              }
-            </div>
-          </div>
-
-          <!-- Reparto -->
-          <div class="home-block home-block-compact">
-            <h2 class="home-block-title">Reparto</h2>
-            <div class="home-reparto-grid">
-              <div class="home-reparto-bars">
-                <div class="home-amount-row">
-                  <span class="home-amount-label">Monto definido</span>
-                  <div class="home-amount-track">
-                    <div
-                      class="home-amount-fill"
-                      style="width: 100%; background: var(--st-open)"
-                    ></div>
-                  </div>
-                  <span class="home-amount-value">{{ formatSoles(d.delivery.totalAmount) }}</span>
-                </div>
-                <div class="home-amount-row">
-                  <span class="home-amount-label">Devoluciones</span>
-                  <div class="home-amount-track">
-                    <div
-                      class="home-amount-fill"
-                      [style.width.%]="amountPct(d.delivery.returnedAmount, d.delivery.totalAmount)"
-                      style="background: var(--status-danger)"
-                    ></div>
-                  </div>
-                  <span class="home-amount-value">{{
-                    formatSoles(d.delivery.returnedAmount)
-                  }}</span>
-                </div>
-                <div class="home-amount-row">
-                  <span class="home-amount-label">Monto neto</span>
-                  <div class="home-amount-track">
-                    <div
-                      class="home-amount-fill"
-                      [style.width.%]="amountPct(d.delivery.netAmount, d.delivery.totalAmount)"
-                      style="background: var(--status-ok)"
-                    ></div>
-                  </div>
-                  <span class="home-amount-value">{{ formatSoles(d.delivery.netAmount) }}</span>
-                </div>
-
-                <div class="home-progress">
-                  <div class="home-progress-head">
-                    <span>Avance de comprobantes</span>
-                    <span class="home-progress-pct">{{ deliveryProgressPct(d.delivery) }}%</span>
-                  </div>
-                  <div class="home-progress-track">
-                    <div
-                      class="home-progress-fill"
-                      [style.width.%]="deliveryProgressPct(d.delivery)"
-                    ></div>
-                  </div>
-                  <span class="home-progress-note"
-                    >{{ d.delivery.totalItems - d.delivery.itemStatusCounts.pending }} de
-                    {{ d.delivery.totalItems }} comprobantes conciliados</span
-                  >
-                </div>
-              </div>
-
-              <div class="home-donut-wrap">
-                <span class="home-donut-title">Planillas por estado</span>
-                <div class="home-donut" [style.background]="donutGradient(d.delivery)">
-                  <div class="home-donut-hole">
-                    <span class="home-donut-value">{{ d.delivery.totalBatches }}</span>
-                    <span class="home-donut-label">planillas</span>
-                  </div>
-                </div>
-                <div class="home-donut-legend">
-                  @for (row of batchStatusSegments(d.delivery); track row.code) {
-                    @if (row.count > 0) {
-                      <a
-                        class="home-legend-row"
-                        routerLink="/reparto"
-                        [queryParams]="{ estado: row.code }"
-                      >
-                        <span class="home-legend-dot" [style.background]="row.colorVar"></span>
-                        <span class="home-legend-name">{{ row.name }}</span>
-                        <span class="home-legend-value">{{ row.count }} · {{ row.pct }}%</span>
-                      </a>
-                    }
-                  }
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Mejores ventas + Producto en mejor movimiento -->
-          <div class="home-double-grid">
-            <div class="home-block">
-              <div class="home-block-head">
-                <h2 class="home-block-title">Mejores ventas del día</h2>
-                <div class="home-block-controls">
-                  <ui-field
-                    label="Top"
-                    type="select"
-                    [(value)]="topLimitStr"
-                    [options]="topLimitOptions"
-                  />
-                  <ui-field
-                    label="Canal"
-                    type="select"
-                    [(value)]="topChannelIdStr"
-                    [options]="channelOptions()"
-                  />
-                </div>
-              </div>
-              @if (topLoading()) {
-                <div class="home-top-skeleton" role="status" aria-label="Cargando"></div>
-              } @else if (displayedTopSalespeople().length === 0) {
-                <p class="home-block-empty">{{ topEmptyText() }}</p>
-              } @else {
-                <ol class="home-rank-list">
-                  @for (s of displayedTopSalespeople(); track s.userId; let i = $index) {
-                    <li class="home-rank-row">
-                      <span class="home-rank-num">{{ i + 1 }}</span>
-                      <span class="home-rank-body">
-                        <span class="home-rank-name">{{ s.fullName }}</span>
-                        <span class="home-rank-meta"
-                          >{{ s.branchName || '—'
-                          }}{{ topChannelIdStr() ? '' : ' · ' + s.salesChannelName }}</span
-                        >
-                      </span>
-                      <span class="home-rank-amount">{{ formatSoles(s.netAmount) }}</span>
-                    </li>
-                  }
-                </ol>
-              }
-            </div>
-
-            <div class="home-block">
-              <h2 class="home-block-title">Producto en mejor movimiento</h2>
-              @if (d.topProducts.length === 0) {
-                <p class="home-block-empty">Todavía no hay unidades despachadas hoy.</p>
-              } @else {
-                <div class="home-product-bars">
-                  @for (p of d.topProducts; track p.productId) {
-                    <div class="home-product-row">
-                      <span class="home-product-name">{{ p.productName }}</span>
-                      <div class="home-product-track">
-                        <div
-                          class="home-product-fill"
-                          [style.width.%]="productBarPct(d.topProducts, p.totalQuantity)"
-                        ></div>
+                        <span class="home-product-value">{{ p.totalQuantity }} u.</span>
                       </div>
-                      <span class="home-product-value">{{ p.totalQuantity }} u.</span>
-                    </div>
-                  }
-                </div>
-                <p class="home-block-note">Unidades despachadas hoy.</p>
-              }
+                    }
+                  </div>
+                  <p class="home-block-note">Unidades despachadas hoy.</p>
+                }
+              </div>
             </div>
-          </div>
 
-          <p class="home-dash-footer">Datos al {{ d.date }}.</p>
+            <p class="home-dash-footer">Datos al {{ d.date }}.</p>
+          }
+        } @else {
+          <div class="home-welcome">
+            <p class="home-welcome-text">Bienvenido al panel de HDS.</p>
+          </div>
         }
-      } @else if (isLogisticsHome()) {
-        <app-logistics-home />
-      } @else {
-        <div class="home-welcome">
-          <p class="home-welcome-text">Bienvenido al panel de HDS.</p>
-        </div>
-      }
-    </section>
+      </section>
+    }
   `,
   styles: [
     `

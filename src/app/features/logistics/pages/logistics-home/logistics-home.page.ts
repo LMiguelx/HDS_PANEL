@@ -6,6 +6,7 @@ import { catchError, filter, map, switchMap, tap } from 'rxjs/operators';
 import { AuthService } from '../../../../core/auth/auth';
 import { UiButton } from '../../../../shared/ui/button/button';
 import { UiEmpty } from '../../../../shared/ui/empty/empty';
+import { UiCard } from '../../../../shared/ui/card/card';
 import { UiLineChart, LineChartSeries } from '../../../../shared/ui/line-chart/line-chart';
 import { LogisticsApi } from '../../data-access/logistics.api';
 import { LogisticsDashboardView } from '../../domain/logistics.models';
@@ -68,6 +69,7 @@ function todayIso(): string {
     RouterLink,
     UiButton,
     UiEmpty,
+    UiCard,
     UiLineChart,
     LogisticsAlertCard,
     LogisticsPickingDayCard,
@@ -121,6 +123,7 @@ function todayIso(): string {
                   [value]="d.alerts.batchesNotReady"
                   label="Planillas que no pueden salir"
                   detail="Picking sin cerrar"
+                  icon="local_shipping"
                   [level]="batchesNotReadyLevel(d.alerts.batchesNotReady)"
                   [route]="['/reparto/picking']"
                   [queryParams]="{ date: d.date, onlyPending: 'true' }"
@@ -131,6 +134,7 @@ function todayIso(): string {
                   [value]="d.alerts.negativeProducts"
                   label="Productos en negativo"
                   detail="Ventas de hoy sin stock del ERP"
+                  icon="trending_down"
                   [level]="negativeProductsLevel(d.alerts.negativeProducts)"
                   [route]="['/reportes-ventas/validacion-stock']"
                   [queryParams]="{
@@ -145,6 +149,7 @@ function todayIso(): string {
                   [value]="a.count"
                   label="Entregas por revisar"
                   [detail]="'La más antigua: ' + relativeTimeText(a.oldestAt)"
+                  icon="visibility"
                   [level]="receiptsInReviewLevel(a)"
                   [route]="['/recepcion-mercaderia/entregas']"
                   [queryParams]="{ statusCode: 'IN_REVIEW' }"
@@ -155,6 +160,7 @@ function todayIso(): string {
                   [value]="a.count"
                   label="Entregas sin tomar por el ERP"
                   [detail]="'Confirmada ' + relativeTimeText(a.oldestAt)"
+                  icon="schedule"
                   [level]="receiptsNotTakenLevel(a)"
                   [route]="['/recepcion-mercaderia/entregas']"
                   [queryParams]="{ statusCode: 'CONFIRMED', erpTaken: 'false' }"
@@ -165,6 +171,7 @@ function todayIso(): string {
                   [value]="erpStockTimeText(a)"
                   label="Stock del ERP"
                   [detail]="erpStockDetailText(a)"
+                  icon="dns"
                   [level]="erpStockLevel(a)"
                   [route]="['/inventario/cuadre']"
                 />
@@ -173,26 +180,21 @@ function todayIso(): string {
           </div>
         }
 
-        <div
-          class="lgh-main-grid"
-          [class.lgh-grid-single]="!((d.picking || d.returns) && canSeeBrandChart())"
-        >
-          @if (d.picking || d.returns) {
+        <div class="lgh-main-grid" [class.lgh-grid-single]="!d.picking && !canSeeBrandChart()">
+          @if (d.picking; as p) {
             <div class="lgh-side-col">
-              @if (d.picking; as p) {
-                <app-logistics-picking-day-card [picking]="p" />
-                <app-logistics-shortfall-card [picking]="p" />
-              }
-              @if (d.returns; as r) {
-                <app-logistics-returns-day-card [returns]="r" />
-              }
+              <app-logistics-picking-day-card [picking]="p" />
+              <app-logistics-shortfall-card [picking]="p" />
             </div>
           }
 
           @if (canSeeBrandChart()) {
-            <div class="lgh-chart-col">
+            <ui-card class="lgh-chart-col">
               <div class="lgh-chart-head">
-                <h2 class="lgh-block-title">Marcas más vendidas · {{ currentYear }}</h2>
+                <div>
+                  <h2 class="lgh-block-title">Marcas más vendidas · {{ currentYear }}</h2>
+                  <p class="lgh-block-sub">Las 3 marcas con mayor venta neta, mes a mes</p>
+                </div>
                 <a routerLink="/reportes-ventas/marcas-por-mes" class="lgh-chart-link"
                   >Ver reporte completo →</a
                 >
@@ -212,8 +214,9 @@ function todayIso(): string {
                 } @else {
                   <ui-line-chart
                     [series]="chartSeries()"
-                    [height]="240"
+                    [height]="230"
                     [valueFormatter]="formatSoles"
+                    [legend]="false"
                   />
                   <table class="ui-table-grid lgh-legend-table">
                     <thead>
@@ -257,9 +260,13 @@ function todayIso(): string {
                   </table>
                 }
               }
-            </div>
+            </ui-card>
           }
         </div>
+
+        @if (d.returns; as r) {
+          <app-logistics-returns-day-card [returns]="r" class="lgh-returns-full" />
+        }
       }
     </section>
   `,
@@ -323,7 +330,7 @@ function todayIso(): string {
       }
       .lgh-alerts-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
         gap: 12px;
       }
       .lgh-main-grid {
@@ -331,7 +338,7 @@ function todayIso(): string {
         grid-template-columns: 330px 1fr;
         gap: var(--sp-6);
         margin-top: 24px;
-        align-items: start;
+        align-items: stretch;
       }
       /* sección 2.1: "la columna izquierda ocupa el ancho" sin el gráfico de marcas. */
       .lgh-main-grid.lgh-grid-single {
@@ -340,17 +347,23 @@ function todayIso(): string {
       .lgh-side-col {
         display: grid;
         gap: var(--sp-5);
+        align-content: start;
       }
       .lgh-chart-col {
+        display: block;
         min-width: 0;
       }
       .lgh-chart-head {
         display: flex;
-        align-items: baseline;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
         flex-wrap: wrap;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
+      }
+      .lgh-returns-full {
+        display: block;
+        margin-top: var(--sp-6);
       }
       .lgh-chart-link {
         font-size: 13px;

@@ -1,13 +1,12 @@
 import { Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { UiButton } from '../../../shared/ui/button/button';
-import { UiEmpty } from '../../../shared/ui/empty/empty';
 import { PickingDayView } from '../domain/logistics.models';
 
 /** Tarjeta 1 de "Picking y reparto" — doc 93, sección 2.6. */
 @Component({
   selector: 'app-logistics-picking-day-card',
-  imports: [RouterLink, UiButton, UiEmpty],
+  imports: [RouterLink, UiButton],
   template: `
     <div class="lpd-card">
       <div class="lpd-head">
@@ -15,7 +14,10 @@ import { PickingDayView } from '../domain/logistics.models';
         <span class="lpd-total">{{ picking().totalBatches }}</span>
       </div>
       @if (picking().totalBatches === 0) {
-        <ui-empty title="No hay planillas para hoy" />
+        <p class="lpd-empty">
+          <span class="material-icons" aria-hidden="true">event_busy</span>
+          No hay planillas para hoy
+        </p>
       } @else {
         <div class="lpd-bar">
           <span class="lpd-seg lpd-seg-closed" [style.width.%]="closedPct()"></span>
@@ -57,6 +59,17 @@ import { PickingDayView } from '../domain/logistics.models';
         display: flex;
         align-items: baseline;
         justify-content: space-between;
+      }
+      .lpd-empty {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink-muted);
+      }
+      .lpd-empty .material-icons {
+        font-size: 18px;
       }
       h3 {
         margin: 0;

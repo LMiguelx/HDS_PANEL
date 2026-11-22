@@ -56,3 +56,10 @@ export function peakUnitsText(
   if (!month || units == null) return '—';
   return `${monthShortName(month)} · ${units} u.`;
 }
+
+const INT_FMT = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 });
+
+/** "509,382" — celdas de mes de la tabla, sin decimales ni símbolo (el Total sí lleva `formatSoles`). */
+export function formatSolesInt(value: number | null | undefined): string {
+  return value == null ? '—' : INT_FMT.format(value);
+}

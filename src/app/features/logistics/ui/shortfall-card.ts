@@ -1,12 +1,10 @@
 import { Component, input } from '@angular/core';
-import { UiEmpty } from '../../../shared/ui/empty/empty';
 import { PickingDayView } from '../domain/logistics.models';
 import { quantityText } from '../../sales-reports/sales-report-format';
 
 /** Tarjeta 2 de "Picking y reparto" — doc 93, sección 2.6. */
 @Component({
   selector: 'app-logistics-shortfall-card',
-  imports: [UiEmpty],
   template: `
     <div class="lsf-card">
       <div class="lsf-head">
@@ -16,7 +14,10 @@ import { quantityText } from '../../sales-reports/sales-report-format';
         }
       </div>
       @if (picking().withShortfall === 0) {
-        <ui-empty variant="al-dia" title="Sin faltantes de carga hoy ✔" />
+        <p class="lsf-empty">
+          <span class="material-icons" aria-hidden="true">check_circle</span>
+          Sin faltantes de carga hoy
+        </p>
       } @else {
         <ul class="lsf-list">
           @for (p of picking().topShortProducts; track p.productCode) {
@@ -66,6 +67,17 @@ import { quantityText } from '../../sales-reports/sales-report-format';
         font-weight: 800;
         color: var(--status-warn);
         white-space: nowrap;
+      }
+      .lsf-empty {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        font-size: 13px;
+        color: var(--status-ok);
+      }
+      .lsf-empty .material-icons {
+        font-size: 18px;
       }
       .lsf-list {
         list-style: none;

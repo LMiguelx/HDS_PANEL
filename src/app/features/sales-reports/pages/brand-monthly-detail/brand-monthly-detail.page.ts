@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, input, signal, untracked } from '@
 import { Router, RouterLink } from '@angular/router';
 import { UiField, UiFieldOption } from '../../../../shared/ui/field/field';
 import { UiToggle } from '../../../../shared/ui/toggle/toggle';
+import { UiCard } from '../../../../shared/ui/card/card';
 import { UiEmpty } from '../../../../shared/ui/empty/empty';
 import { UiExportMenu } from '../../../../shared/ui/export-menu/export-menu';
 import { UiLineChart, LineChartSeries } from '../../../../shared/ui/line-chart/line-chart';
@@ -12,6 +13,7 @@ import {
 } from '../../../../shared/models/sales-report.models';
 import {
   MONTH_SHORT_NAMES,
+  formatSolesInt,
   peakText,
   variationPctText,
   variationTone,
@@ -32,7 +34,7 @@ type SortDir = 1 | -1;
 /** Pantalla 2 de "Marcas por mes" — doc 93, sección 3.7. */
 @Component({
   selector: 'app-brand-monthly-detail-page',
-  imports: [RouterLink, UiField, UiToggle, UiEmpty, UiExportMenu, UiLineChart],
+  imports: [RouterLink, UiField, UiToggle, UiCard, UiEmpty, UiExportMenu, UiLineChart],
   template: `
     <section class="bmd-page">
       @if (loading()) {
@@ -70,8 +72,8 @@ type SortDir = 1 | -1;
 
         <div class="bmd-kpi-row">
           <div class="bmd-kpi">
-            <span class="bmd-kpi-value">{{ formatSoles(d.totalNet) }}</span>
             <span class="bmd-kpi-label">Venta neta del año</span>
+            <span class="bmd-kpi-value">{{ formatSoles(d.totalNet) }}</span>
             @if (d.previousYearTotalNet != null) {
               <span
                 class="bmd-kpi-sub"
@@ -82,26 +84,29 @@ type SortDir = 1 | -1;
             }
           </div>
           <div class="bmd-kpi">
-            <span class="bmd-kpi-value">{{ d.totalUnits }}</span>
             <span class="bmd-kpi-label">Unidades vendidas</span>
+            <span class="bmd-kpi-value">{{ d.totalUnits }}</span>
           </div>
           <div class="bmd-kpi">
-            <span class="bmd-kpi-value">{{ d.totalBonusUnits }}</span>
             <span class="bmd-kpi-label">Unidades bonificadas</span>
+            <span class="bmd-kpi-value">{{ d.totalBonusUnits }}</span>
           </div>
           <div class="bmd-kpi">
-            <span class="bmd-kpi-value">{{ peakText(d.peakMonth, d.peakNetAmount) }}</span>
             <span class="bmd-kpi-label">Mes pico</span>
+            <span class="bmd-kpi-value">{{ peakText(d.peakMonth, d.peakNetAmount) }}</span>
           </div>
         </div>
 
-        <ui-line-chart
-          [series]="chartSeries()"
-          [height]="220"
-          [valueFormatter]="formatSoles"
-          [showCompare]="d.previousYearTotalNet != null"
-          [compareLabel]="String(year() - 1)"
-        />
+        <ui-card class="bmd-chart-card">
+          <ui-line-chart
+            [series]="chartSeries()"
+            [height]="220"
+            [valueFormatter]="formatSoles"
+            [showCompare]="d.previousYearTotalNet != null"
+            [compareLabel]="String(year() - 1)"
+            [legend]="false"
+          />
+        </ui-card>
 
         @if (d.products.length === 0) {
           <ui-empty title="Sin productos" body="Esta marca no tuvo ventas en el año elegido." />
@@ -111,61 +116,63 @@ type SortDir = 1 | -1;
             <ui-toggle label="Mostrar en soles" [(checked)]="byAmount" />
           </div>
 
-          <div class="bmd-table-wrap">
-            <table class="ui-table-grid bmd-table">
-              <thead>
-                <tr>
-                  <th class="bmd-th-sticky" (click)="setSort('productCode')">Código</th>
-                  <th class="bmd-th-sticky bmd-th-name" (click)="setSort('productName')">
-                    Producto
-                  </th>
-                  @for (m of monthNames; track m; let i = $index) {
-                    <th class="bmd-col-right" (click)="setSort('month' + (i + 1))">{{ m }}</th>
-                  }
-                  <th class="bmd-col-right" (click)="setSort('totalUnits')">Unidades</th>
-                  <th class="bmd-col-right" (click)="setSort('totalNet')">S/</th>
-                  <th class="bmd-col-right" (click)="setSort('totalBonusUnits')">Bonif.</th>
-                  <th (click)="setSort('peak')">Pico</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (p of visibleProducts(); track p.productId) {
+          <ui-card class="bmd-table-card">
+            <div class="bmd-table-wrap">
+              <table class="ui-table-grid bmd-table">
+                <thead>
                   <tr>
-                    <td class="bmd-th-sticky bmd-muted">{{ p.productCode }}</td>
-                    <td class="bmd-th-sticky bmd-th-name">{{ p.productName }}</td>
-                    @for (m of p.months; track m.month) {
-                      <td
-                        class="bmd-col-right"
-                        [class.bmd-peak-cell]="m.month === p.peakMonth"
-                        [style.background]="heatBg(p, m)"
-                      >
-                        @if (byAmount()) {
-                          {{ m.netAmount != null ? formatSoles(m.netAmount) : '—' }}
-                        } @else {
-                          {{ m.units != null ? m.units : '—' }}
-                          @if ((m.bonusUnits ?? 0) > 0) {
-                            <div class="bmd-bonus-sub">+{{ m.bonusUnits }} bonif.</div>
+                    <th class="bmd-th-sticky" (click)="setSort('productCode')">Código</th>
+                    <th class="bmd-th-sticky bmd-th-name" (click)="setSort('productName')">
+                      Producto
+                    </th>
+                    @for (m of monthNames; track m; let i = $index) {
+                      <th class="bmd-col-right" (click)="setSort('month' + (i + 1))">{{ m }}</th>
+                    }
+                    <th class="bmd-col-right" (click)="setSort('totalUnits')">Unidades</th>
+                    <th class="bmd-col-right" (click)="setSort('totalNet')">S/</th>
+                    <th class="bmd-col-right" (click)="setSort('totalBonusUnits')">Bonif.</th>
+                    <th (click)="setSort('peak')">Pico</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (p of visibleProducts(); track p.productId) {
+                    <tr>
+                      <td class="bmd-th-sticky bmd-muted">{{ p.productCode }}</td>
+                      <td class="bmd-th-sticky bmd-th-name">{{ p.productName }}</td>
+                      @for (m of p.months; track m.month) {
+                        <td
+                          class="bmd-col-right"
+                          [class.bmd-peak-cell]="m.month === p.peakMonth"
+                          [style.background]="heatBg(p, m)"
+                        >
+                          @if (byAmount()) {
+                            {{ formatSolesInt(m.netAmount) }}
+                          } @else {
+                            {{ m.units != null ? m.units : '—' }}
+                            @if ((m.bonusUnits ?? 0) > 0) {
+                              <div class="bmd-bonus-sub">+{{ m.bonusUnits }} bonif.</div>
+                            }
                           }
+                        </td>
+                      }
+                      <td class="bmd-col-right bmd-cell-strong">{{ p.totalUnits }}</td>
+                      <td class="bmd-col-right">{{ formatSoles(p.totalNet) }}</td>
+                      <td class="bmd-col-right" [class.bmd-muted]="p.totalBonusUnits === 0">
+                        {{ p.totalBonusUnits }}
+                      </td>
+                      <td class="bmd-muted">
+                        @if (p.peakMonth) {
+                          {{ monthShortName(p.peakMonth) }} · {{ p.peakUnits }} u.
+                        } @else {
+                          —
                         }
                       </td>
-                    }
-                    <td class="bmd-col-right bmd-cell-strong">{{ p.totalUnits }}</td>
-                    <td class="bmd-col-right">{{ formatSoles(p.totalNet) }}</td>
-                    <td class="bmd-col-right" [class.bmd-muted]="p.totalBonusUnits === 0">
-                      {{ p.totalBonusUnits }}
-                    </td>
-                    <td class="bmd-muted">
-                      @if (p.peakMonth) {
-                        {{ monthShortName(p.peakMonth) }} · {{ p.peakUnits }} u.
-                      } @else {
-                        —
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </ui-card>
         }
       }
     </section>
@@ -221,6 +228,8 @@ type SortDir = 1 | -1;
       }
       .bmd-kpi {
         border: 1px solid var(--hairline);
+        border-radius: var(--radius-card);
+        background: var(--surface);
         padding: 14px 16px;
         display: grid;
         gap: 4px;
@@ -232,12 +241,21 @@ type SortDir = 1 | -1;
         font-variant-numeric: var(--tnum);
       }
       .bmd-kpi-label {
-        font-size: 12px;
+        font-size: var(--fs-label, 11px);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
         color: var(--ink-muted);
       }
       .bmd-kpi-sub {
         font-size: 12px;
         font-weight: 700;
+      }
+      .bmd-chart-card {
+        display: block;
+        margin-bottom: var(--sp-6);
+      }
+      .bmd-table-card {
+        display: block;
       }
       .bmd-tone-pos {
         color: var(--status-ok);
@@ -321,6 +339,7 @@ export class BrandMonthlyDetailPage {
 
   protected String = String;
   protected formatSoles = formatSoles;
+  protected formatSolesInt = formatSolesInt;
   protected variationPctText = variationPctText;
   protected variationTone = variationTone;
   protected peakText = peakText;

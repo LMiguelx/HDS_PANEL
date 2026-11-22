@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatSolesInt,
   monthShortName,
   peakText,
   peakUnitsText,
@@ -48,5 +49,17 @@ describe('peakText / peakUnitsText', () => {
     expect(peakText(null, 100)).toBe('—');
     expect(peakUnitsText(3, 420)).toBe('Mar · 420 u.');
     expect(peakUnitsText(3, null)).toBe('—');
+  });
+});
+
+describe('formatSolesInt', () => {
+  it('agrupa miles sin decimales ni símbolo', () => {
+    expect(formatSolesInt(509382)).toBe('509,382');
+    expect(formatSolesInt(0)).toBe('0');
+  });
+
+  it('devuelve — con null', () => {
+    expect(formatSolesInt(null)).toBe('—');
+    expect(formatSolesInt(undefined)).toBe('—');
   });
 });
