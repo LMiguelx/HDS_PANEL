@@ -6,13 +6,8 @@
 import type { CellValue } from 'exceljs';
 import { format, parseISO } from 'date-fns';
 import { ExportColumn, ExportTable } from './export.models';
-import {
-  columnScreenText,
-  isEmptyZero,
-  isoDateParts,
-  rawColumnValue,
-  toFiniteNumber,
-} from './export-values';
+import { columnScreenText, isEmptyZero, rawColumnValue, toFiniteNumber } from './export-values';
+import { excelDate, excelDateTime } from './excel-dates';
 
 const HEADER_FILL = 'FFEFEFEF';
 const SUBTITLE_FONT_COLOR = 'FF5F6672';
@@ -62,9 +57,10 @@ function cellValueFor<T>(column: ExportColumn<T>, raw: unknown): CellValue {
   if (raw == null || raw === '' || isEmptyZero(column, raw)) return null;
   if (isNumericType(column.type)) return toFiniteNumber(raw) ?? null;
   if (isDateType(column.type)) {
-    const p = isoDateParts(raw);
-    // Fecha local real, construida de las partes — nunca parseada como UTC.
-    return p ? new Date(p.y, p.m - 1, p.d, p.hh, p.mm) : null;
+    // `Date.UTC` con los números de reloj — doc 95, parte 3: ExcelJS escribe
+    // los `Date` en UTC, así que construirlo en hora local desfasa la celda.
+    if (typeof raw !== 'string') return null;
+    return column.type === 'date' ? excelDate(raw) : excelDateTime(raw);
   }
   return String(raw);
 }

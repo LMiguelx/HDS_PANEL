@@ -149,6 +149,8 @@ export interface EditCustomerCommand {
   latitude?: number;
   longitude?: number;
   ubigeoCode?: string;
+  /** NUEVO — doc 95, parte 1.2. Máx. 200; el backend la guarda en MAYÚSCULAS. */
+  address?: string;
 }
 
 /** POST /admin/customers (doc 74, sección 2.2) — asignación inicial, opcional. */

@@ -17,6 +17,7 @@ import {
 } from '../../../shared/models/customer.models';
 import { UbigeoView } from '../../../shared/models/customer-request.models';
 import { flattenUbigeoTree, ubigeoText } from '../../../shared/utils/ubigeo';
+import { isValidPhoneFormat, normalizePhoneForCompare } from '../../../shared/utils/phone-view';
 
 function normalize(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -27,7 +28,13 @@ function round8(n: number): number {
   return Math.round(n * 1e8) / 1e8;
 }
 
+/** Igual que compara el backend — doc 95, parte 1.2: en mayúsculas y sin espacios repetidos. */
+function normalizeAddressForCompare(text: string): string {
+  return text.trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
 const MAX_PHONE_LENGTH = 20;
+const MAX_ADDRESS_LENGTH = 200;
 
 export interface EditCustomerDialogData {
   customer: CustomerDetail;
@@ -88,23 +95,21 @@ const MAX_NAME_LENGTH = 150;
                 [error]="nameError()"
               />
 
-              <div class="ecd-doc-row">
-                <ui-field
-                  label="Tipo de documento"
-                  type="select"
-                  [value]="documentTypeIdStr()"
-                  (valueChange)="onDocTypeChange($event)"
-                  [options]="docTypeOptions()"
-                  [error]="docTypeError()"
-                />
-                <ui-field
-                  label="Número de documento"
-                  [value]="documentNumber()"
-                  (valueChange)="onDocNumberChange($event)"
-                  [hint]="docNumberFieldError() ? '' : docNumberHint()"
-                  [error]="docNumberFieldError()"
-                />
-              </div>
+              <ui-field
+                label="Tipo de documento"
+                type="select"
+                [value]="documentTypeIdStr()"
+                (valueChange)="onDocTypeChange($event)"
+                [options]="docTypeOptions()"
+                [error]="docTypeError()"
+              />
+              <ui-field
+                label="Número de documento"
+                [value]="documentNumber()"
+                (valueChange)="onDocNumberChange($event)"
+                [hint]="docNumberFieldError() ? '' : docNumberHint()"
+                [error]="docNumberFieldError()"
+              />
 
               <ui-field
                 label="Tipo de cliente"
@@ -118,7 +123,7 @@ const MAX_NAME_LENGTH = 150;
                 label="Teléfono"
                 [value]="phone()"
                 (valueChange)="onPhoneChange($event)"
-                [hint]="phoneFieldError() ? '' : phone().length + '/' + maxPhoneLength"
+                [hint]="phoneFieldError() ? '' : 'Solo números. Se guarda sin espacios ni guiones.'"
                 [error]="phoneFieldError()"
               />
 
@@ -165,6 +170,13 @@ const MAX_NAME_LENGTH = 150;
                       {{ phone() }}
                     </div>
                   }
+                  @if (hasAddressChange()) {
+                    <div class="ecd-summary-row">
+                      Dirección:
+                      <span class="ecd-before">{{ data.customer.address || '—' }}</span> →
+                      {{ address() }}
+                    </div>
+                  }
                   @if (hasUbigeoChange()) {
                     <div class="ecd-summary-row">
                       Ubigeo:
@@ -184,7 +196,9 @@ const MAX_NAME_LENGTH = 150;
                 [(address)]="address"
                 [referenceLatitude]="data.customer.latitude"
                 [referenceLongitude]="data.customer.longitude"
-                [addressReadonly]="true"
+                [autoFillAddress]="false"
+                [addressMaxLength]="maxAddressLength"
+                [addressError]="addressFieldError()"
               />
               @if (latLngError()) {
                 <div class="ecd-error-banner">{{ latLngError() }}</div>
@@ -192,8 +206,10 @@ const MAX_NAME_LENGTH = 150;
 
               <div class="ecd-field">
                 <ui-typeahead
-                  label="Ubigeo"
-                  placeholder="Distrito · Provincia · Departamento"
+                  label="Ubigeo (opcional)"
+                  [placeholder]="
+                    data.customer.ubigeo ? 'Distrito · Provincia · Departamento' : 'Sin ubigeo'
+                  "
                   [clearOnPick]="false"
                   [search]="ubigeoSearch"
                   [selected]="ubigeo()"
@@ -290,19 +306,6 @@ const MAX_NAME_LENGTH = 150;
         color: var(--ink-muted);
         font-size: 15px;
       }
-      .ecd-doc-row {
-        display: flex;
-        gap: 12px;
-        align-items: flex-start;
-      }
-      .ecd-doc-row > :first-child {
-        flex: 0 0 40%;
-        min-width: 0;
-      }
-      .ecd-doc-row > :last-child {
-        flex: 1 1 60%;
-        min-width: 0;
-      }
       .ecd-summary {
         padding: 10px 14px;
         border: 1px solid var(--hairline);
@@ -331,16 +334,6 @@ const MAX_NAME_LENGTH = 150;
           gap: 24px;
         }
       }
-
-      @media (max-width: 599px) {
-        .ecd-doc-row {
-          flex-direction: column;
-        }
-        .ecd-doc-row > :first-child,
-        .ecd-doc-row > :last-child {
-          flex: 1 1 auto;
-        }
-      }
     `,
   ],
 })
@@ -353,7 +346,7 @@ export class EditCustomerDialog {
   private dialog = inject(UiDialogService);
 
   protected maxNameLength = MAX_NAME_LENGTH;
-  protected maxPhoneLength = MAX_PHONE_LENGTH;
+  protected maxAddressLength = MAX_ADDRESS_LENGTH;
   protected ubigeoText = ubigeoText;
 
   protected options = signal<CustomerEditOptions | null>(null);
@@ -384,6 +377,7 @@ export class EditCustomerDialog {
   protected docTypeError = signal('');
   protected docNumberApiError = signal('');
   protected phoneApiError = signal('');
+  protected addressApiError = signal('');
   protected latLngError = signal('');
   protected ubigeoError = signal('');
 
@@ -454,13 +448,25 @@ export class EditCustomerDialog {
     () => this.customerTypeId() !== this.data.customer.customerTypeId,
   );
 
+  /** Solo los dígitos (y el `+`) — doc 95, parte 1: mismo criterio que aplica el backend al guardar. */
   protected hasPhoneChange = computed(
-    () => this.phone().trim() !== (this.data.customer.phone ?? '').trim(),
+    () =>
+      normalizePhoneForCompare(this.phone()) !==
+      normalizePhoneForCompare(this.data.customer.phone ?? ''),
   );
-  /** "No puede quedar vacío" — doc 83, sección 1.1: solo bloquea si se tocó el teléfono. */
-  protected phoneLiveError = computed(() =>
-    this.hasPhoneChange() && !this.phone().trim() ? 'El teléfono no puede quedar vacío' : '',
-  );
+  /**
+   * Solo bloquea si se tocó el teléfono — doc 83, sección 1.1 y doc 95,
+   * parte 1.4: un teléfono raro ya guardado se puede dejar intacto.
+   */
+  protected phoneLiveError = computed(() => {
+    if (!this.hasPhoneChange()) return '';
+    const trimmed = this.phone().trim();
+    if (!trimmed) return 'El teléfono no puede quedar vacío';
+    if (!isValidPhoneFormat(trimmed)) {
+      return `El teléfono debe tener solo números, de 6 a 15 dígitos (se recibió: ${trimmed})`;
+    }
+    return '';
+  });
   protected phoneFieldError = computed(() => this.phoneApiError() || this.phoneLiveError());
 
   /** Latitud y longitud van siempre juntas — doc 83, sección 1.1. */
@@ -479,6 +485,18 @@ export class EditCustomerDialog {
     return !!code && code !== this.data.customer.ubigeo?.ubigeoCode;
   });
 
+  /** En mayúsculas y sin espacios repetidos, igual que compara el backend — doc 95, parte 1.2. */
+  protected hasAddressChange = computed(
+    () =>
+      normalizeAddressForCompare(this.address()) !==
+      normalizeAddressForCompare(this.data.customer.address ?? ''),
+  );
+  /** Solo bloquea si se tocó la dirección — mismo criterio que el teléfono (doc 95, parte 1.3). */
+  protected addressLiveError = computed(() =>
+    this.hasAddressChange() && !this.address().trim() ? 'La dirección no puede quedar vacía' : '',
+  );
+  protected addressFieldError = computed(() => this.addressApiError() || this.addressLiveError());
+
   protected hasAnyChange = computed(
     () =>
       this.hasNameChange() ||
@@ -487,6 +505,7 @@ export class EditCustomerDialog {
       this.hasCustomerTypeChange() ||
       this.hasPhoneChange() ||
       this.hasLocationChange() ||
+      this.hasAddressChange() ||
       this.hasUbigeoChange(),
   );
 
@@ -520,6 +539,7 @@ export class EditCustomerDialog {
       this.hasAnyChange() &&
       !this.docNumberLiveError() &&
       !this.phoneLiveError() &&
+      !this.addressLiveError() &&
       !this.saving() &&
       !!this.options(),
   );
@@ -597,6 +617,7 @@ export class EditCustomerDialog {
       cmd.longitude = this.longitude()!;
     }
     if (this.hasUbigeoChange()) cmd.ubigeoCode = this.ubigeo()!.code!;
+    if (this.hasAddressChange()) cmd.address = this.address().trim();
     return cmd;
   }
 
@@ -625,6 +646,10 @@ export class EditCustomerDialog {
       this.phoneApiError.set(message);
       return;
     }
+    if (m.includes('dirección') || m.includes('direccion')) {
+      this.addressApiError.set(message);
+      return;
+    }
     if (m.includes('latitud') || m.includes('longitud')) {
       this.latLngError.set(message);
       return;
@@ -648,6 +673,7 @@ export class EditCustomerDialog {
     this.docTypeError.set('');
     this.docNumberApiError.set('');
     this.phoneApiError.set('');
+    this.addressApiError.set('');
     this.latLngError.set('');
     this.ubigeoError.set('');
     this.customerSvc.update(this.data.customer.customerId, this.buildCommand()).subscribe({

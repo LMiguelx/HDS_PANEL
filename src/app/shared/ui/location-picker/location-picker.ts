@@ -99,6 +99,11 @@ function resolveCssVar(name: string, fallback: string): string {
         [search]="addressSearch"
         (picked)="onSearchPicked($event)"
       />
+      @if (pickedSearchAddress()) {
+        <button type="button" class="lp-use-link" (click)="useSearchAddress()">
+          Usar esta dirección
+        </button>
+      }
 
       <div class="lp-map" #mapEl></div>
 
@@ -115,24 +120,19 @@ function resolveCssVar(name: string, fallback: string): string {
         </div>
       }
 
-      @if (addressReadonly()) {
-        <div class="lp-field">
-          <label>Dirección</label>
-          <div class="lp-readonly">{{ address() || '—' }}</div>
-          <div class="lp-hint">La dirección no se edita aquí</div>
-        </div>
-      } @else {
-        <ui-field
-          label="Dirección"
-          [value]="address()"
-          (valueChange)="address.set($event)"
-          placeholder="Av. Los Incas 123, Cerro Colorado"
-        />
-        @if (suggestedAddress() && address().trim()) {
-          <button type="button" class="lp-use-link" (click)="useSuggested()">
-            Usar «{{ suggestedAddress() }}»
-          </button>
-        }
+      <ui-field
+        label="Dirección"
+        [class.lp-address-upper]="addressMaxLength() != null"
+        [value]="address()"
+        (valueChange)="onAddressChange($event)"
+        [hint]="addressError() ? '' : addressHint()"
+        [error]="addressError()"
+        placeholder="Av. Los Incas 123, Cerro Colorado"
+      />
+      @if (autoFillAddress() && suggestedAddress() && address().trim()) {
+        <button type="button" class="lp-use-link" (click)="useSuggested()">
+          Usar «{{ suggestedAddress() }}»
+        </button>
       }
 
       <div class="lp-coords-row">
@@ -239,28 +239,10 @@ function resolveCssVar(name: string, fallback: string): string {
         color: var(--ink);
         text-decoration: underline;
       }
-      .lp-field {
-        display: grid;
-        gap: 6px;
-      }
-      .lp-field label {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ink);
-      }
-      .lp-readonly {
-        min-height: var(--touch-min);
-        padding: 0 12px;
-        display: flex;
-        align-items: center;
-        background: var(--surface-sunk);
-        border: 1px solid var(--divider);
-        color: var(--ink-muted);
-        font-size: 15px;
-      }
-      .lp-hint {
-        font-size: 12px;
-        color: var(--ink-muted);
+      /* Dirección en mayúsculas visualmente — doc 95, parte 1.3: el valor
+         que se envía va tal cual, el backend lo normaliza. */
+      .lp-address-upper ::ng-deep .ui-input {
+        text-transform: uppercase;
       }
       .lp-coords-row {
         display: flex;
@@ -334,12 +316,25 @@ export class LocationPicker {
   /** Ubicación de referencia (marcador gris, fijo) — doc 83, sección 1.2: la ubicación actual del cliente en "Editar datos". */
   referenceLatitude = input<number | null>(null);
   referenceLongitude = input<number | null>(null);
-  /** La dirección se ve como texto y el buscador solo mueve el punto, sin tocarla — doc 83, sección 1.2. */
-  addressReadonly = input(false);
+  /**
+   * `false` en "Editar datos del cliente" — doc 95, parte 1.3: mover el pin
+   * o elegir un resultado del buscador NUNCA sobrescribe la dirección sola;
+   * en su lugar, al elegir un resultado se ofrece "Usar esta dirección".
+   */
+  autoFillAddress = input(true);
+  /** Límite de caracteres + contador "n/max" bajo el campo (p. ej. 200 en Editar). `null` = sin límite ni contador. */
+  addressMaxLength = input<number | null>(null);
+  /** Error inline bajo el campo Dirección, a cargo de quien use el componente (igual que los demás campos del formulario). */
+  addressError = input('');
 
   protected latText = computed(() => (this.latitude() != null ? String(this.latitude()) : ''));
   protected lngText = computed(() => (this.longitude() != null ? String(this.longitude()) : ''));
   protected suggestedAddress = signal('');
+  protected pickedSearchAddress = signal('');
+  protected addressHint = computed(() => {
+    const max = this.addressMaxLength();
+    return max != null ? `${this.address().length}/${max}` : '';
+  });
 
   protected hasReference = computed(
     () => this.referenceLatitude() != null && this.referenceLongitude() != null,
@@ -495,12 +490,13 @@ export class LocationPicker {
     this.latitude.set(rLat);
     this.longitude.set(rLng);
     this.moveMarkerAndLine(rLat, rLng, pan);
-    if (!this.addressReadonly()) this.reverseGeocode(rLat, rLng);
+    if (this.autoFillAddress()) this.reverseGeocode(rLat, rLng);
   }
 
   protected onSearchPicked(item: UiLookupItem) {
     const raw = this.searchRawResults[item.id];
     if (!raw) return;
+    if (!this.autoFillAddress()) this.pickedSearchAddress.set(raw.display_name);
     this.applyPoint(Number(raw.lat), Number(raw.lon), true);
   }
 
@@ -547,6 +543,17 @@ export class LocationPicker {
     this.suggestedAddress.set('');
   }
 
+  /** "Usar esta dirección" — doc 95, parte 1.3: copia el texto del resultado elegido (en mayúsculas); el usuario decide si lo usa. */
+  protected useSearchAddress() {
+    this.address.set(this.pickedSearchAddress().toUpperCase());
+    this.pickedSearchAddress.set('');
+  }
+
+  protected onAddressChange(v: string) {
+    const max = this.addressMaxLength();
+    this.address.set(max != null ? v.slice(0, max) : v);
+  }
+
   /** Forma 4 (escribir/pegar lat-lng) — doc 74, sección 2.4: se mueve cuando ambos valores son válidos. */
   protected onLatText(v: string) {
     this.latitude.set(v.trim() === '' ? null : Number(v));
@@ -565,7 +572,7 @@ export class LocationPicker {
     this.marker?.setLatLng([lat, lng]);
     if (this.map) this.map.setView([lat, lng], zoom);
     this.updateReferenceLine(lat, lng);
-    if (!this.addressReadonly()) this.coordsTyped$.next();
+    if (this.autoFillAddress()) this.coordsTyped$.next();
   }
 
   protected togglePaste() {

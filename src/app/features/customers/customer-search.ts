@@ -7,10 +7,12 @@ import { UiToggle } from '../../shared/ui/toggle/toggle';
 import { UiTable } from '../../shared/ui/table/table';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiBadge } from '../../shared/ui/badge/badge';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { CustomerService } from './customer';
 import { AdminCustomerSummary } from '../../shared/models/customer.models';
 import { ratingText } from './customer-format';
+import { phoneView } from '../../shared/utils/phone-view';
 
 /** Buscador admin (GET /api/admin/customers) — todos los clientes del tenant. */
 @Component({
@@ -23,6 +25,7 @@ import { ratingText } from './customer-format';
     UiTable,
     UiStatus,
     UiEmpty,
+    UiBadge,
     HasPermissionDirective,
   ],
   template: `
@@ -95,7 +98,12 @@ import { ratingText } from './customer-format';
                 </td>
                 <td class="cs-muted">{{ c.documentNumber }}</td>
                 <td class="cs-muted">{{ c.address || '—' }}</td>
-                <td class="cs-muted">{{ c.phone || '—' }}</td>
+                <td class="cs-muted cs-phone-cell">
+                  {{ phoneView(c.phone).text }}
+                  @if (phoneView(c.phone).needsReview) {
+                    <ui-badge>Revisar teléfono</ui-badge>
+                  }
+                </td>
                 <td>
                   @if (c.visitStatusName) {
                     <ui-status [label]="c.visitStatusName" />
@@ -209,6 +217,12 @@ import { ratingText } from './customer-format';
         color: var(--ink-muted);
         font-size: 13px;
       }
+      .cs-phone-cell {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
       .cs-row-action {
         text-align: right;
       }
@@ -261,6 +275,7 @@ export class CustomerSearchPage implements OnInit, OnDestroy {
   private customerSvc = inject(CustomerService);
 
   protected ratingText = ratingText;
+  protected phoneView = phoneView;
 
   protected query = signal('');
   protected onlyActive = signal(true);

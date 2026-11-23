@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { UiButton } from '../../shared/ui/button/button';
 import { UiStatus } from '../../shared/ui/status/status';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiBadge } from '../../shared/ui/badge/badge';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { AuthService } from '../../core/auth/auth';
 import { ToastService } from '../../core/ui/toast';
@@ -29,6 +30,7 @@ import { OrderAdminService } from '../orders/order-admin';
 import { OrderSummary } from '../../shared/models/order.models';
 import { orderStatusName, deliveryStatusName } from '../orders/order-format';
 import { ubigeoText } from '../../shared/utils/ubigeo';
+import { phoneView } from '../../shared/utils/phone-view';
 
 /**
  * Ficha completa del cliente — GET /api/customers/{id}, ahora con la
@@ -37,7 +39,7 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
  */
 @Component({
   selector: 'app-customer-detail',
-  imports: [RouterLink, UiButton, UiStatus, UiEmpty],
+  imports: [RouterLink, UiButton, UiStatus, UiEmpty, UiBadge],
   template: `
     <section class="cd-page">
       @if (loading()) {
@@ -155,7 +157,12 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
             <div class="cd-contact-strip">
               <div class="cd-field">
                 <span class="cd-label">Teléfono</span>
-                <span class="cd-value">{{ c.phone || '—' }}</span>
+                <span class="cd-value cd-phone-value">
+                  {{ phoneView(c.phone).text }}
+                  @if (phoneView(c.phone).needsReview) {
+                    <ui-badge>Revisar teléfono</ui-badge>
+                  }
+                </span>
               </div>
               <div class="cd-field">
                 <span class="cd-label">Actividad</span>
@@ -435,6 +442,12 @@ import { ubigeoText } from '../../shared/utils/ubigeo';
         font-size: 14px;
         color: var(--ink);
       }
+      .cd-phone-value {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
       .cd-orders-skeleton {
         height: 120px;
         background: var(--faint);
@@ -621,6 +634,7 @@ export class CustomerDetailPage {
   protected ratingText = ratingText;
   protected initials = initials;
   protected ubigeoText = ubigeoText;
+  protected phoneView = phoneView;
   protected dateText = dateText;
   protected dateTimeText = dateTimeText;
   protected weekdaysText = weekdaysText;

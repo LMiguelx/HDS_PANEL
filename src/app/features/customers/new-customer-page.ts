@@ -60,7 +60,9 @@ interface BannerAction {
           <p class="nc-sub">Crea el cliente con los mismos datos que tiene en el ERP.</p>
         </div>
         <div class="nc-head-actions">
-          <button type="button" class="nc-cancel" (click)="cancel()">Cancelar</button>
+          <button type="button" class="nc-cancel" [disabled]="saving()" (click)="cancel()">
+            Cancelar
+          </button>
           <button
             uiButton
             variant="primary"
@@ -147,23 +149,21 @@ interface BannerAction {
                 "
                 [error]="fieldErrors()['businessName'] || ''"
               />
-              <div class="nc-row nc-row-doc">
-                <ui-field
-                  label="Tipo de documento"
-                  type="select"
-                  [value]="documentTypeId()"
-                  (valueChange)="onDocTypeChange($event)"
-                  [options]="docTypeOptions()"
-                  [error]="fieldErrors()['documentTypeId'] || ''"
-                />
-                <ui-field
-                  label="Número de documento"
-                  [value]="documentNumber()"
-                  (valueChange)="onDocNumberChange($event)"
-                  [hint]="docNumberFieldError() ? '' : docNumberHint()"
-                  [error]="docNumberFieldError()"
-                />
-              </div>
+              <ui-field
+                label="Tipo de documento"
+                type="select"
+                [value]="documentTypeId()"
+                (valueChange)="onDocTypeChange($event)"
+                [options]="docTypeOptions()"
+                [error]="fieldErrors()['documentTypeId'] || ''"
+              />
+              <ui-field
+                label="Número de documento"
+                [value]="documentNumber()"
+                (valueChange)="onDocNumberChange($event)"
+                [hint]="docNumberFieldError() ? '' : docNumberHint()"
+                [error]="docNumberFieldError()"
+              />
               <ui-field
                 label="Tipo de cliente"
                 type="select"
@@ -286,6 +286,10 @@ interface BannerAction {
       .nc-cancel:hover {
         color: var(--ink);
       }
+      .nc-cancel:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
       .nc-skeleton {
         height: 400px;
         background: var(--faint);
@@ -348,12 +352,6 @@ interface BannerAction {
       .nc-row > * {
         flex: 1;
         min-width: 0;
-      }
-      .nc-row-doc > :first-child {
-        flex: 0 0 40%;
-      }
-      .nc-row-doc > :last-child {
-        flex: 1 1 60%;
       }
       .nc-mono-field ::ng-deep .ui-input {
         font-family: monospace;
@@ -651,13 +649,14 @@ export class NewCustomerPage {
     this.customerSvc.create(this.buildCommand()).subscribe({
       next: (result) => {
         this.saving.set(false);
-        this.toast.success(`Cliente ${result.customer.code} creado`);
+        const lines = [`Cliente ${result.customer.code} creado correctamente`];
         if (result.approvedRequestId != null) {
-          this.toast.info(
-            `Se aprobó la solicitud de creación #${result.approvedRequestId} de ${result.approvedRequestRequestedByName}.`,
-          );
+          lines.push(`También se aprobó la solicitud de ${result.approvedRequestRequestedByName}`);
         }
-        this.router.navigate(['/clientes', result.customer.customerId]);
+        this.toast.success(lines.join('\n'));
+        // `replaceUrl` — doc 95, parte 2.3: al volver atrás desde la ficha se
+        // vuelve a la lista de Clientes, nunca al formulario ya enviado.
+        this.router.navigate(['/clientes', result.customer.customerId], { replaceUrl: true });
       },
       error: (err) => this.handleError(err),
     });
