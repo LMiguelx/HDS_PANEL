@@ -1,4 +1,6 @@
 import { Routes } from '@angular/router';
+import { permissionGuard } from '../../core/auth/permission-guard';
+import { PERMISSIONS } from '../../core/auth/permissions';
 
 export const SALES_REPORTS_ROUTES: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'resumen-dia' },
@@ -34,5 +36,13 @@ export const SALES_REPORTS_ROUTES: Routes = [
   {
     path: 'validacion-stock',
     loadComponent: () => import('./stock-validation-tab').then((m) => m.StockValidationTab),
+  },
+  {
+    path: 'sugerido-compra',
+    canActivate: [permissionGuard(PERMISSIONS.PREDICTION_PURCHASE)],
+    loadComponent: () =>
+      import('./pages/purchase-suggestion/purchase-suggestion.page').then(
+        (m) => m.PurchaseSuggestionPage,
+      ),
   },
 ];

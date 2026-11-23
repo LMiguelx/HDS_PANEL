@@ -41,6 +41,9 @@ export const PERMISSIONS = {
   GOODS_RECEIPT_STORE: 'goods_receipt.store',
   GOODS_RECEIPT_CONFIG: 'goods_receipt.config',
   ORDER_INTAKE_MANAGE: 'order.intake.manage',
+  // El código es exactamente 'prediction.purcharse' (así está en la base de
+  // datos) — doc 94, sección 1.1. No corregir el typo acá.
+  PREDICTION_PURCHASE: 'prediction.purcharse',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

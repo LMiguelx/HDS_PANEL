@@ -28,13 +28,23 @@ import {
 } from '../../../../shared/utils/export/export.models';
 import { exportFileName } from '../../../../shared/utils/export/export-file-name';
 import { ToastService } from '../../../../core/ui/toast';
+import { HasPermissionDirective } from '../../../../shared/directives/has-permission';
 
 type SortDir = 1 | -1;
 
 /** Pantalla 2 de "Marcas por mes" — doc 93, sección 3.7. */
 @Component({
   selector: 'app-brand-monthly-detail-page',
-  imports: [RouterLink, UiField, UiToggle, UiCard, UiEmpty, UiExportMenu, UiLineChart],
+  imports: [
+    RouterLink,
+    UiField,
+    UiToggle,
+    UiCard,
+    UiEmpty,
+    UiExportMenu,
+    UiLineChart,
+    HasPermissionDirective,
+  ],
   template: `
     <section class="bmd-page">
       @if (loading()) {
@@ -62,6 +72,13 @@ type SortDir = 1 | -1;
           <h1>{{ d.brandName }}</h1>
           <div class="bmd-head-right">
             <ui-field label="Año" type="select" [(value)]="yearStr" [options]="yearOptions()" />
+            <a
+              class="bmd-suggest-link"
+              routerLink="/reportes-ventas/sugerido-compra"
+              [queryParams]="{ brandId: d.brandId }"
+              *hasPermission="['prediction.purcharse']"
+              >Ver sugerido de compra</a
+            >
             <ui-export-menu
               [disabled]="!canExport()"
               [busy]="exporting()"
@@ -214,6 +231,22 @@ type SortDir = 1 | -1;
       }
       .bmd-head-right ui-field {
         width: 110px;
+      }
+      .bmd-suggest-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--touch-min);
+        padding: 0 14px;
+        border: 1px solid var(--divider);
+        border-radius: var(--radius-control, 0);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ink);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .bmd-suggest-link:hover {
+        background: var(--faint);
       }
       h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
