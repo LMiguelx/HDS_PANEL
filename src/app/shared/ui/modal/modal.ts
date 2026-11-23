@@ -121,7 +121,7 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
         display: none;
       }
 
-      @media (max-width: 599px) {
+      @media (max-width: 767px) {
         .ui-modal {
           max-width: 100%;
         }

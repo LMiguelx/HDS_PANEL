@@ -2,6 +2,8 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { format } from 'date-fns';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiField } from '../../../shared/ui/field/field';
+import { UiModal } from '../../../shared/ui/modal/modal';
+import { UiOptionCard } from '../../../shared/ui/option-card/option-card';
 import { UI_DIALOG_DATA, UiDialogRef } from '../../../shared/ui/dialog/dialog';
 import { durationText as durationLabel } from '../../assignments/assignment-format';
 import { OrderIntakeAdminService } from '../../../core/order-intake/order-intake-admin';
@@ -10,7 +12,9 @@ import { ClosureView } from '../../../shared/models/order-intake.models';
 export type ScheduleClosureDialogData =
   { mode: 'schedule' } | { mode: 'change-end'; closure: ClosureView };
 
-const MAX_DURATION_MS = 72 * 60 * 60_000;
+const MAX_REASON_LENGTH = 200;
+
+type DurationState = 'incomplete' | 'invalid' | 'valid';
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
@@ -31,185 +35,239 @@ function combine(date: string, time: string): Date | null {
  * Programar cierre / Cambiar fin — doc 65, sección 2.10. Un solo componente
  * para los dos diálogos: comparten el campo Fin, los atajos y el cálculo de
  * duración; "Programar cierre" agrega Inicio (Ahora/Programar) y Motivo.
+ * El error de validación solo aparece al salir de un campo o al enviar,
+ * nunca al abrir — mientras el fin está vacío se ve una pista neutra.
  */
 @Component({
   selector: 'app-schedule-closure-dialog',
-  imports: [UiButton, UiField],
+  imports: [UiButton, UiField, UiModal, UiOptionCard],
   template: `
-    <div class="scd">
-      <h2 class="scd-title">
-        {{ isSchedule ? 'Programar cierre de la toma de pedidos' : 'Cambiar fin del cierre' }}
-      </h2>
+    <ui-modal
+      [title]="isSchedule ? 'Programar cierre' : 'Cambiar fin del cierre'"
+      subtitle="Toma de pedidos"
+      (close)="ref.close(false)"
+    >
+      <div class="scd">
+        @if (isSchedule) {
+          <div class="scd-section">
+            <span class="scd-section-label">Inicio</span>
+            <div class="scd-option-row">
+              <ui-option-card [selected]="startMode() === 'now'" (pick)="startMode.set('now')">
+                <strong>Ahora</strong>
+                <div class="scd-option-sub">Empieza al confirmar.</div>
+              </ui-option-card>
+              <ui-option-card
+                [selected]="startMode() === 'scheduled'"
+                (pick)="startMode.set('scheduled')"
+              >
+                <strong>Programar</strong>
+                <div class="scd-option-sub">Elige fecha y hora de inicio.</div>
+              </ui-option-card>
+            </div>
+            @if (startMode() === 'scheduled') {
+              <div class="scd-row">
+                <ui-field label="Fecha" type="date" [(value)]="startDate" (blur)="markTouched()" />
+                <ui-field label="Hora" type="time" [(value)]="startTime" (blur)="markTouched()" />
+              </div>
+            }
+          </div>
+        }
 
-      @if (isSchedule) {
-        <div class="scd-start-row">
-          <span class="scd-start-label">Inicio</span>
-          <label class="scd-radio">
-            <input
-              type="radio"
-              name="startMode"
-              [checked]="startMode() === 'now'"
-              (change)="startMode.set('now')"
-            />
-            Ahora
-          </label>
-          <label class="scd-radio">
-            <input
-              type="radio"
-              name="startMode"
-              [checked]="startMode() === 'scheduled'"
-              (change)="startMode.set('scheduled')"
-            />
-            Programar
-          </label>
-          @if (startMode() === 'scheduled') {
-            <ui-field label="Fecha" type="date" [(value)]="startDate" />
-            <ui-field label="Hora" type="time" [(value)]="startTime" />
+        <div class="scd-section">
+          <span class="scd-section-label">Fin</span>
+          <div class="scd-row">
+            <ui-field label="Fecha" type="date" [(value)]="endDate" (blur)="markTouched()" />
+            <ui-field label="Hora" type="time" [(value)]="endTime" (blur)="markTouched()" />
+          </div>
+          <div class="scd-shortcuts">
+            <button type="button" class="scd-shortcut" (click)="shortcutTomorrow6am()">
+              Mañana 06:00
+            </button>
+            <button type="button" class="scd-shortcut" (click)="shortcutPlusHours(2)">+2 h</button>
+            <button type="button" class="scd-shortcut" (click)="shortcutPlusHours(4)">+4 h</button>
+          </div>
+        </div>
+
+        @switch (durationState()) {
+          @case ('incomplete') {
+            <p class="scd-hint">Elige cuándo termina el cierre para continuar.</p>
           }
-        </div>
-      }
+          @case ('invalid') {
+            @if (touched()) {
+              <p class="scd-error-text">{{ invalidReasonText() }}</p>
+            }
+          }
+          @case ('valid') {
+            <div class="scd-summary">
+              <div class="scd-summary-item">
+                <span class="scd-summary-label">Inicia</span>
+                <span>{{ startLabel() }}</span>
+              </div>
+              <div class="scd-summary-item">
+                <span class="scd-summary-label">Termina</span>
+                <span>{{ endLabel() }}</span>
+              </div>
+              <div class="scd-summary-item">
+                <span class="scd-summary-label">Duración</span>
+                <span>{{ durationLabelText() }}</span>
+              </div>
+            </div>
+          }
+        }
 
-      <div class="scd-end-row">
-        <ui-field label="Fin *" type="date" [(value)]="endDate" />
-        <ui-field label="Hora" type="time" [(value)]="endTime" />
-        <div class="scd-shortcuts">
-          <button type="button" class="scd-shortcut" (click)="shortcutTomorrow6am()">
-            Mañana 06:00
-          </button>
-          <button type="button" class="scd-shortcut" (click)="shortcutPlusHours(2)">+2 h</button>
-          <button type="button" class="scd-shortcut" (click)="shortcutPlusHours(4)">+4 h</button>
-        </div>
+        @if (isSchedule) {
+          <ui-field
+            label="Motivo (opcional)"
+            type="textarea"
+            [rows]="2"
+            [value]="reason()"
+            (valueChange)="onReasonChange($event)"
+            [hint]="reason().length + ' / ' + maxReasonLength"
+          />
+          <p class="scd-info">
+            <span class="material-icons" aria-hidden="true">info</span>
+            Vendedores y televentas no podrán crear, editar ni anular pedidos hasta el fin.
+            Supervisión sigue operando. La toma de pedidos se reabre sola a la hora de fin.
+          </p>
+        }
+
+        @if (errorMsg()) {
+          <p class="scd-api-error">{{ errorMsg() }}</p>
+        }
       </div>
 
-      <p class="scd-duration" [class.scd-duration-danger]="!durationValid()">
-        {{ durationText() }}
-      </p>
-
-      @if (isSchedule) {
-        <ui-field label="Motivo (opcional)" [(value)]="reason" hint="Máximo 200 caracteres." />
-        <p class="scd-info">
-          <span class="material-icons" aria-hidden="true">info</span>
-          Vendedores y televentas no podrán crear, editar ni anular pedidos hasta el fin.
-          Supervisión sigue operando. La toma de pedidos se reabre sola a la hora de fin.
-        </p>
-      }
-
-      @if (errorMsg()) {
-        <p class="scd-error">{{ errorMsg() }}</p>
-      }
-
-      <div class="scd-actions">
+      <ng-container modalFooter>
         <button uiButton variant="secondary" (click)="ref.close(false)">Cancelar</button>
         <button
           uiButton
           variant="primary"
-          [disabled]="!durationValid()"
+          [disabled]="durationState() !== 'valid'"
+          [title]="durationState() !== 'valid' ? 'Elige cuándo termina el cierre' : ''"
           [loading]="saving()"
           (click)="submit()"
         >
           {{ isSchedule ? 'Programar cierre' : 'Guardar' }}
         </button>
-      </div>
-    </div>
+      </ng-container>
+    </ui-modal>
   `,
-  host: {
-    style:
-      'display:block; background:var(--bg); border:2px solid var(--divider); box-shadow:var(--elev-dialog); padding:24px;',
-  },
   styles: [
     `
       .scd {
         display: grid;
-        gap: 16px;
-        width: 100%;
+        gap: var(--sp-4);
       }
-      .scd-title {
-        font-size: 20px;
-        margin: 0;
-        color: var(--ink);
+      .scd-section {
+        display: grid;
+        gap: var(--sp-2);
       }
-      .scd-start-row {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        flex-wrap: wrap;
+      .scd-section-label {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        font-weight: 800;
       }
-      .scd-start-label {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ink);
+      .scd-option-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--sp-3);
       }
-      .scd-radio {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 14px;
-        color: var(--ink);
-        cursor: pointer;
+      .scd-option-sub {
+        font-size: var(--fs-meta);
+        color: var(--ink-muted);
+        font-weight: 400;
       }
-      .scd-end-row {
+      .scd-row {
         display: flex;
         align-items: flex-end;
-        gap: 12px;
+        gap: var(--sp-3);
         flex-wrap: wrap;
       }
-      .scd-end-row ui-field {
+      .scd-row ui-field {
+        flex: 1;
         min-width: 140px;
       }
       .scd-shortcuts {
         display: flex;
-        gap: 6px;
+        gap: var(--sp-2);
         flex-wrap: wrap;
       }
       .scd-shortcut {
         appearance: none;
+        min-height: var(--touch-min);
         border: 1px solid var(--divider);
         background: transparent;
         color: var(--ink);
         font-family: var(--font-sans);
-        font-size: 12px;
+        font-size: var(--fs-dense);
         font-weight: 700;
-        padding: 6px 10px;
-        border-radius: var(--radius-control);
+        padding: 0 var(--sp-3);
+        border-radius: var(--radius-control, 0);
         cursor: pointer;
         white-space: nowrap;
       }
       .scd-shortcut:hover {
         border-color: var(--accent);
       }
-      .scd-duration {
+      .scd-hint {
         margin: 0;
-        font-size: 13px;
+        font-size: var(--fs-dense);
+        color: var(--ink-muted);
+      }
+      .scd-error-text {
+        margin: 0;
+        font-size: var(--fs-dense);
         font-weight: 700;
+        color: var(--status-danger);
+      }
+      .scd-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: var(--sp-3);
+        padding: var(--sp-3) var(--sp-4);
+        background: var(--surface-sunk);
+        border-radius: var(--radius-control, 0);
+      }
+      .scd-summary-item {
+        display: grid;
+        gap: 2px;
+        font-size: var(--fs-dense);
         color: var(--ink);
       }
-      .scd-duration-danger {
-        color: var(--status-danger);
+      .scd-summary-label {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        font-weight: 800;
       }
       .scd-info {
         display: flex;
         align-items: flex-start;
-        gap: 8px;
+        gap: var(--sp-2);
         margin: 0;
-        padding: 10px 14px;
-        background: var(--faint);
-        border: 1px solid var(--hairline);
-        font-size: 12px;
+        padding: var(--sp-3) var(--sp-4);
+        border-left: 3px solid var(--ink-muted);
+        background: color-mix(in srgb, var(--ink-muted) 10%, transparent);
+        border-radius: var(--radius-control, 0);
+        font-size: var(--fs-dense);
         color: var(--ink-muted);
       }
       .scd-info .material-icons {
         font-size: 16px;
         flex: none;
       }
-      .scd-error {
+      .scd-api-error {
         margin: 0;
         color: var(--status-danger);
-        font-size: 13px;
+        font-size: var(--fs-dense);
       }
-      .scd-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
+
+      @media (max-width: 767px) {
+        .scd-option-row {
+          grid-template-columns: 1fr;
+        }
       }
     `,
   ],
@@ -221,6 +279,7 @@ export class ScheduleClosureDialog {
 
   protected isSchedule = this.data.mode === 'schedule';
   private closure = this.data.mode === 'change-end' ? this.data.closure : null;
+  protected maxReasonLength = MAX_REASON_LENGTH;
 
   protected startMode = signal<'now' | 'scheduled'>('now');
   protected startDate = signal(isoDateStr(new Date()));
@@ -232,6 +291,9 @@ export class ScheduleClosureDialog {
 
   protected saving = signal(false);
   protected errorMsg = signal('');
+
+  /** Solo se muestra el error de validación después de salir de un campo o intentar enviar. */
+  protected touched = signal(!!this.closure);
 
   private effectiveStart = computed<Date | null>(() => {
     if (this.closure) return new Date(this.closure.startsAt);
@@ -248,26 +310,36 @@ export class ScheduleClosureDialog {
     return end.getTime() - start.getTime();
   });
 
-  protected durationValid = computed(() => {
+  protected durationState = computed<DurationState>(() => {
     const ms = this.durationMs();
-    return ms != null && ms > 0 && ms <= MAX_DURATION_MS;
+    if (ms == null) return 'incomplete';
+    if (ms <= 0) return 'invalid';
+    return 'valid';
   });
 
-  protected durationText = computed(() => {
-    const ms = this.durationMs();
-    if (ms == null) return this.closure ? '' : 'Elige el fin del cierre.';
-    if (ms <= 0) return 'El fin debe ser posterior al inicio.';
-    if (ms > MAX_DURATION_MS) return 'Un cierre dura como máximo 72 horas.';
-    const mins = Math.round(ms / 60_000);
-    if (this.closure) {
-      return `El cierre quedará de ${this.startTimeLabel()} a ${format(this.effectiveEnd()!, 'dd/MM HH:mm')} (${durationLabel(mins)})`;
-    }
-    return `Durará ${durationLabel(mins)}`;
-  });
+  protected invalidReasonText = computed(() =>
+    this.durationState() === 'invalid' ? 'El fin debe ser posterior al inicio.' : '',
+  );
 
-  private startTimeLabel(): string {
+  protected startLabel = computed(() => {
     const s = this.effectiveStart();
     return s ? format(s, 'dd/MM HH:mm') : '';
+  });
+  protected endLabel = computed(() => {
+    const e = this.effectiveEnd();
+    return e ? format(e, 'dd/MM HH:mm') : '';
+  });
+  protected durationLabelText = computed(() => {
+    const ms = this.durationMs();
+    return ms != null ? durationLabel(Math.round(ms / 60_000)) : '';
+  });
+
+  protected markTouched() {
+    this.touched.set(true);
+  }
+
+  protected onReasonChange(v: string) {
+    this.reason.set(v.slice(0, MAX_REASON_LENGTH));
   }
 
   protected shortcutPlusHours(hours: number) {
@@ -275,6 +347,7 @@ export class ScheduleClosureDialog {
     const d = new Date(start.getTime() + hours * 3600_000);
     this.endDate.set(isoDateStr(d));
     this.endTime.set(isoTimeStr(d));
+    this.markTouched();
   }
 
   protected shortcutTomorrow6am() {
@@ -282,10 +355,12 @@ export class ScheduleClosureDialog {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1, 6, 0, 0);
     this.endDate.set(isoDateStr(d));
     this.endTime.set(isoTimeStr(d));
+    this.markTouched();
   }
 
   protected submit() {
-    if (!this.durationValid()) return;
+    this.markTouched();
+    if (this.durationState() !== 'valid') return;
     const end = this.effectiveEnd();
     if (!end) return;
     const endsAt = `${isoDateStr(end)}T${isoTimeStr(end)}:00`;

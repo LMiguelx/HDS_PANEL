@@ -3,20 +3,24 @@ import { UiButton } from '../../shared/ui/button/button';
 import { UiField } from '../../shared/ui/field/field';
 import { UiCard } from '../../shared/ui/card/card';
 import { UiEmpty } from '../../shared/ui/empty/empty';
+import { UiStatus } from '../../shared/ui/status/status';
 import { UiDialogService } from '../../shared/ui/dialog/dialog';
 import { HasPermissionDirective } from '../../shared/directives/has-permission';
 import { MaintenanceService } from '../../core/maintenance/maintenance.service';
 import { PERMISSIONS } from '../../core/auth/permissions';
 import { CompanyModuleTabs } from './ui/module-tabs';
 import { OrderIntakeCard } from './ui/order-intake-card';
+import { ClosureHistoryCard } from './ui/closure-history-card';
 import { AssignmentCycleCard } from './ui/assignment-cycle-card';
 import { dateTimeText } from '../assignments/assignment-format';
 
 /**
  * Empresa → Sistema — doc 38 (Modo mantenimiento) y doc 65, secciones 2 y 3
- * (Toma de pedidos, Ciclo de asignaciones). Cada tarjeta se muestra solo con
- * su propio permiso (sección 6 del doc 65); la pestaña misma aparece si el
- * usuario tiene al menos uno de los tres (ver `CompanyModuleTabs`).
+ * (Toma de pedidos, Historial de cierres, Ciclo de asignaciones). Cada
+ * tarjeta se muestra solo con su propio permiso (sección 6 del doc 65); la
+ * pestaña misma aparece si el usuario tiene al menos uno de los tres (ver
+ * `CompanyModuleTabs`). "Programar cierre" (dentro de Toma de pedidos) es el
+ * único botón primario de la pantalla.
  */
 @Component({
   selector: 'app-system-tab',
@@ -25,18 +29,25 @@ import { dateTimeText } from '../assignments/assignment-format';
     UiField,
     UiCard,
     UiEmpty,
+    UiStatus,
     HasPermissionDirective,
     CompanyModuleTabs,
     OrderIntakeCard,
+    ClosureHistoryCard,
     AssignmentCycleCard,
   ],
   template: `
     <app-company-module-tabs />
     <section class="sys-page">
-      <h1>Sistema</h1>
+      <div class="sys-head">
+        <span class="sys-eyebrow">Administración · Empresa</span>
+        <h1>Sistema</h1>
+      </div>
 
       <div class="sys-grid">
         <app-order-intake-card *hasPermission="PERMISSIONS.ORDER_INTAKE_MANAGE" />
+
+        <app-closure-history-card *hasPermission="PERMISSIONS.ORDER_INTAKE_MANAGE" />
 
         <app-assignment-cycle-card *hasPermission="PERMISSIONS.CONFIG_EDIT" />
 
@@ -55,17 +66,18 @@ import { dateTimeText } from '../assignments/assignment-format';
             class="sys-card"
             *hasPermission="'system.maintenance.manage'"
           >
-            <p class="sys-help">
-              Bloquea el acceso al sistema mientras se hace una intervención.
-              <strong>Afecta a todas las empresas del sistema.</strong> Quien tiene este permiso
-              sigue pudiendo entrar.
+            <p class="sys-alert-warn">
+              <span class="material-icons" aria-hidden="true">warning</span>
+              Bloquea el acceso al sistema mientras se hace una intervención. Afecta a todas las
+              empresas del sistema. Quien tiene este permiso sigue pudiendo entrar.
             </p>
 
+            <ui-status
+              [label]="s.enabled ? 'Activo' : 'Inactivo'"
+              [status]="s.enabled ? 'en ruta' : 'cerrado'"
+            />
+
             @if (s.enabled) {
-              <div class="sys-status sys-status-on">
-                <span class="sys-dot"></span>
-                Activo
-              </div>
               <p class="sys-meta">
                 Desde las {{ dateTimeText(s.enabledAt) }} · por {{ s.enabledBy }}
                 @if (s.reason) {
@@ -73,18 +85,14 @@ import { dateTimeText } from '../assignments/assignment-format';
                 }
               </p>
               <div class="sys-actions">
-                <button uiButton variant="primary" [loading]="saving()" (click)="turnOff()">
+                <button uiButton variant="secondary" [loading]="saving()" (click)="turnOff()">
                   Desactivar mantenimiento
                 </button>
               </div>
             } @else {
-              <div class="sys-status sys-status-off">
-                <span class="sys-dot"></span>
-                Inactivo
-              </div>
               <ui-field label="Motivo (opcional)" [(value)]="reason" />
               <div class="sys-actions">
-                <button uiButton variant="primary" [loading]="saving()" (click)="turnOn()">
+                <button uiButton variant="secondary" [loading]="saving()" (click)="turnOn()">
                   Activar mantenimiento
                 </button>
               </div>
@@ -107,9 +115,22 @@ import { dateTimeText } from '../assignments/assignment-format';
         box-sizing: border-box;
         padding: var(--sp-8);
       }
-      h1 {
+      .sys-head {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-bottom: var(--sp-5);
+      }
+      .sys-eyebrow {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        font-weight: 800;
+      }
+      .sys-head h1 {
         font: var(--fw-display) var(--fs-display) / var(--lh-display) var(--font-sans);
-        margin: 0 0 var(--sp-5);
+        margin: 0;
         color: var(--ink);
       }
       .sys-skeleton {
@@ -122,7 +143,8 @@ import { dateTimeText } from '../assignments/assignment-format';
         gap: var(--sp-5);
         align-items: start;
       }
-      .sys-grid > app-order-intake-card {
+      .sys-grid > app-order-intake-card,
+      .sys-grid > app-closure-history-card {
         grid-column: 1 / -1;
       }
       @media (max-width: 900px) {
@@ -131,41 +153,26 @@ import { dateTimeText } from '../assignments/assignment-format';
         }
       }
       .sys-card {
-        max-width: var(--card-w-sm);
         display: flex;
         flex-direction: column;
         gap: var(--sp-5);
       }
-      .sys-help {
-        margin: 0;
-        font-size: var(--fs-dense);
-        color: var(--ink-muted);
-      }
-      .sys-status {
+      .sys-alert-warn {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: var(--sp-2);
-        font-weight: 700;
-      }
-      .sys-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-      }
-      .sys-status-off {
-        color: var(--ink-muted);
-      }
-      .sys-status-off .sys-dot {
-        background: var(--ink-muted);
-      }
-      .sys-status-on {
-        color: var(--status-warn);
+        margin: 0;
+        padding: var(--sp-3) var(--sp-4);
+        border-left: 3px solid var(--status-warn);
         background: color-mix(in srgb, var(--status-warn) 10%, transparent);
-        padding: var(--sp-2) var(--sp-3);
-        border-radius: var(--radius-control);
+        border-radius: var(--radius-control, 0);
+        font-size: var(--fs-dense);
+        color: var(--ink);
       }
-      .sys-status-on .sys-dot {
-        background: var(--status-warn);
+      .sys-alert-warn .material-icons {
+        font-size: 18px;
+        color: var(--status-warn);
+        flex: none;
       }
       .sys-meta {
         margin: 0;
@@ -212,10 +219,10 @@ export class SystemTabPage {
   protected turnOn() {
     this.dialog
       .confirm({
-        title: 'Activar mantenimiento',
-        message:
-          'Nadie sin este permiso podrá usar el sistema, en ninguna empresa, hasta que lo desactives. ¿Activar el modo mantenimiento?',
+        title: '¿Activar el modo mantenimiento?',
+        message: `Afecta a todas las empresas del sistema. Motivo: ${this.reason().trim() || '—'}`,
         confirmLabel: 'Activar mantenimiento',
+        destructive: true,
       })
       .subscribe((confirmed) => {
         if (!confirmed) return;

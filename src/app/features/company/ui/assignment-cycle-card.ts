@@ -1,7 +1,8 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { UiButton } from '../../../shared/ui/button/button';
 import { UiCard } from '../../../shared/ui/card/card';
 import { UiEmpty } from '../../../shared/ui/empty/empty';
+import { UiStepper, UiStep } from '../../../shared/ui/stepper/stepper';
 import { UiDialogService } from '../../../shared/ui/dialog/dialog';
 import { ToastService } from '../../../core/ui/toast';
 import { CompanyAdminService } from '../company-admin';
@@ -12,7 +13,7 @@ import { CycleAnchorDialog } from './cycle-anchor-dialog';
 /** Tarjeta "Ciclo de asignaciones" — doc 65, sección 3.3. `config.edit`. */
 @Component({
   selector: 'app-assignment-cycle-card',
-  imports: [UiButton, UiCard, UiEmpty],
+  imports: [UiButton, UiCard, UiEmpty, UiStepper],
   template: `
     <ui-card title="Ciclo de asignaciones" class="sys-card">
       <p class="sys-help">Las visitas se programan en un ciclo de 4 semanas.</p>
@@ -34,19 +35,22 @@ import { CycleAnchorDialog } from './cycle-anchor-dialog';
           >
         </div>
 
-        <div class="acc-strip">
-          @for (w of [1, 2, 3, 4]; track w) {
-            <span class="acc-segment" [class.acc-segment-on]="w === i.currentWeekOfCycle">{{
-              w
-            }}</span>
-          }
-          <span class="acc-cycle-range"
-            >Ciclo actual: {{ dateText(i.cycleStartDate) }} – {{ dateText(i.cycleEndDate) }}</span
-          >
+        <ui-stepper [steps]="steps()" />
+
+        <div class="acc-kv">
+          <div class="acc-kv-item">
+            <span class="acc-kv-label">Ciclo actual</span>
+            <span class="acc-kv-value"
+              >{{ dateText(i.cycleStartDate) }} – {{ dateText(i.cycleEndDate) }}</span
+            >
+          </div>
+          <div class="acc-kv-item">
+            <span class="acc-kv-label">Fecha ancla</span>
+            <span class="acc-kv-value">{{ dateText(i.anchorDate) }}</span>
+          </div>
         </div>
 
         <div class="acc-anchor-row">
-          <span class="sys-meta">Fecha ancla: {{ dateText(i.anchorDate) }}</span>
           <button uiButton variant="secondary" size="sm" (click)="openChangeAnchor()">
             Cambiar fecha ancla
           </button>
@@ -70,39 +74,30 @@ import { CycleAnchorDialog } from './cycle-anchor-dialog';
         font-size: var(--fs-dense);
         color: var(--ink-muted);
       }
-      .acc-strip {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        flex-wrap: wrap;
+      .acc-kv {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: var(--sp-4) var(--sp-5);
       }
-      .acc-segment {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border: 1px solid var(--divider);
+      .acc-kv-item {
+        display: grid;
+        gap: 2px;
+      }
+      .acc-kv-label {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
+        text-transform: uppercase;
         color: var(--ink-muted);
-        font-weight: 700;
-        font-size: 13px;
-        border-radius: var(--radius-control);
+        font-weight: 800;
       }
-      .acc-segment-on {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: var(--bg);
-      }
-      .acc-cycle-range {
-        margin-left: 10px;
-        font-size: var(--fs-dense);
-        color: var(--ink-muted);
+      .acc-kv-value {
+        font-size: var(--fs-body);
+        color: var(--ink);
+        font-variant-numeric: var(--tnum);
       }
       .acc-anchor-row {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
+        justify-content: flex-start;
         padding-top: var(--sp-2);
         border-top: 1px solid var(--hairline);
       }
@@ -123,6 +118,14 @@ export class AssignmentCycleCard {
   constructor() {
     this.load();
   }
+
+  protected steps = computed<UiStep[]>(() => {
+    const current = this.info()?.currentWeekOfCycle ?? 1;
+    return [1, 2, 3, 4].map((week) => ({
+      label: `Semana ${week}`,
+      state: week < current ? 'complete' : week === current ? 'current' : 'upcoming',
+    }));
+  });
 
   load() {
     this.loading.set(true);

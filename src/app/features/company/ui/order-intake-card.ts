@@ -1,36 +1,29 @@
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { UiButton } from '../../../shared/ui/button/button';
-import { UiField } from '../../../shared/ui/field/field';
 import { UiCard } from '../../../shared/ui/card/card';
 import { UiEmpty } from '../../../shared/ui/empty/empty';
-import { UiMenu } from '../../../shared/ui/menu/menu';
+import { UiStatus } from '../../../shared/ui/status/status';
 import { UiDialogService } from '../../../shared/ui/dialog/dialog';
 import { ToastService } from '../../../core/ui/toast';
 import { IntakeStatusService } from '../../../core/order-intake/intake-status.service';
 import { OrderIntakeAdminService } from '../../../core/order-intake/order-intake-admin';
 import { ClosureView } from '../../../shared/models/order-intake.models';
 import { dateTimeText, durationText } from '../../assignments/assignment-format';
-import { closureStatusTone, lastChangeText, shortDateTimeText } from './order-intake-format';
 import { ScheduleClosureDialog, ScheduleClosureDialogData } from './schedule-closure-dialog';
-
-function todayMinus(days: number): string {
-  const d = new Date(Date.now() - days * 86_400_000);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 /**
  * Tarjeta "Toma de pedidos" — doc 65, sección 2.9. `order.intake.manage`.
- * Programar/cambiar/reabrir/anular cierres y el historial, con el estado
- * compartido `IntakeStatusService` (lo usa también la barra superior).
+ * Programar/cambiar/reabrir/anular el cierre en curso y el próximo
+ * programado. El historial vive en su propia tarjeta (`ClosureHistoryCard`).
  */
 @Component({
   selector: 'app-order-intake-card',
-  imports: [UiButton, UiField, UiCard, UiEmpty, UiMenu],
+  imports: [UiButton, UiCard, UiEmpty, UiStatus],
   template: `
     <ui-card title="Toma de pedidos" class="sys-card oi-card">
       <p class="sys-help">
         Cierra la toma de pedidos entre dos horas. Vendedores y televentas no podrán crear, editar
-        ni anular pedidos. Supervisión sigue operando. Se reabre sola a la hora de fin.
+        ni anular pedidos; Supervisión sigue operando.
       </p>
 
       @if (intake.loading() && !intake.status()) {
@@ -43,121 +36,61 @@ function todayMinus(days: number): string {
           (action)="intake.refresh()"
         />
       } @else if (intake.status(); as s) {
-        @if (s.current; as c) {
-          <div class="sys-status sys-status-on">
-            <span class="sys-dot"></span>
-            En curso — cerrada hasta {{ dateTimeText(c.endsAt) }} ({{ countdownText() }})
-          </div>
-          <p class="sys-meta">
-            Desde {{ dateTimeText(c.startsAt) }} · por {{ c.createdByName }}
-            @if (c.reason) {
-              · "{{ c.reason }}"
+        <div class="oi-top-row">
+          <div class="oi-status-block">
+            @if (s.current; as c) {
+              <ui-status
+                [label]="'Cerrada hasta ' + dateTimeText(c.endsAt) + ' (' + countdownText() + ')'"
+                status="en ruta"
+              />
+              <p class="sys-meta">
+                Desde {{ dateTimeText(c.startsAt) }} · por {{ c.createdByName }}
+                @if (c.reason) {
+                  · "{{ c.reason }}"
+                }
+              </p>
+              <div class="sys-actions">
+                <button uiButton variant="secondary" size="sm" (click)="openChangeEnd(c)">
+                  Cambiar fin
+                </button>
+                <button uiButton variant="secondary" size="sm" (click)="reopenNow(c)">
+                  Reabrir ahora
+                </button>
+              </div>
+            } @else {
+              <ui-status label="Abierta" status="entregado" />
+              <p class="sys-meta">Vendedores y televentas pueden tomar pedidos.</p>
             }
-          </p>
-          <div class="sys-actions">
-            <button uiButton variant="secondary" size="sm" (click)="openChangeEnd(c)">
-              Cambiar fin
-            </button>
-            <button uiButton variant="secondary" size="sm" (click)="reopenNow(c)">
-              Reabrir ahora
-            </button>
           </div>
-        } @else {
-          <div class="sys-status sys-status-off">
-            <span class="sys-dot"></span>
-            Abierta
-          </div>
-          @if (!s.next) {
-            <p class="sys-note">No hay cierres programados</p>
-          }
-        }
 
-        @if (s.next; as n) {
-          <div class="oi-next-row">
-            <span
-              >Próximo: {{ dateTimeText(n.startsAt) }} → {{ dateTimeText(n.endsAt) }} ({{
-                n.statusName
-              }})</span
-            >
-            <div class="sys-actions">
-              <button uiButton variant="ghost" size="sm" (click)="openChangeEnd(n)">
-                Cambiar fin
-              </button>
-              <button uiButton variant="ghost" size="sm" (click)="cancelClosure(n)">Anular</button>
-            </div>
-          </div>
-        }
-
-        <div class="sys-actions oi-schedule-row">
-          <button uiButton variant="primary" size="sm" (click)="openSchedule()">
-            + Programar cierre
-          </button>
+          <button uiButton variant="primary" (click)="openSchedule()">Programar cierre</button>
         </div>
-      }
 
-      <hr class="oi-rule" />
-
-      <div class="oi-history-head">
-        <span class="oi-history-title">Historial</span>
-        <ui-field label="Desde" type="date" [(value)]="historyFrom" (valueChange)="loadHistory()" />
-      </div>
-
-      @if (historyLoading()) {
-        <div class="sys-skeleton" role="status" aria-label="Cargando"></div>
-      } @else if (historyError()) {
-        <ui-empty
-          variant="error"
-          title="No pudimos cargar el historial"
-          actionLabel="Reintentar"
-          (action)="loadHistory()"
-        />
-      } @else if (history().length === 0) {
-        <ui-empty title="No hay cierres en este periodo" />
-      } @else {
-        <table class="ui-table-grid oi-history-table">
-          <thead>
-            <tr>
-              <th>Inicio</th>
-              <th>Fin</th>
-              <th>Estado</th>
-              <th>Motivo</th>
-              <th>Creó</th>
-              <th>Último cambio</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (c of history(); track c.closureId) {
-              <tr>
-                <td>{{ shortDateTimeText(c.startsAt) }}</td>
-                <td>{{ shortDateTimeText(c.endsAt) }}</td>
-                <td>
-                  <span
-                    class="oi-status-badge"
-                    [style.color]="'var(' + closureStatusTone(c.statusCode) + ')'"
-                  >
-                    ● {{ c.statusName }}
-                  </span>
-                </td>
-                <td class="oi-reason-cell" [title]="c.reason || ''">{{ c.reason || '—' }}</td>
-                <td class="oi-muted">{{ c.createdByName }}</td>
-                <td class="oi-muted">{{ lastChangeText(c) }}</td>
-                <td class="oi-menu-cell">
-                  @if (c.changeable) {
-                    <ui-menu label="Acciones">
-                      <button type="button" (click)="openChangeEnd(c)">Cambiar fin</button>
-                      @if (c.statusCode === 'ACTIVE') {
-                        <button type="button" (click)="reopenNow(c)">Reabrir ahora</button>
-                      } @else {
-                        <button type="button" (click)="cancelClosure(c)">Anular</button>
-                      }
-                    </ui-menu>
-                  }
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+        <div class="oi-scheduled">
+          <span class="oi-scheduled-label">Cierres programados</span>
+          @if (s.next; as n) {
+            <div class="oi-next-row">
+              <span
+                >{{ dateTimeText(n.startsAt) }} → {{ dateTimeText(n.endsAt) }} ({{
+                  n.statusName
+                }})</span
+              >
+              <div class="sys-actions">
+                <button uiButton variant="ghost" size="sm" (click)="openChangeEnd(n)">
+                  Cambiar fin
+                </button>
+                <button uiButton variant="ghost" size="sm" (click)="cancelClosure(n)">
+                  Anular
+                </button>
+              </div>
+            </div>
+          } @else {
+            <div class="oi-empty-compact">
+              <span class="material-icons" aria-hidden="true">event_busy</span>
+              No hay cierres programados.
+            </div>
+          }
+        </div>
       }
     </ui-card>
   `,
@@ -166,72 +99,62 @@ function todayMinus(days: number): string {
       .oi-card {
         max-width: none;
       }
-      .oi-next-row {
+      .oi-top-row {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 12px;
+        gap: var(--sp-4);
         flex-wrap: wrap;
-        font-size: var(--fs-dense);
-        color: var(--ink);
-        padding: var(--sp-2) 0;
       }
-      .oi-schedule-row {
-        justify-content: flex-end;
+      .oi-status-block {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
       }
-      .oi-rule {
-        border: 0;
+      .oi-scheduled {
+        display: grid;
+        gap: var(--sp-2);
+        padding-top: var(--sp-3);
         border-top: 1px solid var(--hairline);
-        margin: var(--sp-2) 0;
       }
-      .oi-history-head {
-        display: flex;
-        align-items: flex-end;
-        justify-content: flex-start;
-        gap: 16px;
-        /* La tarjeta ocupa todo el ancho de la grilla (es la única que lo
-           hace); sin este tope el filtro "Desde" quedaba empujado al borde
-           derecho, lejísimos del título "Historial", con un hueco enorme
-           en medio — doc feedback. */
-        max-width: 420px;
-      }
-      .oi-history-title {
-        font-size: var(--fs-label, 11px);
-        letter-spacing: 0.04em;
+      .oi-scheduled-label {
+        font-size: var(--fs-label);
+        letter-spacing: var(--ls-label);
         text-transform: uppercase;
         color: var(--ink-muted);
         font-weight: 800;
       }
-      .oi-history-head ui-field {
-        width: 180px;
-      }
-      .oi-history-table {
-        width: 100%;
-        margin-top: var(--sp-2);
-      }
-      .oi-status-badge {
-        font-weight: 700;
+      .oi-next-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-3);
+        flex-wrap: wrap;
         font-size: var(--fs-dense);
-        white-space: nowrap;
+        color: var(--ink);
       }
-      .oi-reason-cell {
-        max-width: 200px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .oi-muted {
+      .oi-empty-compact {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        min-height: var(--touch-min);
+        padding: 0 var(--sp-3);
+        border: 1px dashed var(--divider);
+        border-radius: var(--radius-control, 0);
         color: var(--ink-muted);
         font-size: var(--fs-dense);
       }
-      .oi-menu-cell {
-        text-align: right;
+      .oi-empty-compact .material-icons {
+        font-size: 18px;
       }
 
       @media (max-width: 767px) {
-        .oi-history-table {
-          display: block;
-          overflow-x: auto;
+        .oi-top-row {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .oi-top-row button[uiButton] {
+          width: 100%;
         }
       }
     `,
@@ -244,14 +167,6 @@ export class OrderIntakeCard {
   private toast = inject(ToastService);
 
   protected dateTimeText = dateTimeText;
-  protected shortDateTimeText = shortDateTimeText;
-  protected closureStatusTone = closureStatusTone;
-  protected lastChangeText = lastChangeText;
-
-  protected history = signal<ClosureView[]>([]);
-  protected historyFrom = signal(todayMinus(7));
-  protected historyLoading = signal(true);
-  protected historyError = signal(false);
 
   private clockTick = signal(Date.now());
   private tickHandle = setInterval(() => this.clockTick.set(Date.now()), 30_000);
@@ -271,7 +186,6 @@ export class OrderIntakeCard {
     // shell (persiste entre pantallas); esta tarjeta solo pide un refresh al
     // entrar — doc 65, sección 2.8.
     this.intake.refresh();
-    this.loadHistory();
     // `offsetMs` se recalcula cada vez que llega un status nuevo, para la cuenta regresiva.
     effect(() => {
       const s = this.intake.status();
@@ -280,26 +194,11 @@ export class OrderIntakeCard {
     inject(DestroyRef).onDestroy(() => clearInterval(this.tickHandle));
   }
 
-  loadHistory() {
-    this.historyLoading.set(true);
-    this.historyError.set(false);
-    this.intakeSvc.closures(this.historyFrom() || undefined).subscribe({
-      next: (list) => {
-        this.history.set(list);
-        this.historyLoading.set(false);
-      },
-      error: () => {
-        this.historyLoading.set(false);
-        this.historyError.set(true);
-      },
-    });
-  }
-
   protected openSchedule() {
     this.dialog
       .open<ScheduleClosureDialog, ScheduleClosureDialogData, ClosureView | false>(
         ScheduleClosureDialog,
-        { data: { mode: 'schedule' }, width: '560px' },
+        { data: { mode: 'schedule' }, width: 'var(--card-w-sm)' },
       )
       .afterClosed()
       .subscribe((result) => {
@@ -308,7 +207,6 @@ export class OrderIntakeCard {
           result.statusCode === 'ACTIVE' ? 'Toma de pedidos cerrada.' : 'Cierre programado.',
         );
         this.intake.refresh();
-        this.loadHistory();
       });
   }
 
@@ -316,14 +214,13 @@ export class OrderIntakeCard {
     this.dialog
       .open<ScheduleClosureDialog, ScheduleClosureDialogData, ClosureView | false>(
         ScheduleClosureDialog,
-        { data: { mode: 'change-end', closure }, width: '560px' },
+        { data: { mode: 'change-end', closure }, width: 'var(--card-w-sm)' },
       )
       .afterClosed()
       .subscribe((result) => {
         if (!result) return;
         this.toast.success('Cierre actualizado.');
         this.intake.refresh();
-        this.loadHistory();
       });
   }
 
@@ -341,12 +238,10 @@ export class OrderIntakeCard {
           next: () => {
             this.toast.success('Toma de pedidos reabierta.');
             this.intake.refresh();
-            this.loadHistory();
           },
           error: (err) => {
             this.toast.error(err?.error?.detail ?? 'No pudimos reabrir la toma de pedidos.');
             this.intake.refresh();
-            this.loadHistory();
           },
         });
       });
@@ -355,8 +250,8 @@ export class OrderIntakeCard {
   protected cancelClosure(closure: ClosureView) {
     this.dialog
       .confirm({
-        title: `¿Anular el cierre del ${shortDateTimeText(closure.startsAt)} al ${shortDateTimeText(closure.endsAt)}?`,
-        message: '',
+        title: `¿Anular el cierre programado?`,
+        message: `Se anulará el cierre del ${dateTimeText(closure.startsAt)} al ${dateTimeText(closure.endsAt)}.`,
         confirmLabel: 'Anular cierre',
         destructive: true,
       })
@@ -366,11 +261,9 @@ export class OrderIntakeCard {
           next: () => {
             this.toast.success('Cierre anulado.');
             this.intake.refresh();
-            this.loadHistory();
           },
           error: (err) => {
             this.toast.error(err?.error?.detail ?? 'No pudimos anular el cierre.');
-            this.loadHistory();
           },
         });
       });
