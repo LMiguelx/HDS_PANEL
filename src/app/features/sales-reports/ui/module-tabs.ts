@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission';
+import { PERMISSIONS } from '../../../core/auth/permissions';
 
 /** Pestañas de Reportes de ventas, mismo patrón que los demás módulos. */
 @Component({
@@ -24,7 +25,7 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
       <a
         routerLink="/reportes-ventas/sugerido-compra"
         routerLinkActive="active"
-        *hasPermission="['prediction.purcharse']"
+        *hasPermission="[PERMISSIONS.PREDICTION_PURCHASE]"
         >Sugerido de compra</a
       >
       <a
@@ -76,4 +77,6 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
     `,
   ],
 })
-export class SalesReportModuleTabs {}
+export class SalesReportModuleTabs {
+  protected PERMISSIONS = PERMISSIONS;
+}

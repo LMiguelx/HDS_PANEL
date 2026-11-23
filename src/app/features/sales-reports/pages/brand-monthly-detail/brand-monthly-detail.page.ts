@@ -29,6 +29,7 @@ import {
 import { exportFileName } from '../../../../shared/utils/export/export-file-name';
 import { ToastService } from '../../../../core/ui/toast';
 import { HasPermissionDirective } from '../../../../shared/directives/has-permission';
+import { PERMISSIONS } from '../../../../core/auth/permissions';
 
 type SortDir = 1 | -1;
 
@@ -76,7 +77,7 @@ type SortDir = 1 | -1;
               class="bmd-suggest-link"
               routerLink="/reportes-ventas/sugerido-compra"
               [queryParams]="{ brandId: d.brandId }"
-              *hasPermission="['prediction.purcharse']"
+              *hasPermission="[PERMISSIONS.PREDICTION_PURCHASE]"
               >Ver sugerido de compra</a
             >
             <ui-export-menu
@@ -370,6 +371,7 @@ export class BrandMonthlyDetailPage {
   brandId = input('', { alias: 'brandId' });
   yearParam = input('', { alias: 'year' });
 
+  protected PERMISSIONS = PERMISSIONS;
   protected String = String;
   protected formatSoles = formatSoles;
   protected formatSolesInt = formatSolesInt;
