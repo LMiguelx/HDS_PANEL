@@ -1,65 +1,26 @@
 <div class="shell">
-  <header class="topbar">
-    <div class="brand-zone">
-      @if (isHandset()) {
-        <button
-          uiButton
-          variant="ghost"
-          class="menu-btn"
-          type="button"
-          aria-label="Abrir menú"
-          (click)="drawerOpen.set(!drawerOpen())"
-        >
-          ☰
-        </button>
-      }
-      <span class="brand">HDSAPP</span>
-      <span class="brand-sep"></span>
-      <span class="brand-sub">Panel de control</span>
+  @if (maintenanceBlock.reason(); as reason) {
+    <div class="maintenance-block">
+      <div class="maintenance-block-card">
+        <span class="material-icons maintenance-block-icon" aria-hidden="true">build</span>
+        <h1>Sistema en mantenimiento</h1>
+        <p>{{ reason }}</p>
+        <button uiButton variant="primary" (click)="retryAfterMaintenance()">Reintentar</button>
+      </div>
     </div>
+  } @else {
+    <app-shell-topbar />
 
-    <div class="topbar-actions">
-      @if (!isHandset()) {
-        <span class="user-name">{{ user()?.fullName || user()?.username }}</span>
+    <div class="body">
+      <app-shell-sidebar />
+
+      @if (isHandset() && drawer.open()) {
+        <div class="scrim" (click)="drawer.close()"></div>
       }
-      <button uiButton variant="secondary" sizes="sm" type="button" (click)="theme.toggle()">
-        {{ themeLabel() }}
-      </button>
-      <button uiButton variant="ghost" sizes="sm" type="button" (click)="logout()">Salir</button>
+
+      <main class="content">
+        <router-outlet />
+      </main>
     </div>
-  </header>
-
-  <div class="body">
-    <nav class="sidebar" [class.open]="drawerOpen()">
-      @for (group of groups(); track group.name) {
-        <div class="group-label">{{ group.name || 'Módulos' }}</div>
-        @for (item of group.items; track item.route) {
-          <a
-            class="nav-item"
-            [routerLink]="item.route"
-            routerLinkActive="active"
-            [class.is-coming-soon]="item.comingSoon"
-            (click)="closeDrawer()"
-          >
-            <span class="nav-label">{{ item.label }}</span>
-            @if (item.comingSoon) {
-              <span class="nav-tag">Próximamente</span>
-            } @else if (item.route === '/promociones' && pendingCount.count()) {
-              <span class="nav-badge">{{ pendingCount.count() }}</span>
-            } @else if (item.route === '/asignaciones' && assignmentAlerts.count()) {
-              <span class="nav-badge">{{ assignmentAlerts.count() }}</span>
-            }
-          </a>
-        }
-      }
-    </nav>
-
-    @if (isHandset() && drawerOpen()) {
-      <div class="scrim" (click)="closeDrawer()"></div>
-    }
-
-    <main class="content">
-      <router-outlet />
-    </main>
-  </div>
+  }
 </div>

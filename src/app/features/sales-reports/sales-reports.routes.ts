@@ -1,0 +1,48 @@
+import { Routes } from '@angular/router';
+import { permissionGuard } from '../../core/auth/permission-guard';
+import { PERMISSIONS } from '../../core/auth/permissions';
+
+export const SALES_REPORTS_ROUTES: Routes = [
+  { path: '', pathMatch: 'full', redirectTo: 'resumen-dia' },
+  {
+    path: 'resumen-dia',
+    loadComponent: () => import('./daily-summary-tab').then((m) => m.DailySummaryTab),
+  },
+  {
+    path: 'liquidacion-vendedores',
+    loadComponent: () =>
+      import('./salesperson-settlement-tab').then((m) => m.SalespersonSettlementTab),
+  },
+  {
+    path: 'marcas-productos',
+    loadComponent: () => import('./brand-sales-tab').then((m) => m.BrandSalesTab),
+  },
+  {
+    path: 'marcas-productos/producto/:productId',
+    loadComponent: () => import('./product-sales-detail').then((m) => m.ProductSalesDetailPage),
+  },
+  {
+    path: 'marcas-por-mes',
+    loadComponent: () =>
+      import('./pages/brand-monthly/brand-monthly.page').then((m) => m.BrandMonthlyPage),
+  },
+  {
+    path: 'marcas-por-mes/:brandId',
+    loadComponent: () =>
+      import('./pages/brand-monthly-detail/brand-monthly-detail.page').then(
+        (m) => m.BrandMonthlyDetailPage,
+      ),
+  },
+  {
+    path: 'validacion-stock',
+    loadComponent: () => import('./stock-validation-tab').then((m) => m.StockValidationTab),
+  },
+  {
+    path: 'sugerido-compra',
+    canActivate: [permissionGuard(PERMISSIONS.PREDICTION_PURCHASE)],
+    loadComponent: () =>
+      import('./pages/purchase-suggestion/purchase-suggestion.page').then(
+        (m) => m.PurchaseSuggestionPage,
+      ),
+  },
+];

@@ -1,67 +1,39 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { map } from 'rxjs';
 import { UiButton } from '../../../shared/ui/button/button';
-import { AuthService } from '../../auth/auth';
-import { ThemeService } from '../../theme/theme.service';
-import { NAV, NavItem, PROMO_ANY_PERMISSION } from '../nav.config';
-import { PendingCountStore } from '../../../features/promos/pending-count';
-import { AssignmentAlertStore } from '../../../features/assignments/assignment-alerts';
+import { MaintenanceBlockState } from '../../http/maintenance-block.state';
+import { MobileDrawerState } from '../mobile-drawer.state';
+import { ShellTopbar } from './shell-topbar';
+import { ShellSidebar } from './shell-sidebar';
 
+/**
+ * Orquestador del shell: el bloqueo de mantenimiento, la barra superior y el
+ * lateral viven en sus propios componentes (ver `shell-topbar.ts` /
+ * `shell-sidebar.ts`), separados solo por el presupuesto `anyComponentStyle`
+ * (4kB de aviso / 8kB de error, ver ARCHITECTURE_PANEL.md). Este archivo solo
+ * arma el layout (`.shell` / `.body` / `.content` / `.scrim`).
+ */
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, UiButton],
+  imports: [RouterOutlet, UiButton, ShellTopbar, ShellSidebar],
   templateUrl: './shell.html',
   styleUrls: ['./shell.scss'],
 })
 export class ShellComponent {
-  private auth = inject(AuthService);
   private breakpoints = inject(BreakpointObserver);
-  readonly theme = inject(ThemeService);
-  readonly pendingCount = inject(PendingCountStore);
-  readonly assignmentAlerts = inject(AssignmentAlertStore);
-
-  readonly user = this.auth.currentUser;
-  readonly drawerOpen = signal(false);
+  readonly maintenanceBlock = inject(MaintenanceBlockState);
+  readonly drawer = inject(MobileDrawerState);
 
   readonly isHandset = toSignal(
     this.breakpoints.observe([Breakpoints.Handset]).pipe(map((r) => r.matches)),
     { initialValue: false },
   );
 
-  readonly themeLabel = computed(() => (this.theme.resolved() === 'dark' ? 'Claro' : 'Oscuro'));
-
-  constructor() {
-    if (this.auth.hasAny(...PROMO_ANY_PERMISSION)) {
-      this.pendingCount.refresh();
-    }
-    if (this.auth.hasAny('customer.assign')) {
-      this.assignmentAlerts.refresh();
-    }
-    // Al pasar a escritorio el cajón deja de tener sentido.
-    effect(() => {
-      if (!this.isHandset()) this.drawerOpen.set(false);
-    });
-  }
-
-  /** Ítems visibles según permisos, agrupados por 'group'. */
-  readonly groups = computed(() => {
-    const visible = NAV.filter((i) => this.auth.hasAny(...i.anyOf));
-    const byGroup = new Map<string, NavItem[]>();
-    for (const item of visible) {
-      const key = item.group ?? '';
-      (byGroup.get(key) ?? byGroup.set(key, []).get(key)!).push(item);
-    }
-    return Array.from(byGroup, ([name, items]) => ({ name, items }));
-  });
-
-  closeDrawer() {
-    if (this.isHandset()) this.drawerOpen.set(false);
-  }
-
-  logout() {
-    this.auth.logout();
+  /** Recarga la app entera: el bloqueo no sabe qué pedido falló, así que vuelve a intentar todo desde cero. */
+  protected retryAfterMaintenance() {
+    window.location.reload();
   }
 }

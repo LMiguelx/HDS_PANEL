@@ -26,9 +26,9 @@ export type UiButtonSize = 'sm' | 'md';
       :host {
         appearance: none;
         font-family: var(--font-sans);
-        font-weight: 800;
+        font-weight: 700;
         font-size: 14px;
-        border-radius: 0;
+        border-radius: var(--radius-control, 0);
         cursor: pointer;
         display: inline-flex;
         align-items: center;

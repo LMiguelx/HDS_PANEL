@@ -1,0 +1,79 @@
+<section class="tvs-page">
+  <div class="tvs-head">
+    <div>
+      <p class="tvs-eyebrow">Televentas</p>
+      <h1>Stock{{ warehouseName() ? ' · ' + warehouseName() : '' }}</h1>
+    </div>
+    <button uiButton variant="secondary" size="sm" [loading]="loading()" (click)="load()">
+      <span class="material-icons" aria-hidden="true">refresh</span>
+      Actualizar
+    </button>
+  </div>
+
+  @if (session.noBranch()) {
+    <ui-empty
+      variant="error"
+      title="Sin sede asignada"
+      body="Tu usuario no tiene una sede configurada; comuníquese con supervisión."
+    />
+  } @else if (session.noWarehouse()) {
+    <ui-empty
+      variant="error"
+      title="Sin almacén configurado"
+      body="Tu sede no tiene almacén configurado; comuníquese con supervisión."
+    />
+  } @else if (loading() && items().length === 0) {
+    <div class="tvs-skeleton" role="status" aria-label="Cargando"></div>
+  } @else if (error()) {
+    <ui-empty
+      variant="error"
+      title="No pudimos cargar el stock"
+      body="Intenta de nuevo en unos segundos."
+      actionLabel="Reintentar"
+      (action)="load()"
+    />
+  } @else {
+    <div class="tvs-filters">
+      <ui-field
+        label="Buscar"
+        placeholder="Nombre o código"
+        [(value)]="search"
+        class="tvs-search"
+      />
+      <ui-field label="Marca" type="select" [(value)]="brandId" [options]="brandOptions()" />
+      <ui-field label="Familia" type="select" [(value)]="familyId" [options]="familyOptions()" />
+      <ui-toggle label="Solo con stock" [(checked)]="onlyWithStock" />
+    </div>
+
+    @if (visibleItems().length === 0) {
+      <ui-empty title="Sin resultados" body="Prueba con otro filtro." />
+    } @else {
+      <table class="ui-table-grid tvs-table">
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Producto</th>
+            <th>Marca</th>
+            <th>Familia</th>
+            <th>Unidad</th>
+            <th class="tvs-num">Stock</th>
+            <th>Actualizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (i of visibleItems(); track i.productId) {
+            <tr>
+              <td class="tvs-muted">{{ i.productCode }}</td>
+              <td>{{ i.productName }}</td>
+              <td class="tvs-muted">{{ i.brandName }}</td>
+              <td class="tvs-muted">{{ i.familyName }}</td>
+              <td class="tvs-muted">{{ i.unitOfMeasure }}</td>
+              <td class="tvs-num" [class.tvs-zero]="i.quantity <= 0">{{ i.quantity }}</td>
+              <td class="tvs-muted">{{ dateTimeText(i.updatedAt) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  }
+</section>

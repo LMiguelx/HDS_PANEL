@@ -1,0 +1,303 @@
+// Contratos de Reportes de ventas (OrderReportController, /api/orders/reports).
+// Ver 27-panel-admin-pedidos-reportes-ventas-dashboard.md, secciones 9-10.
+import { PageResponse } from './api.models';
+
+/** `GroupBy` de la liquidación — doc 43, sección 3.2. */
+export type SettlementGroupBy = 'DAY' | 'SALESPERSON';
+
+export interface SalespersonSettlementRow {
+  date: string | null; // yyyy-MM-dd; null en la vista por vendedor (doc 43)
+  salespersonId: number; // para abrir Pedidos filtrado
+  salespersonCode: string;
+  salespersonName: string;
+  orderCount: number;
+  weightKg: number; // 1 decimal
+  netAmount: number;
+  firstOrderAt: string | null; // "Hora Inicio" — campo y televentas; null en la vista por vendedor o si ese día no hubo campo ni televentas
+  lastOrderAt: string | null; // "Hora Fin"
+  fieldOrderCount: number; // NUEVO (doc 42): ahora solo campo, antes incluía todo lo que no era mostrador
+  fieldNetAmount: number;
+  counterOrderCount: number;
+  counterNetAmount: number;
+  telesalesOrderCount: number; // NUEVO (doc 42, sección 12.2)
+  telesalesNetAmount: number;
+  workedDays: number; // NUEVO (doc 43) — días con campo o televentas; por fila de día, 1 o 0
+}
+
+export interface SalespersonSettlementReport {
+  from: string;
+  to: string;
+  totalOrders: number; // "Sumas" — cuadra exacto con las filas
+  totalWeightKg: number;
+  totalNetAmount: number;
+  lastOrderAt: string | null; // último pedido de campo o televentas del período; null si no hubo
+  rows: SalespersonSettlementRow[];
+  originCode: string | null; // el filtro aplicado (FIELD | TELESALES | COUNTER); null = todos
+  totalFieldOrders: number;
+  totalFieldNetAmount: number;
+  totalCounterOrders: number;
+  totalCounterNetAmount: number;
+  totalTelesalesOrders: number; // NUEVO (doc 42, sección 12.2)
+  totalTelesalesNetAmount: number;
+  salespersonId: number | null; // NUEVO (doc 43) — filtro aplicado; null = todos
+  salespersonName: string | null; // NUEVO — para el título y el archivo
+  groupBy: SettlementGroupBy; // NUEVO
+}
+
+export interface ProductSalesRow {
+  productId: number;
+  productCode: string;
+  productName: string;
+  orderCount: number; // pedidos distintos con este producto
+  quantity: number; // unidades vendidas
+  grossAmount: number;
+  discountAmount: number;
+  netAmount: number;
+}
+
+/**
+ * orderCount de la marca NO es la suma de los orderCount de sus productos
+ * — un mismo pedido puede llevar varios productos de la marca y a nivel
+ * marca cuenta una sola vez. products ya viene ordenado por netAmount desc.
+ */
+export interface BrandSalesReport {
+  brandId: number;
+  brandName: string;
+  from: string;
+  to: string;
+  orderCount: number;
+  grossAmount: number;
+  discountAmount: number;
+  netAmount: number;
+  products: ProductSalesRow[];
+  salespersonId: number | null; // null si no se filtró
+  salespersonName: string | null;
+}
+
+/** Un pedido donde se vendió el producto — montos solo de ESE producto dentro del pedido. */
+export interface ProductOrderRow {
+  orderId: number;
+  orderDate: string;
+  statusCode: string; // sección 3.1 (nunca CANCELLED)
+  customerId: number;
+  customerName: string;
+  salespersonId: number;
+  salespersonName: string;
+  quantity: number;
+  grossAmount: number;
+  discountAmount: number;
+  netAmount: number;
+}
+
+export interface ProductSalesReport {
+  productId: number;
+  productCode: string;
+  productName: string;
+  brandName: string;
+  from: string;
+  to: string;
+  orderCount: number; // del rango completo, no de la página
+  quantity: number;
+  grossAmount: number;
+  discountAmount: number;
+  netAmount: number;
+  orders: PageResponse<ProductOrderRow>;
+  salespersonId: number | null; // null si no se filtró
+  salespersonName: string | null;
+}
+
+// ─────────────────────── Validación de stock — doc 56, sección 6 ───────────────────────
+// Reemplaza "Ventas con stock" (doc 30): /orders/reports/sales-stock ya no existe.
+
+/** `status` de una fila — doc 56, sección 4.1. */
+export type StockValidationStatus = 'SHORTFALL' | 'NO_ERP_STOCK' | 'OK';
+
+export interface StockValidationRow {
+  productId: number; // NO mostrar — sirve para abrir sus pedidos
+  productCode: string;
+  productName: string;
+  unitOfMeasure: string;
+  toBillQuantity: number; // Por facturar
+  pendingQuantity: number; // Bonificación pendiente
+  erpStock: number | null; // Stock ERP; null si el ERP nunca lo subió
+  erpStockAt: string | null; // hora de esa subida; null si nunca
+  erpStale: boolean; // no vino en la última actualización del ERP
+  availableQuantity: number | null; // Disponible; null sin stock del ERP
+  shortfallQuantity: number; // Faltan (0 si alcanza)
+  openAdvanceQuantity: number; // adelantos abiertos del producto
+  advanceNotBacked: boolean; // hay faltante Y adelanto abierto
+  systemStock: number; // stock actual de la app (referencia)
+  nextAdjustment: number | null; // próximo ajuste; negativo = la app tiene de más; null sin stock del ERP
+  status: StockValidationStatus;
+}
+
+export interface StockValidationReport {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  onlyIssues: boolean;
+  lastErpUploadAt: string | null; // última actualización del ERP en el almacén; null si nunca
+  pendingUploads: number; // subidas del ERP aún en proceso (> 0 = el reporte aún no refleja la última)
+  productCount: number; // productos con algo por facturar (todos, aunque onlyIssues filtre)
+  shortfallCount: number;
+  noErpStockCount: number;
+  staleCount: number;
+  appExcessCount: number;
+  advanceNotBackedCount: number;
+  rows: StockValidationRow[];
+  /** NUEVO (doc 87, sección 4.1). `null` con un backend viejo: no mostrar la franja de avisos. */
+  alerts: StockValidationAlerts | null;
+}
+
+/** Avisos de la franja de Validación de stock — doc 87, sección 4.1. Ninguno bloquea. */
+export interface StockValidationAlerts {
+  windowDays: number; // ventana de facturación (3)
+  lookbackDays: number; // hasta cuántos días atrás se buscan (31)
+  ordersWithoutErpResponse: number; // enviados sin respuesta del ERP, fuera de la ventana
+  oldestWithoutErpResponse: string | null; // ISO, el más antiguo de esos
+  sentNotBilledOrders: number; // enviados antes de hoy, aún sin marca (dentro de la ventana)
+  openPreviousDaysOrders: number; // abiertos de días anteriores
+  negativeStockProducts: number; // productos con stock negativo en el app
+  ordersMarkedAfterLastUpload: number; // marcados por el ERP después de su última subida
+}
+
+/** Pedidos enviados sin respuesta del ERP, fuera de la ventana — doc 87, sección 4.3. */
+export interface OrderWithoutErpRow {
+  orderId: number;
+  orderDate: string; // ISO
+  statusCode: 'SENT_TO_BILLING' | 'COUNTER_DELIVERED';
+  customerId: number; // NO mostrar
+  customerName: string;
+  salespersonId: number; // NO mostrar
+  salespersonName: string;
+  netAmount: number;
+}
+
+export interface OrdersWithoutErpReport {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  windowDays: number; // 3
+  windowStart: string; // ISO: anteriores a esta fecha y hora = sin respuesta
+  lookbackStart: string; // ISO: desde cuándo se busca
+  total: number; // cuántos son en total
+  limit: number; // 500
+  orders: OrderWithoutErpRow[];
+}
+
+// ─────────────────────── Reporte de negativos — doc 63, sección 4 ───────────────────────
+// Diferencia con Validación de stock: aquella cuenta TODO lo que falta
+// facturar sin importar el día; este reporte mira SOLO el día elegido —
+// lo que se va a facturar hoy y lo que almacén corrige hoy.
+
+export interface NegativeStockRow {
+  productId: number; // NO mostrar — abre sus pedidos (doc 56, sección 7)
+  productCode: string;
+  productName: string;
+  unitOfMeasure: string;
+  soldQuantity: number; // Vendido
+  systemStock: number; // Stock app (referencia)
+  erpStock: number | null; // Stock ERP; null = el ERP nunca lo subió
+  erpStockAt: string | null; // fecha y hora de esa subida; null = nunca
+  erpStale: boolean; // no vino en la última actualización del ERP
+  difference: number; // siempre negativa
+}
+
+export interface NegativeStockReport {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  date: string; // yyyy-MM-dd — día de los pedidos
+  lastErpUploadAt: string | null; // última actualización del ERP en el almacén; null si nunca
+  pendingUploads: number; // > 0 = el reporte aún no refleja la última subida
+  generatedAt: string; // hora de la consulta (va en el archivo)
+  productCount: number; // productos vendidos en el día (todos)
+  negativeCount: number; // filas del reporte
+  noErpStockCount: number; // de ellas, sin subida del ERP
+  rows: NegativeStockRow[];
+}
+
+/** Panel "Pedidos de un producto" — doc 56, sección 7. */
+export interface StockValidationOrderRow {
+  orderId: number; // mostrar como "N.° de pedido"
+  orderDate: string;
+  statusCode: string; // OPEN | SENT_TO_BILLING | COUNTER_DELIVERED
+  originCode: string; // FIELD | TELESALES | COUNTER
+  customerId: number; // NO mostrar
+  customerName: string;
+  salespersonId: number; // NO mostrar
+  salespersonName: string;
+  saleQuantity: number;
+  bonusQuantity: number;
+  pendingQuantity: number; // de bonusQuantity, pendiente de stock
+  editable: boolean; // true = sigue abierto: se puede editar
+}
+
+export interface StockValidationProductDetail {
+  warehouseId: number; // NO mostrar
+  warehouseName: string;
+  product: StockValidationRow; // cabecera del panel
+  orders: StockValidationOrderRow[]; // del más antiguo al más nuevo
+}
+
+// ─────────────────────── "Marcas por mes" — doc 93, sección 3 ───────────────────────
+// Mes CON información y sin ventas de la marca → 0. Mes SIN información
+// (futuro o anterior al histórico, agosto 2025) → null. El front nunca
+// calcula participación, picos ni totales: vienen del backend.
+
+export interface MonthAmount {
+  month: number; // 1-12
+  netAmount: number | null; // null = mes sin información
+  previousYearNetAmount: number | null; // mismo mes del año anterior; null = sin información
+}
+
+export interface BrandMonthlyRow {
+  rank: number;
+  brandId: number; // NO mostrar; para navegar al detalle
+  brandName: string;
+  totalNet: number;
+  share: number; // % del total del año, 1 decimal
+  peakMonth: number | null; // 1-12; null si no vendió
+  peakNetAmount: number | null;
+  previousYearTotalNet: number | null;
+  months: MonthAmount[]; // siempre 12, de enero a diciembre
+}
+
+export interface BrandMonthlyReport {
+  year: number;
+  top: number | null; // el top pedido (null = todas)
+  brandCount: number; // marcas que vendieron en el año (antes de aplicar top)
+  totalNet: number; // venta neta de TODAS las marcas del año
+  previousYearTotalNet: number | null; // null = sin información del año anterior
+  brands: BrandMonthlyRow[]; // ordenadas por venta del año (rank 1 = la que más vendió)
+}
+
+export interface ProductMonthAmount {
+  month: number;
+  units: number | null; // null = mes sin información
+  netAmount: number | null;
+  bonusUnits: number | null;
+}
+
+export interface ProductMonthlyRow {
+  productId: number; // NO mostrar
+  productCode: string;
+  productName: string;
+  totalUnits: number;
+  totalNet: number;
+  totalBonusUnits: number;
+  peakMonth: number | null; // mes de MÁS UNIDADES vendidas; null si solo tuvo bonificación
+  peakUnits: number | null;
+  months: ProductMonthAmount[]; // siempre 12
+}
+
+export interface BrandMonthlyDetail {
+  year: number;
+  brandId: number; // NO mostrar
+  brandName: string;
+  totalNet: number;
+  previousYearTotalNet: number | null;
+  totalUnits: number; // unidades vendidas (sin bonificaciones)
+  totalBonusUnits: number; // unidades bonificadas, aparte
+  peakMonth: number | null;
+  peakNetAmount: number | null;
+  months: MonthAmount[]; // 12 meses de la marca
+  products: ProductMonthlyRow[]; // del que más vendió (S/) al que menos
+}
